@@ -1,3 +1,8 @@
+"use client";
+
+import Link from "next/link";
+import type { ReactNode } from "react";
+
 import {
   Authenticator,
   useAuthenticator
@@ -19,14 +24,9 @@ import {
 } from "lucide-react";
 
 import {
-  ReactNode
-} from "react";
-
-import {
   useCurrentUser
 } from "@/hooks/useCurrentUser";
 
-import Link from "next/link";
 
 type Role =
   | "SUPER_ADMIN"
@@ -35,7 +35,15 @@ type Role =
   | "CAMPAIGNER";
 
 
-const menuItems = [
+type MenuItem = {
+  label: string;
+  icon: typeof LayoutDashboard;
+  href?: string;
+  roles: Role[];
+};
+
+
+const menuItems: MenuItem[] = [
   {
     label: "Dashboard",
     icon: LayoutDashboard,
@@ -47,7 +55,6 @@ const menuItems = [
       "CAMPAIGNER"
     ]
   },
-
   {
     label: "Studies",
     icon: FileText,
@@ -57,7 +64,6 @@ const menuItems = [
       "CAMPAIGN_MANAGER"
     ]
   },
-
   {
     label: "Geography",
     icon: Map,
@@ -67,18 +73,16 @@ const menuItems = [
       "CAMPAIGN_MANAGER"
     ]
   },
-
   {
     label: "Users",
     icon: Users,
-    href: "/users",	
+    href: "/users",
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
       "CAMPAIGN_MANAGER"
     ]
   },
-
   {
     label: "Contacts",
     icon: Database,
@@ -89,7 +93,6 @@ const menuItems = [
       "CAMPAIGNER"
     ]
   },
-
   {
     label: "Campaigns",
     icon: Megaphone,
@@ -100,7 +103,6 @@ const menuItems = [
       "CAMPAIGNER"
     ]
   },
-
   {
     label: "Calls",
     icon: Phone,
@@ -111,7 +113,6 @@ const menuItems = [
       "CAMPAIGNER"
     ]
   },
-
   {
     label: "Analytics",
     icon: BarChart3,
@@ -121,7 +122,6 @@ const menuItems = [
       "CAMPAIGN_MANAGER"
     ]
   },
-
   {
     label: "Pipeline",
     icon: Settings,
@@ -129,11 +129,7 @@ const menuItems = [
       "SUPER_ADMIN"
     ]
   }
-] satisfies Array<{
-  label: string;
-  icon: typeof LayoutDashboard;
-  roles: Role[];
-}>;
+];
 
 
 function AuthenticatedShell({
@@ -141,44 +137,32 @@ function AuthenticatedShell({
 }: {
   children: ReactNode;
 }) {
-
   const {
     signOut
-  } =
-    useAuthenticator();
-
+  } = useAuthenticator();
 
   const {
     user,
     loading,
     error
-  } =
-    useCurrentUser();
+  } = useCurrentUser();
 
 
   if (loading) {
-
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-
         <div className="text-sm text-slate-500">
           Loading platform profile...
         </div>
-
       </div>
     );
   }
 
 
-  if (
-    error ||
-    !user
-  ) {
-
+  if (!user || error) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-
-        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
+        <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
 
           <h1 className="text-xl font-semibold text-slate-900">
             Access unavailable
@@ -190,6 +174,7 @@ function AuthenticatedShell({
           </p>
 
           <button
+            type="button"
             onClick={signOut}
             className="mt-6 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white"
           >
@@ -197,24 +182,19 @@ function AuthenticatedShell({
           </button>
 
         </div>
-
       </div>
     );
   }
 
 
   const role =
-    user.role.code;
+    user.role.code as Role;
 
 
   const visibleMenu =
     menuItems.filter(
-      function (item) {
-
-        return item.roles.includes(
-          role
-        );
-      }
+      (item) =>
+        item.roles.includes(role)
     );
 
 
@@ -235,44 +215,51 @@ function AuthenticatedShell({
 
         </div>
 
-<nav className="flex-1 space-y-1 px-3 py-5">
 
-  {visibleMenu.map(function (item) {
+        <nav className="flex-1 space-y-1 px-3 py-5">
 
-    const Icon = item.icon;
+          {visibleMenu.map(
+            (item) => {
+              const Icon =
+                item.icon;
 
-    if (item.href) {
+              if (item.href) {
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                  >
+                    <Icon size={19} />
+                    <span>
+                      {item.label}
+                    </span>
+                  </Link>
+                );
+              }
 
-      return (
-        <Link
-          key={item.label}
-          href={item.href}
-          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-        >
-          <Icon size={19} />
-          {item.label}
-        </Link>
-      );
-    }
+              return (
+                <div
+                  key={item.label}
+                  className="flex w-full cursor-default items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-500"
+                >
+                  <Icon size={19} />
+                  <span>
+                    {item.label}
+                  </span>
+                </div>
+              );
+            }
+          )}
 
-    return (
-      <button
-        key={item.label}
-        type="button"
-        className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-      >
-        <Icon size={19} />
-        {item.label}
-      </button>
-    );
+        </nav>
 
-  })}
 
-</nav>
+        <div className="border-t border-slate-800 p-4">
 
           <div className="px-2">
 
-            <div className="truncate text-sm font-medium">
+            <div className="truncate text-sm font-medium text-white">
               {user.name}
             </div>
 
@@ -288,11 +275,14 @@ function AuthenticatedShell({
 
 
           <button
+            type="button"
             onClick={signOut}
-            className="mt-4 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="mt-4 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
           >
             <LogOut size={18} />
-            Sign out
+            <span>
+              Sign out
+            </span>
           </button>
 
         </div>
@@ -314,7 +304,6 @@ export default function AppShell({
 }: {
   children: ReactNode;
 }) {
-
   return (
     <Authenticator
       hideSignUp={true}
@@ -322,11 +311,9 @@ export default function AppShell({
         "email"
       ]}
     >
-
       <AuthenticatedShell>
         {children}
       </AuthenticatedShell>
-
     </Authenticator>
   );
 }
