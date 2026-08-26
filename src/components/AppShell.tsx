@@ -26,6 +26,7 @@ import {
   useCurrentUser
 } from "@/hooks/useCurrentUser";
 
+import Link from "next/link";
 
 type Role =
   | "SUPER_ADMIN"
@@ -38,6 +39,7 @@ const menuItems = [
   {
     label: "Dashboard",
     icon: LayoutDashboard,
+    href: "/",
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
@@ -69,6 +71,7 @@ const menuItems = [
   {
     label: "Users",
     icon: Users,
+    href: "/users",	
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
@@ -232,32 +235,40 @@ function AuthenticatedShell({
 
         </div>
 
+<nav className="flex-1 space-y-1 px-3 py-5">
 
-        <nav className="flex-1 space-y-1 px-3 py-5">
+  {visibleMenu.map(function (item) {
 
-          {visibleMenu.map(
-            function (item) {
+    const Icon = item.icon;
 
-              const Icon =
-                item.icon;
+    if (item.href) {
 
-              return (
-                <button
-                  key={item.label}
-                  className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-                >
-                  <Icon size={19} />
+      return (
+        <Link
+          key={item.label}
+          href={item.href}
+          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+        >
+          <Icon size={19} />
+          {item.label}
+        </Link>
+      );
+    }
 
-                  {item.label}
-                </button>
-              );
-            }
-          )}
+    return (
+      <button
+        key={item.label}
+        type="button"
+        className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+      >
+        <Icon size={19} />
+        {item.label}
+      </button>
+    );
 
-        </nav>
+  })}
 
-
-        <div className="border-t border-slate-800 p-4">
+</nav>
 
           <div className="px-2">
 
