@@ -55,6 +55,7 @@ const menuItems: MenuItem[] = [
       "CAMPAIGNER"
     ]
   },
+
   {
     label: "Studies",
     icon: FileText,
@@ -64,15 +65,18 @@ const menuItems: MenuItem[] = [
       "CAMPAIGN_MANAGER"
     ]
   },
+
   {
     label: "Geography",
     icon: Map,
+    href: "/geography",
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
       "CAMPAIGN_MANAGER"
     ]
   },
+
   {
     label: "Users",
     icon: Users,
@@ -83,6 +87,7 @@ const menuItems: MenuItem[] = [
       "CAMPAIGN_MANAGER"
     ]
   },
+
   {
     label: "Contacts",
     icon: Database,
@@ -93,6 +98,7 @@ const menuItems: MenuItem[] = [
       "CAMPAIGNER"
     ]
   },
+
   {
     label: "Campaigns",
     icon: Megaphone,
@@ -103,6 +109,7 @@ const menuItems: MenuItem[] = [
       "CAMPAIGNER"
     ]
   },
+
   {
     label: "Calls",
     icon: Phone,
@@ -113,6 +120,7 @@ const menuItems: MenuItem[] = [
       "CAMPAIGNER"
     ]
   },
+
   {
     label: "Analytics",
     icon: BarChart3,
@@ -122,6 +130,7 @@ const menuItems: MenuItem[] = [
       "CAMPAIGN_MANAGER"
     ]
   },
+
   {
     label: "Pipeline",
     icon: Settings,
@@ -231,6 +240,7 @@ function AuthenticatedShell({
                     className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
                   >
                     <Icon size={19} />
+
                     <span>
                       {item.label}
                     </span>
@@ -238,12 +248,14 @@ function AuthenticatedShell({
                 );
               }
 
+
               return (
                 <div
                   key={item.label}
                   className="flex w-full cursor-default items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-500"
                 >
                   <Icon size={19} />
+
                   <span>
                     {item.label}
                   </span>
@@ -280,6 +292,7 @@ function AuthenticatedShell({
             className="mt-4 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
           >
             <LogOut size={18} />
+
             <span>
               Sign out
             </span>
