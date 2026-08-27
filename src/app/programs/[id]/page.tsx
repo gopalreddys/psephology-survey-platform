@@ -886,12 +886,21 @@ export default function ProgramDetailPage() {
                         return (
 
                           <div
-                            key={
-                              iteration.id
-                            }
+  key={
+    iteration.id
+  }
 
-                            className="flex items-center justify-between px-6 py-5"
-                          >
+  onClick={
+    function () {
+
+      router.push(
+        `/iterations/${iteration.id}`
+      );
+    }
+  }
+
+  className="cursor-pointer flex items-center justify-between px-6 py-5 hover:bg-slate-50"
+>
 
                             <div>
 
