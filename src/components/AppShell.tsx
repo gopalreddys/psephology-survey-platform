@@ -89,14 +89,15 @@ const menuItems: MenuItem[] = [
   },
 
   {
-    label: "Contacts",
-    icon: Database,
-    roles: [
-      "SUPER_ADMIN",
-      "ADMIN",
-      "CAMPAIGN_MANAGER",
-      "CAMPAIGNER"
-    ]
+    label: "Voter Data",
+  icon: Database,
+  href: "/voters",
+  roles: [
+    "SUPER_ADMIN",
+    "ADMIN",
+    "CAMPAIGN_MANAGER",
+    "CAMPAIGNER"
+  ]
   },
 
   {
