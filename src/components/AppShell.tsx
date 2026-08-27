@@ -57,14 +57,16 @@ const menuItems: MenuItem[] = [
   },
 
   {
-    label: "Studies",
-    icon: FileText,
-    roles: [
-      "SUPER_ADMIN",
-      "ADMIN",
-      "CAMPAIGN_MANAGER"
-    ]
-  },
+  label: "Programs",
+  icon: FileText,
+  href: "/programs",
+  roles: [
+    "SUPER_ADMIN",
+    "ADMIN",
+    "CAMPAIGN_MANAGER",
+    "CAMPAIGNER"
+  ]
+},
 
   {
     label: "Geography",
