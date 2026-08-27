@@ -20,7 +20,8 @@ import {
   Megaphone,
   Phone,
   Settings,
-  Users
+  Users,
+  ClipboardList
 } from "lucide-react";
 
 import {
@@ -60,6 +61,18 @@ const menuItems: MenuItem[] = [
   label: "Programs",
   icon: FileText,
   href: "/programs",
+  roles: [
+    "SUPER_ADMIN",
+    "ADMIN",
+    "CAMPAIGN_MANAGER",
+    "CAMPAIGNER"
+  ]
+},
+
+{
+  label: "Questionnaires",
+  icon: ClipboardList,
+  href: "/questionnaires",
   roles: [
     "SUPER_ADMIN",
     "ADMIN",
