@@ -13,6 +13,9 @@ import {
   apiFetch
 } from "@/lib/api";
 
+import {
+  useRouter
+} from "next/navigation";
 
 type JurisdictionType = {
   id: string;
@@ -151,6 +154,8 @@ export default function ProgramsPage() {
       null
     );
 
+const router =
+  useRouter();
 
   const [
     form,
@@ -199,6 +204,7 @@ export default function ProgramsPage() {
 
     });
 
+ 
 
   async function loadPrograms() {
 
@@ -1068,13 +1074,25 @@ export default function ProgramsPage() {
                     function (program) {
 
                       return (
-                        <tr
-                          key={
-                            program.id
-                          }
-                          className="border-t border-slate-100"
-                        >
+                       
+			<tr
+  key={
+    program.id
+  }
 
+  onClick={
+    function () {
+
+      router.push(
+        `/programs/${program.id}`
+      );
+    }
+  }
+
+  className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+>
+			
+                 
                           <td className="px-5 py-4">
 
                             <div className="font-medium text-slate-900">
