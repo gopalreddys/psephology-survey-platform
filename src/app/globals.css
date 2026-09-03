@@ -733,3 +733,308 @@ body {
   color: #806c73;
 }
 
+
+
+/* =========================================================
+   Psephology AI — Vibrant Pastel Rose Theme V2
+   ========================================================= */
+
+:root {
+  --ps-cream: #fff9f5;
+  --ps-blush: #fff0f3;
+  --ps-baby-pink: #fadde3;
+  --ps-soft-rose: #f3b8c3;
+  --ps-coral-rose: #e98591;
+  --ps-raspberry: #c65367;
+  --ps-deep-rose: #713744;
+  --ps-text: #432d34;
+  --ps-muted-text: #846b73;
+}
+
+
+/* LEFT PANEL — LIGHTER AND MORE VIBRANT */
+
+.login-brand-panel {
+  color: #432d34;
+
+  background:
+    radial-gradient(
+      circle at 8% 12%,
+      rgba(255, 255, 255, 0.90),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 88% 82%,
+      rgba(233, 133, 145, 0.25),
+      transparent 38%
+    ),
+    linear-gradient(
+      145deg,
+      #fff0f3 0%,
+      #fadde3 48%,
+      #f3b8c3 100%
+    );
+}
+
+
+/* Decorative circles */
+
+.login-brand-panel::before {
+  border-color:
+    rgba(198, 83, 103, 0.13);
+}
+
+
+.login-brand-panel::after {
+  border-color:
+    rgba(198, 83, 103, 0.10);
+}
+
+
+/* Brand icon */
+
+.login-brand-mark {
+  color: #713744;
+
+  background:
+    rgba(255, 255, 255, 0.58);
+
+  border-color:
+    rgba(198, 83, 103, 0.18);
+
+  box-shadow:
+    0 8px 30px
+    rgba(198, 83, 103, 0.10);
+}
+
+
+.login-eyebrow {
+  color: #b84f62;
+}
+
+
+.login-brand-copy h1 {
+  color: #4b3038;
+}
+
+
+.login-brand-copy p {
+  color: #765b64;
+}
+
+
+/* FEATURE CARDS */
+
+.login-capability {
+  background:
+    rgba(255, 255, 255, 0.48);
+
+  border-color:
+    rgba(198, 83, 103, 0.15);
+
+  box-shadow:
+    0 10px 32px
+    rgba(113, 55, 68, 0.045);
+}
+
+
+.login-capability:hover {
+  background:
+    rgba(255, 255, 255, 0.68);
+
+  border-color:
+    rgba(198, 83, 103, 0.25);
+
+  transform:
+    translateY(-1px);
+}
+
+
+.login-capability-icon {
+  color: #b94f63;
+
+  background:
+    linear-gradient(
+      135deg,
+      #fadde3,
+      #f3b8c3
+    );
+}
+
+
+.login-capability strong {
+  color: #4b3038;
+}
+
+
+.login-capability span {
+  color: #80636c;
+}
+
+
+.login-brand-footer {
+  color: #80636c;
+}
+
+
+/* RIGHT PANEL */
+
+.login-page {
+  background: #fff9f5;
+}
+
+
+.login-form-panel {
+  background:
+    radial-gradient(
+      circle at 92% 6%,
+      rgba(250, 221, 227, 0.58),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 12% 92%,
+      rgba(255, 240, 243, 0.75),
+      transparent 34%
+    ),
+    #fff9f5;
+}
+
+
+.login-form-eyebrow {
+  color: #c65367;
+}
+
+
+.login-form-heading h2 {
+  color: #432d34;
+}
+
+
+.login-form-heading p {
+  color: #846b73;
+}
+
+
+/* INPUTS */
+
+.login-authenticator .amplify-label {
+  color: #51383f;
+}
+
+
+.login-authenticator .amplify-input {
+  background: rgba(255, 255, 255, 0.76);
+  border-color: #efcbd2;
+  color: #432d34;
+}
+
+
+.login-authenticator .amplify-input:hover {
+  border-color: #e6aeba;
+}
+
+
+.login-authenticator .amplify-input:focus {
+  border-color: #e98591;
+
+  box-shadow:
+    0 0 0 4px
+    rgba(233, 133, 145, 0.13);
+}
+
+
+/* SIGN-IN BUTTON */
+
+.login-authenticator
+.amplify-button--primary {
+  background:
+    linear-gradient(
+      135deg,
+      #c65367,
+      #df7180
+    );
+
+  box-shadow:
+    0 10px 28px
+    rgba(198, 83, 103, 0.20);
+}
+
+
+.login-authenticator
+.amplify-button--primary:hover {
+  background:
+    linear-gradient(
+      135deg,
+      #b94b5e,
+      #d86576
+    );
+
+  box-shadow:
+    0 12px 32px
+    rgba(198, 83, 103, 0.25);
+}
+
+
+/* FORGOT PASSWORD */
+
+.login-authenticator
+.amplify-button--link {
+  color: #c65367;
+}
+
+
+.login-authenticator
+.amplify-button--link:hover {
+  color: #a84153;
+}
+
+
+/* SECURITY AREA */
+
+.login-security-note {
+  border-color: #f1d7dc;
+  color: #846b73;
+}
+
+
+.login-security-note svg {
+  color: #df7180;
+}
+
+
+.login-version {
+  color: #aa8d95;
+}
+
+
+/* MOBILE */
+
+.login-mobile-mark {
+  background:
+    linear-gradient(
+      135deg,
+      #c65367,
+      #e98591
+    );
+
+  box-shadow:
+    0 7px 20px
+    rgba(198, 83, 103, 0.20);
+}
+
+
+.login-mobile-brand span {
+  color: #432d34;
+}
+
+
+.login-mobile-brand small {
+  color: #846b73;
+}
+
+
+.login-loading {
+  background: #fff9f5;
+  color: #846b73;
+}
+
