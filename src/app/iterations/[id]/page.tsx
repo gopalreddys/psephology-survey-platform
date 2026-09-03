@@ -117,7 +117,8 @@ export default function IterationPage() {
       runNumber: "1",
       runName: "Run 1 - Initial",
       targetContacts: "30",
-      maxAttemptsPerVoter: "3"
+      maxAttemptsPerVoter: "3",
+      sourceName: ""
     });
 
 
@@ -256,7 +257,11 @@ export default function IterationPage() {
               maxAttemptsPerVoter:
                 Number(
                   form.maxAttemptsPerVoter
-                )
+                ),
+
+              sourceName:
+                form.sourceName ||
+                null
             })
           }
         );
@@ -509,6 +514,47 @@ export default function IterationPage() {
 
                   className="input"
                 />
+
+              </Field>
+
+
+              <Field label="Contact Cohort">
+
+                <select
+                  value={
+                    form.sourceName
+                  }
+
+                  onChange={
+                    function (event) {
+
+                      updateForm(
+                        "sourceName",
+                        event.target.value
+                      );
+
+                      if (
+                        event.target.value ===
+                        "PSEPHOLOGY_DEMO_CONTACTS"
+                      ) {
+                        updateForm(
+                          "targetContacts",
+                          "10"
+                        );
+                      }
+                    }
+                  }
+
+                  className="input"
+                >
+                  <option value="">
+                    All Eligible Voters
+                  </option>
+
+                  <option value="PSEPHOLOGY_DEMO_CONTACTS">
+                    Controlled Demo Contacts
+                  </option>
+                </select>
 
               </Field>
 
