@@ -6,16 +6,27 @@ import {
 } from "react";
 
 import {
+  ArrowLeft,
+  BarChart3,
+  ChevronRight,
+  ClipboardList,
+  Languages,
+  MapPinned,
+  PhoneCall,
+  Plus,
+  RotateCcw,
+  Target,
+  Users,
+  X
+} from "lucide-react";
+
+import {
   useParams,
   useRouter
 } from "next/navigation";
 
-import AppShell
-  from "@/components/AppShell";
-
-import {
-  apiFetch
-} from "@/lib/api";
+import AppShell from "@/components/AppShell";
+import { apiFetch } from "@/lib/api";
 
 
 type Iteration = {
@@ -129,9 +140,7 @@ export default function IterationPage() {
         `/api/iterations/${iterationId}`
       );
 
-    setIteration(
-      data
-    );
+    setIteration(data);
 
     setForm(
       function (current) {
@@ -157,17 +166,13 @@ export default function IterationPage() {
         `/api/iterations/${iterationId}/runs`
       );
 
-    setRuns(
-      data
-    );
+    setRuns(data);
   }
 
 
   async function loadData() {
 
-    setLoading(
-      true
-    );
+    setLoading(true);
 
     try {
 
@@ -186,9 +191,7 @@ export default function IterationPage() {
 
     } finally {
 
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
@@ -201,7 +204,9 @@ export default function IterationPage() {
       }
 
     },
-    [iterationId]
+    [
+      iterationId
+    ]
   );
 
 
@@ -222,15 +227,35 @@ export default function IterationPage() {
   }
 
 
+  function openCreateRun() {
+
+    const nextRunNumber =
+      runs.length + 1;
+
+    setForm(
+      function (current) {
+
+        return {
+          ...current,
+          runNumber:
+            String(
+              nextRunNumber
+            ),
+
+          runName:
+            `Run ${nextRunNumber}`
+        };
+      }
+    );
+
+    setShowCreate(true);
+  }
+
+
   async function createRun() {
 
-    setSaving(
-      true
-    );
-
-    setMessage(
-      null
-    );
+    setSaving(true);
+    setMessage(null);
 
     try {
 
@@ -240,29 +265,31 @@ export default function IterationPage() {
           {
             method: "POST",
 
-            body: JSON.stringify({
-              runNumber:
-                Number(
-                  form.runNumber
-                ),
+            body:
+              JSON.stringify({
 
-              runName:
-                form.runName,
+                runNumber:
+                  Number(
+                    form.runNumber
+                  ),
 
-              targetContacts:
-                Number(
-                  form.targetContacts
-                ),
+                runName:
+                  form.runName,
 
-              maxAttemptsPerVoter:
-                Number(
-                  form.maxAttemptsPerVoter
-                ),
+                targetContacts:
+                  Number(
+                    form.targetContacts
+                  ),
 
-              sourceName:
-                form.sourceName ||
-                null
-            })
+                maxAttemptsPerVoter:
+                  Number(
+                    form.maxAttemptsPerVoter
+                  ),
+
+                sourceName:
+                  form.sourceName ||
+                  null
+              })
           }
         );
 
@@ -271,9 +298,7 @@ export default function IterationPage() {
         `Run created successfully. ${result.run.selected_contacts} voters selected.`
       );
 
-      setShowCreate(
-        false
-      );
+      setShowCreate(false);
 
       await loadRuns();
 
@@ -287,9 +312,7 @@ export default function IterationPage() {
 
     } finally {
 
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
 
@@ -299,7 +322,7 @@ export default function IterationPage() {
     return (
       <AppShell>
 
-        <div className="p-8 text-sm text-slate-500">
+        <div className="iteration-detail-loading">
           Loading iteration...
         </div>
 
@@ -313,8 +336,12 @@ export default function IterationPage() {
     return (
       <AppShell>
 
-        <div className="p-8">
-          Iteration not found.
+        <div className="iteration-detail-page">
+
+          <div className="iteration-detail-error">
+            Iteration not found.
+          </div>
+
         </div>
 
       </AppShell>
@@ -325,7 +352,7 @@ export default function IterationPage() {
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="iteration-detail-page">
 
         <button
           type="button"
@@ -339,32 +366,35 @@ export default function IterationPage() {
             }
           }
 
-          className="text-sm font-medium text-indigo-600"
+          className="iteration-detail-back"
         >
-          ← Back to Program
+          <ArrowLeft size={15} />
+          Back to Program
         </button>
 
 
-        <div className="mt-5 flex items-start justify-between">
+        <section className="iteration-detail-header">
 
           <div>
 
-            <p className="text-sm font-medium text-indigo-600">
-              Iteration {iteration.iteration_number}
-            </p>
+            <div className="iteration-detail-eyebrow">
+              ITERATION {iteration.iteration_number}
+            </div>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <h1>
               {iteration.iteration_name}
             </h1>
 
-            <p className="mt-2 text-slate-500">
+            <div className="iteration-detail-program">
               {iteration.study_name}
-            </p>
+              {" · "}
+              {iteration.study_code}
+            </div>
 
           </div>
 
 
-          <div className="flex items-center gap-3">
+          <div className="iteration-detail-actions">
 
             <button
               type="button"
@@ -378,8 +408,9 @@ export default function IterationPage() {
                 }
               }
 
-              className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="iteration-analysis-button"
             >
+              <BarChart3 size={16} />
               View Analysis
             </button>
 
@@ -388,53 +419,53 @@ export default function IterationPage() {
               type="button"
 
               onClick={
-                function () {
-
-                  setShowCreate(
-                    true
-                  );
-                }
+                openCreateRun
               }
 
-              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
+              className="iteration-create-run-button"
             >
-              + Create Run
+              <Plus size={16} />
+              Create Run
             </button>
 
           </div>
 
-        </div>
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="iteration-detail-message">
             {message}
           </div>
 
         )}
 
 
-        <div className="mt-8 grid gap-4 md:grid-cols-4">
+        <section className="iteration-detail-metrics">
 
-          <Metric
+          <IterationMetric
+            icon={ClipboardList}
             label="Research Phase"
             value={
-              iteration.research_phase
-            }
-          />
-
-          <Metric
-            label="Target Sample"
-            value={
-              String(
-                iteration.target_sample_size ??
-                "-"
+              formatLabel(
+                iteration.research_phase
               )
             }
           />
 
-          <Metric
+          <IterationMetric
+            icon={Target}
+            label="Target Sample"
+            value={
+              iteration.target_sample_size
+                ?.toLocaleString() ||
+              "-"
+            }
+          />
+
+          <IterationMetric
+            icon={MapPinned}
             label="Constituency"
             value={
               iteration.jurisdiction_name ||
@@ -442,7 +473,8 @@ export default function IterationPage() {
             }
           />
 
-          <Metric
+          <IterationMetric
+            icon={PhoneCall}
             label="Runs"
             value={
               String(
@@ -451,193 +483,341 @@ export default function IterationPage() {
             }
           />
 
-        </div>
+        </section>
+
+
+        <section className="iteration-objective-card">
+
+          <div className="iteration-objective-icon">
+            <Target size={19} />
+          </div>
+
+          <div>
+
+            <div className="iteration-detail-eyebrow">
+              RESEARCH OBJECTIVE
+            </div>
+
+            <h2>
+              What this iteration is designed to learn
+            </h2>
+
+            <p>
+              {
+                iteration.objective ||
+                "No research objective defined."
+              }
+            </p>
+
+
+            <div className="iteration-objective-meta">
+
+              <span>
+                <ClipboardList size={13} />
+
+                {
+                  formatLabel(
+                    iteration.sample_design_type
+                  )
+                }
+              </span>
+
+              <span>
+                <Languages size={13} />
+                Research configuration
+              </span>
+
+            </div>
+
+          </div>
+
+        </section>
 
 
         {showCreate && (
 
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="run-create-panel">
 
-            <h2 className="text-xl font-semibold text-slate-900">
-              Create Run
-            </h2>
+            <div className="run-create-header">
 
-            <p className="mt-1 text-sm text-slate-500">
-              Freeze the operational voter sample for this research iteration.
-            </p>
+              <div>
 
+                <div className="iteration-detail-eyebrow">
+                  NEW EXECUTION RUN
+                </div>
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+                <h2>
+                  Create Run
+                </h2>
 
-              <Field label="Run Number">
+                <p>
+                  Freeze the eligible voter cohort
+                  and execution limits for this
+                  research iteration.
+                </p>
 
-                <input
-                  type="number"
-                  min={1}
+              </div>
 
-                  value={
-                    form.runNumber
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "runNumber",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field label="Run Name">
-
-                <input
-                  value={
-                    form.runName
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "runName",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field label="Contact Cohort">
-
-                <select
-                  value={
-                    form.sourceName
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "sourceName",
-                        event.target.value
-                      );
-
-                      if (
-                        event.target.value ===
-                        "PSEPHOLOGY_DEMO_CONTACTS"
-                      ) {
-                        updateForm(
-                          "targetContacts",
-                          "10"
-                        );
-                      }
-                    }
-                  }
-
-                  className="input"
-                >
-                  <option value="">
-                    All Eligible Voters
-                  </option>
-
-                  <option value="PSEPHOLOGY_DEMO_CONTACTS">
-                    Controlled Demo Contacts
-                  </option>
-                </select>
-
-              </Field>
-
-
-              <Field label="Target Voters">
-
-                <input
-                  type="number"
-                  min={1}
-
-                  value={
-                    form.targetContacts
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "targetContacts",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field label="Maximum Attempts / Voter">
-
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-
-                  value={
-                    form.maxAttemptsPerVoter
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "maxAttemptsPerVoter",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-            </div>
-
-
-            <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-
-              Run 1 will freeze the currently eligible voters.
-              Successful or terminal voters will automatically be excluded
-              from later retry cycles.
-
-            </div>
-
-
-            <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
 
                 onClick={
                   function () {
-
-                    setShowCreate(
-                      false
-                    );
+                    setShowCreate(false);
                   }
                 }
 
-                className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm"
+                className="run-close-button"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+
+            <div className="run-form-section">
+
+              <div className="run-form-heading">
+
+                <div className="run-form-icon">
+                  <PhoneCall size={17} />
+                </div>
+
+                <div>
+
+                  <h3>
+                    Run Identity
+                  </h3>
+
+                  <p>
+                    Identify this execution cycle
+                    within the iteration.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div className="run-form-grid">
+
+                <Field label="Run Number">
+
+                  <input
+                    type="number"
+                    min={1}
+
+                    value={
+                      form.runNumber
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "runNumber",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="run-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Run Name">
+
+                  <input
+                    value={
+                      form.runName
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "runName",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="run-input"
+                  />
+
+                </Field>
+
+              </div>
+
+            </div>
+
+
+            <div className="run-form-section">
+
+              <div className="run-form-heading">
+
+                <div className="run-form-icon">
+                  <Users size={17} />
+                </div>
+
+                <div>
+
+                  <h3>
+                    Voter Cohort
+                  </h3>
+
+                  <p>
+                    Define which eligible contacts
+                    will be frozen into this Run.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div className="run-form-grid">
+
+                <Field label="Contact Cohort">
+
+                  <select
+                    value={
+                      form.sourceName
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        const value =
+                          event.target.value;
+
+                        updateForm(
+                          "sourceName",
+                          value
+                        );
+
+                        if (
+                          value ===
+                          "PSEPHOLOGY_DEMO_CONTACTS"
+                        ) {
+
+                          updateForm(
+                            "targetContacts",
+                            "10"
+                          );
+                        }
+                      }
+                    }
+
+                    className="run-input"
+                  >
+
+                    <option value="">
+                      All Eligible Voters
+                    </option>
+
+                    <option value="PSEPHOLOGY_DEMO_CONTACTS">
+                      Controlled Demo Contacts
+                    </option>
+
+                  </select>
+
+                </Field>
+
+
+                <Field label="Target Voters">
+
+                  <input
+                    type="number"
+                    min={1}
+
+                    value={
+                      form.targetContacts
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "targetContacts",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="run-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Maximum Attempts / Voter">
+
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+
+                    value={
+                      form.maxAttemptsPerVoter
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "maxAttemptsPerVoter",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="run-input"
+                  />
+
+                </Field>
+
+              </div>
+
+
+              <div className="run-policy-note">
+
+                <RotateCcw size={17} />
+
+                <div>
+
+                  <strong>
+                    Retry policy
+                  </strong>
+
+                  <span>
+                    This Run freezes the selected voter cohort.
+                    Successful or terminal voters remain excluded
+                    from later retry cycles within the same Run.
+                  </span>
+
+                </div>
+
+              </div>
+
+            </div>
+
+
+            <div className="run-create-footer">
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowCreate(false);
+                  }
+                }
+
+                className="run-cancel-button"
               >
                 Cancel
               </button>
@@ -654,153 +834,318 @@ export default function IterationPage() {
                   createRun
                 }
 
-                className="rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="run-submit-button"
               >
-                {saving
-                  ? "Creating..."
-                  : "Create Run"}
+
+                {
+                  saving
+                    ? "Creating..."
+                    : (
+                      <>
+                        <Plus size={15} />
+                        Create Run
+                      </>
+                    )
+                }
+
               </button>
 
             </div>
 
-          </div>
+          </section>
 
         )}
 
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="runs-panel">
 
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="runs-header">
 
-            <h2 className="font-semibold text-slate-900">
-              Runs
-            </h2>
+            <div>
+
+              <div className="iteration-detail-eyebrow">
+                EXECUTION MANAGEMENT
+              </div>
+
+              <h2>
+                Runs
+              </h2>
+
+              <p>
+                Runs manage voter reach and retry
+                execution within the same research iteration.
+              </p>
+
+            </div>
+
+
+            <div className="runs-count">
+              {runs.length}
+              {" "}
+              {
+                runs.length === 1
+                  ? "Run"
+                  : "Runs"
+              }
+            </div>
 
           </div>
 
 
-          {runs.length === 0 ? (
+          {
+            runs.length === 0
+              ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              No Runs created yet.
-            </div>
+                <div className="runs-empty">
 
-          ) : (
+                  <PhoneCall size={25} />
 
-            <div className="divide-y divide-slate-100">
+                  <strong>
+                    No Runs created yet
+                  </strong>
 
-              {runs.map(
-                function (run) {
+                  <span>
+                    Create a Run to freeze the voter
+                    cohort for survey execution.
+                  </span>
 
-                  return (
-                    <div
-                      key={
-                        run.id
+                </div>
+
+              )
+              : (
+
+                <div className="runs-list">
+
+                  {
+                    runs.map(
+                      function (run) {
+
+                        const selected =
+                          run.total_contacts ??
+                          run.selected_contacts ??
+                          0;
+
+                        return (
+
+                          <div
+                            key={
+                              run.id
+                            }
+
+                            className="run-card"
+                          >
+
+                            <div className="run-card-header">
+
+                              <div className="run-card-identity">
+
+                                <div className="run-number">
+                                  {
+                                    run.run_number
+                                  }
+                                </div>
+
+
+                                <div>
+
+                                  <div className="run-title-row">
+
+                                    <h3>
+                                      {
+                                        run.run_name ||
+                                        `Run ${run.run_number}`
+                                      }
+                                    </h3>
+
+                                    <RunStatus
+                                      status={
+                                        run.status
+                                      }
+                                    />
+
+                                  </div>
+
+
+                                  <div className="run-card-meta">
+
+                                    <span>
+                                      {
+                                        formatLabel(
+                                          run.run_type
+                                        )
+                                      }
+                                    </span>
+
+                                    <span>
+                                      Max attempts:
+                                      {" "}
+                                      {
+                                        run.max_attempts_per_voter
+                                      }
+                                    </span>
+
+                                  </div>
+
+                                </div>
+
+                              </div>
+
+                            </div>
+
+
+                            <div className="run-stat-grid">
+
+                              <RunStat
+                                icon={Users}
+                                label="Selected"
+                                value={
+                                  String(
+                                    selected
+                                  )
+                                }
+                              />
+
+                              <RunStat
+                                icon={Target}
+                                label="Successful"
+                                value={
+                                  String(
+                                    run.successful_contacts ??
+                                    0
+                                  )
+                                }
+                              />
+
+                              <RunStat
+                                icon={RotateCcw}
+                                label="Retry Eligible"
+                                value={
+                                  String(
+                                    run.retry_eligible_contacts ??
+                                    0
+                                  )
+                                }
+                              />
+
+                              <RunStat
+                                icon={PhoneCall}
+                                label="Max Attempts"
+                                value={
+                                  String(
+                                    run.max_attempts_per_voter
+                                  )
+                                }
+                              />
+
+                            </div>
+
+
+                            <div className="run-progress-row">
+
+                              <div>
+
+                                <span>
+                                  Successful survey coverage
+                                </span>
+
+                                <strong>
+                                  {
+                                    selected > 0
+                                      ? Math.round(
+                                          (
+                                            (
+                                              run.successful_contacts ||
+                                              0
+                                            ) /
+                                            selected
+                                          ) *
+                                          100
+                                        )
+                                      : 0
+                                  }
+                                  %
+                                </strong>
+
+                              </div>
+
+
+                              <div className="run-progress-track">
+
+                                <div
+                                  className="run-progress-fill"
+
+                                  style={{
+                                    width:
+                                      `${
+                                        selected > 0
+                                          ? Math.min(
+                                              100,
+                                              Math.round(
+                                                (
+                                                  (
+                                                    run.successful_contacts ||
+                                                    0
+                                                  ) /
+                                                  selected
+                                                ) *
+                                                100
+                                              )
+                                            )
+                                          : 0
+                                      }%`
+                                  }}
+                                />
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        );
                       }
+                    )
+                  }
 
-                      className="px-6 py-5"
-                    >
+                </div>
 
-                      <div className="flex items-center justify-between">
-
-                        <div>
-
-                          <div className="font-semibold text-slate-900">
-                            {run.run_name ||
-                              `Run ${run.run_number}`}
-                          </div>
-
-                          <div className="mt-1 text-xs text-slate-500">
-                            {run.run_type}
-                            {" • Max Attempts "}
-                            {run.max_attempts_per_voter}
-                          </div>
-
-                        </div>
-
-
-                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-                          {run.status}
-                        </span>
-
-                      </div>
-
-
-                      <div className="mt-5 grid gap-4 md:grid-cols-4">
-
-                        <Metric
-                          label="Selected"
-                          value={
-                            String(
-                              run.total_contacts ??
-                              run.selected_contacts ??
-                              0
-                            )
-                          }
-                        />
-
-                        <Metric
-                          label="Successful"
-                          value={
-                            String(
-                              run.successful_contacts ??
-                              0
-                            )
-                          }
-                        />
-
-                        <Metric
-                          label="Retry Eligible"
-                          value={
-                            String(
-                              run.retry_eligible_contacts ??
-                              0
-                            )
-                          }
-                        />
-
-                        <Metric
-                          label="Max Attempts"
-                          value={
-                            String(
-                              run.max_attempts_per_voter
-                            )
-                          }
-                        />
-
-                      </div>
-
-                    </div>
-                  );
-                }
-              )}
-
-            </div>
-
-          )}
-
-        </div>
-
-
-        <style jsx global>{`
-          .input {
-            width: 100%;
-            border: 1px solid #cbd5e1;
-            border-radius: 0.5rem;
-            padding: 0.65rem 0.75rem;
-            font-size: 0.875rem;
-            background: white;
-            color: #0f172a;
-            outline: none;
+              )
           }
 
-          .input:focus {
-            border-color: #6366f1;
-            box-shadow:
-              0 0 0 2px
-              rgba(99, 102, 241, 0.12);
-          }
-        `}</style>
+
+          <div className="runs-lifecycle">
+
+            <span>
+              Iteration
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Run
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Retry Cycles
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Successful Evidence
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Analysis
+            </span>
+
+          </div>
+
+        </section>
 
       </div>
 
@@ -809,23 +1154,34 @@ export default function IterationPage() {
 }
 
 
-function Metric({
+function IterationMetric({
+  icon: Icon,
   label,
   value
 }: {
+  icon: React.ElementType;
   label: string;
   value: string;
 }) {
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
 
-      <div className="text-xs font-medium uppercase text-slate-400">
-        {label}
+    <div className="iteration-detail-metric">
+
+      <div className="iteration-detail-metric-icon">
+        <Icon size={17} />
       </div>
 
-      <div className="mt-2 text-lg font-semibold text-slate-900">
-        {value}
+      <div>
+
+        <div className="iteration-detail-metric-label">
+          {label}
+        </div>
+
+        <div className="iteration-detail-metric-value">
+          {value}
+        </div>
+
       </div>
 
     </div>
@@ -842,9 +1198,10 @@ function Field({
 }) {
 
   return (
-    <div>
 
-      <label className="mb-2 block text-sm font-medium text-slate-700">
+    <div className="run-field">
+
+      <label>
         {label}
       </label>
 
@@ -852,4 +1209,81 @@ function Field({
 
     </div>
   );
+}
+
+
+function RunStatus({
+  status
+}: {
+  status: string;
+}) {
+
+  return (
+
+    <span className="run-status">
+      {
+        formatLabel(
+          status
+        )
+      }
+    </span>
+  );
+}
+
+
+function RunStat({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+
+  return (
+
+    <div className="run-stat">
+
+      <div className="run-stat-icon">
+        <Icon size={15} />
+      </div>
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function formatLabel(
+  value: string | null
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .replaceAll(
+      "_",
+      " "
+    )
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
 }
