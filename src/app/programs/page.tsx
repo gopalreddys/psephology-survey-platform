@@ -3,19 +3,31 @@
 import {
   useEffect,
   useMemo,
-  useState
+  useState,
 } from "react";
 
-import AppShell
-  from "@/components/AppShell";
+import {
+  ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardList,
+  Globe2,
+  Languages,
+  MapPinned,
+  Plus,
+  Target,
+  Users,
+  X,
+} from "lucide-react";
 
 import {
-  apiFetch
-} from "@/lib/api";
-
-import {
-  useRouter
+  useRouter,
 } from "next/navigation";
+
+import AppShell from "@/components/AppShell";
+import { apiFetch } from "@/lib/api";
+
 
 type JurisdictionType = {
   id: string;
@@ -54,71 +66,59 @@ type Program = {
   study_code: string;
   study_name: string;
 
-  purpose:
-    string | null;
+  purpose: string | null;
+  study_type: string;
+  scope_mode: string | null;
+  election_type: string | null;
 
-  study_type:
-    string;
+  jurisdiction_name: string | null;
+  jurisdiction_code: string | null;
 
-  scope_mode:
-    string | null;
+  target_sample_size: number | null;
+  primary_language: string | null;
 
-  election_type:
-    string | null;
-
-  jurisdiction_name:
-    string | null;
-
-  jurisdiction_code:
-    string | null;
-
-  target_sample_size:
-    number | null;
-
-  primary_language:
-    string | null;
-
-  status:
-    string;
-
-  created_at:
-    string;
+  status: string;
+  created_at: string;
 };
 
 
 export default function ProgramsPage() {
 
+  const router =
+    useRouter();
+
+
   const [
     programs,
-    setPrograms
+    setPrograms,
   ] =
     useState<Program[]>([]);
 
 
   const [
     jurisdictionTypes,
-    setJurisdictionTypes
+    setJurisdictionTypes,
   ] =
     useState<JurisdictionType[]>([]);
 
 
   const [
     jurisdictions,
-    setJurisdictions
+    setJurisdictions,
   ] =
     useState<Jurisdiction[]>([]);
 
 
   const [
     selectedJurisdictionId,
-    setSelectedJurisdictionId
+    setSelectedJurisdictionId,
   ] =
     useState("");
 
 
   const [
     scope,
-    setScope
+    setScope,
   ] =
     useState<ScopeResult | null>(
       null
@@ -127,39 +127,37 @@ export default function ProgramsPage() {
 
   const [
     showCreate,
-    setShowCreate
+    setShowCreate,
   ] =
     useState(false);
 
 
   const [
     loading,
-    setLoading
+    setLoading,
   ] =
     useState(true);
 
 
   const [
     saving,
-    setSaving
+    setSaving,
   ] =
     useState(false);
 
 
   const [
     message,
-    setMessage
+    setMessage,
   ] =
     useState<string | null>(
       null
     );
 
-const router =
-  useRouter();
 
   const [
     form,
-    setForm
+    setForm,
   ] =
     useState({
 
@@ -200,11 +198,9 @@ const router =
         "Telugu",
 
       methodologyNotes:
-        "Demo V1 baseline study"
-
+        "Demo V1 baseline study",
     });
 
- 
 
   async function loadPrograms() {
 
@@ -256,7 +252,7 @@ const router =
       await Promise.all([
         loadPrograms(),
         loadJurisdictionTypes(),
-        loadAssemblyJurisdictions()
+        loadAssemblyJurisdictions(),
       ]);
 
     } catch (error) {
@@ -325,11 +321,10 @@ const router =
             targetSampleSize:
               String(
                 data.eligibleVoters || 0
-              )
+              ),
           };
         }
       );
-
 
     } catch (error) {
 
@@ -352,8 +347,7 @@ const router =
 
         return {
           ...current,
-          [key]:
-            value
+          [key]: value,
         };
       }
     );
@@ -402,8 +396,7 @@ const router =
       await apiFetch(
         "/api/programs",
         {
-          method:
-            "POST",
+          method: "POST",
 
           body:
             JSON.stringify({
@@ -457,7 +450,7 @@ const router =
                 form.primaryLanguage,
 
               supportedLanguages: [
-                form.primaryLanguage
+                form.primaryLanguage,
               ],
 
               weightingRequired:
@@ -467,9 +460,8 @@ const router =
                 form.methodologyNotes,
 
               ownerUserId:
-                null
-
-            })
+                null,
+            }),
         }
       );
 
@@ -485,7 +477,6 @@ const router =
 
 
       await loadPrograms();
-
 
     } catch (error) {
 
@@ -508,22 +499,23 @@ const router =
     useMemo(
       function () {
 
-        return jurisdictionTypes
-          .find(
-            function (item) {
-
-              return (
-                item.code ===
-                "ASSEMBLY"
-              );
-            }
-          )
-          ?.name ||
-          "Assembly Constituency";
+        return (
+          jurisdictionTypes
+            .find(
+              function (item) {
+                return (
+                  item.code ===
+                  "ASSEMBLY"
+                );
+              }
+            )
+            ?.name ||
+          "Assembly Constituency"
+        );
 
       },
       [
-        jurisdictionTypes
+        jurisdictionTypes,
       ]
     );
 
@@ -531,23 +523,26 @@ const router =
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="programs-page">
 
-        <div className="flex items-start justify-between">
+        {/* HEADER */}
+
+        <section className="programs-header">
 
           <div>
 
-            <p className="text-sm font-medium text-indigo-600">
-              Research
-            </p>
+            <div className="programs-eyebrow">
+              RESEARCH MANAGEMENT
+            </div>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <h1>
               Programs
             </h1>
 
-            <p className="mt-2 text-slate-500">
-              Create and manage psephology
-              survey programs.
+            <p>
+              Create and manage structured psephology
+              research programs from constituency scope
+              through survey execution and analysis.
             </p>
 
           </div>
@@ -564,38 +559,117 @@ const router =
               }
             }
 
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
+            className="programs-create-button"
           >
-            + Create Program
+            <Plus size={16} />
+            Create Program
           </button>
 
-        </div>
+        </section>
+
+
+        {/* SUMMARY */}
+
+        <section className="programs-summary-grid">
+
+          <SummaryCard
+            icon={ClipboardList}
+            label="Programs"
+            value={
+              String(
+                programs.length
+              )
+            }
+            detail="Research programs configured"
+          />
+
+          <SummaryCard
+            icon={MapPinned}
+            label="Research Scope"
+            value={
+              programs.length > 0
+                ? String(
+                    new Set(
+                      programs
+                        .map(
+                          function (program) {
+                            return program.jurisdiction_code;
+                          }
+                        )
+                        .filter(Boolean)
+                    ).size
+                  )
+                : "0"
+            }
+            detail="Constituencies represented"
+          />
+
+          <SummaryCard
+            icon={Users}
+            label="Target Sample"
+            value={
+              programs
+                .reduce(
+                  function (
+                    total,
+                    program
+                  ) {
+                    return (
+                      total +
+                      (
+                        program.target_sample_size ||
+                        0
+                      )
+                    );
+                  },
+                  0
+                )
+                .toLocaleString()
+            }
+            detail="Combined target contacts"
+          />
+
+          <SummaryCard
+            icon={BarChart3}
+            label="Research Model"
+            value="Iterative"
+            detail="Program → Iteration → Run"
+          />
+
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="programs-message">
+            <CheckCircle2 size={15} />
             {message}
           </div>
 
         )}
 
 
+        {/* CREATE PROGRAM */}
+
         {showCreate && (
 
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="program-create-panel">
 
-            <div className="flex items-center justify-between">
+            <div className="program-create-header">
 
               <div>
 
-                <h2 className="text-xl font-semibold text-slate-900">
+                <div className="programs-eyebrow">
+                  NEW RESEARCH PROGRAM
+                </div>
+
+                <h2>
                   Create Survey Program
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Define the research purpose,
-                  election scope and target population.
+                <p>
+                  Define the research identity,
+                  electoral scope and target population.
                 </p>
 
               </div>
@@ -606,226 +680,333 @@ const router =
 
                 onClick={
                   function () {
+
                     setShowCreate(
                       false
                     );
                   }
                 }
 
-                className="text-sm text-slate-500"
+                className="program-close-button"
+                aria-label="Close"
               >
-                Close
+                <X size={18} />
               </button>
 
             </div>
 
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <div className="program-form-section">
 
-              <Field
-                label="Program Code"
-              >
-                <input
-                  value={
-                    form.studyCode
-                  }
+              <div className="program-form-section-heading">
 
-                  onChange={
-                    function (event) {
+                <div className="program-section-icon">
+                  <ClipboardList size={17} />
+                </div>
 
-                      updateForm(
-                        "studyCode",
-                        event.target.value
-                      );
-                    }
-                  }
+                <div>
+                  <h3>
+                    Program Identity
+                  </h3>
 
-                  className="input"
-                />
-              </Field>
+                  <p>
+                    Define the research program
+                    and survey methodology.
+                  </p>
+                </div>
+
+              </div>
 
 
-              <Field
-                label="Program Name"
-              >
-                <input
-                  value={
-                    form.studyName
-                  }
+              <div className="program-form-grid">
 
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "studyName",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-              </Field>
-
-
-              <Field
-                label="Survey Type"
-              >
-                <select
-                  value={
-                    form.studyType
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "studyType",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
+                <Field
+                  label="Program Code"
+                  hint="Unique research program identifier"
                 >
-                  <option value="OPINION_SURVEY">
-                    Opinion Survey
-                  </option>
-
-                  <option value="VOTER_PULSE">
-                    Voter Pulse
-                  </option>
-
-                </select>
-              </Field>
-
-
-              <Field
-                label="Scope Type"
-              >
-                <select
-                  value={
-                    form.scopeMode
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "scopeMode",
-                        event.target.value
-                      );
+                  <input
+                    value={
+                      form.studyCode
                     }
-                  }
 
-                  className="input"
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "studyCode",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Program Name"
+                  hint="Human-readable research program name"
+                >
+                  <input
+                    value={
+                      form.studyName
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "studyName",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Survey Type"
+                >
+                  <select
+                    value={
+                      form.studyType
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "studyType",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  >
+                    <option value="OPINION_SURVEY">
+                      Opinion Survey
+                    </option>
+
+                    <option value="VOTER_PULSE">
+                      Voter Pulse
+                    </option>
+                  </select>
+                </Field>
+
+
+                <Field
+                  label="Primary Language"
+                >
+                  <select
+                    value={
+                      form.primaryLanguage
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "primaryLanguage",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  >
+                    <option value="Telugu">
+                      Telugu
+                    </option>
+
+                    <option value="English">
+                      English
+                    </option>
+
+                    <option value="Hindi">
+                      Hindi
+                    </option>
+                  </select>
+                </Field>
+
+              </div>
+
+            </div>
+
+
+            <div className="program-form-section">
+
+              <div className="program-form-section-heading">
+
+                <div className="program-section-icon">
+                  <MapPinned size={17} />
+                </div>
+
+                <div>
+                  <h3>
+                    Electoral Scope
+                  </h3>
+
+                  <p>
+                    Select the election and
+                    geography covered by this research.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div className="program-form-grid">
+
+                <Field
+                  label="Scope Type"
+                >
+                  <select
+                    value={
+                      form.scopeMode
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "scopeMode",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  >
+                    <option value="ELECTORAL">
+                      Electoral Constituency
+                    </option>
+
+                    <option value="GENERAL_GEOGRAPHY">
+                      General Geography
+                    </option>
+                  </select>
+                </Field>
+
+
+                <Field
+                  label="Election Type"
+                >
+                  <select
+                    value={
+                      form.electionType
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "electionType",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  >
+                    <option value="ASSEMBLY">
+                      MLA / Assembly
+                    </option>
+
+                    <option value="PARLIAMENTARY">
+                      MP / Parliamentary
+                    </option>
+
+                    <option value="MLC_GRADUATES">
+                      MLC Graduate
+                    </option>
+                  </select>
+                </Field>
+
+
+                <Field
+                  label={
+                    assemblyTypeName
+                  }
+                  span
                 >
 
-                  <option value="ELECTORAL">
-                    Electoral Constituency
-                  </option>
-
-                  <option value="GENERAL_GEOGRAPHY">
-                    General Geography
-                  </option>
-
-                </select>
-              </Field>
-
-
-              <Field
-                label="Election Type"
-              >
-                <select
-                  value={
-                    form.electionType
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "electionType",
-                        event.target.value
-                      );
+                  <select
+                    value={
+                      selectedJurisdictionId
                     }
-                  }
 
-                  className="input"
-                >
+                    onChange={
+                      function (event) {
 
-                  <option value="ASSEMBLY">
-                    MLA / Assembly
-                  </option>
-
-                  <option value="PARLIAMENTARY">
-                    MP / Parliamentary
-                  </option>
-
-                  <option value="MLC_GRADUATES">
-                    MLC Graduate
-                  </option>
-
-                </select>
-              </Field>
-
-
-              <Field
-                label={assemblyTypeName}
-              >
-
-                <select
-                  value={
-                    selectedJurisdictionId
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      selectJurisdiction(
-                        event.target.value
-                      );
+                        selectJurisdiction(
+                          event.target.value
+                        );
+                      }
                     }
-                  }
 
-                  className="input"
-                >
+                    className="program-input"
+                  >
 
-                  <option value="">
-                    Select Constituency
-                  </option>
+                    <option value="">
+                      Select Constituency
+                    </option>
 
 
-                  {jurisdictions.map(
-                    function (item) {
+                    {jurisdictions.map(
+                      function (item) {
 
-                      return (
-                        <option
-                          key={
-                            item.id
-                          }
-                          value={
-                            item.id
-                          }
-                        >
-                          {item.name}
-                        </option>
-                      );
-                    }
-                  )}
+                        return (
+                          <option
+                            key={
+                              item.id
+                            }
 
-                </select>
+                            value={
+                              item.id
+                            }
+                          >
+                            {item.name}
+                          </option>
+                        );
+                      }
+                    )}
 
-              </Field>
+                  </select>
+
+                </Field>
+
+              </div>
 
 
               {scope && (
 
-                <div className="md:col-span-2 rounded-xl bg-indigo-50 p-5">
+                <div className="program-scope-card">
 
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="program-scope-header">
+
+                    <div>
+                      <div className="program-scope-label">
+                        RESOLVED RESEARCH SCOPE
+                      </div>
+
+                      <strong>
+                        {scope.jurisdiction.name}
+                      </strong>
+                    </div>
+
+                    <CheckCircle2 size={18} />
+                  </div>
+
+
+                  <div className="program-scope-grid">
 
                     <ScopeMetric
+                      icon={MapPinned}
                       label="Constituency"
                       value={
                         scope
@@ -835,6 +1016,7 @@ const router =
                     />
 
                     <ScopeMetric
+                      icon={Users}
                       label="Eligible Voters"
                       value={
                         scope
@@ -844,6 +1026,7 @@ const router =
                     />
 
                     <ScopeMetric
+                      icon={Globe2}
                       label="Mapped Geography"
                       value={
                         scope
@@ -864,124 +1047,133 @@ const router =
 
               )}
 
-
-              <Field
-                label="Target Sample"
-              >
-                <input
-                  type="number"
-
-                  value={
-                    form.targetSampleSize
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "targetSampleSize",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-              </Field>
+            </div>
 
 
-              <Field
-                label="Primary Language"
-              >
-                <select
-                  value={
-                    form.primaryLanguage
-                  }
+            <div className="program-form-section">
 
-                  onChange={
-                    function (event) {
+              <div className="program-form-section-heading">
 
-                      updateForm(
-                        "primaryLanguage",
-                        event.target.value
-                      );
-                    }
-                  }
+                <div className="program-section-icon">
+                  <Target size={17} />
+                </div>
 
-                  className="input"
+                <div>
+                  <h3>
+                    Research Parameters
+                  </h3>
+
+                  <p>
+                    Define sample requirements
+                    and research context.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div className="program-form-grid">
+
+                <Field
+                  label="Target Sample"
+                  hint="Number of survey contacts"
                 >
+                  <input
+                    type="number"
 
-                  <option value="Telugu">
-                    Telugu
-                  </option>
-
-                  <option value="English">
-                    English
-                  </option>
-
-                  <option value="Hindi">
-                    Hindi
-                  </option>
-
-                </select>
-              </Field>
-
-
-              <Field
-                label="Purpose"
-                span
-              >
-                <textarea
-                  rows={3}
-
-                  value={
-                    form.purpose
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "purpose",
-                        event.target.value
-                      );
+                    value={
+                      form.targetSampleSize
                     }
-                  }
 
-                  className="input"
-                />
-              </Field>
+                    onChange={
+                      function (event) {
 
-
-              <Field
-                label="Methodology Notes"
-                span
-              >
-                <textarea
-                  rows={3}
-
-                  value={
-                    form.methodologyNotes
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "methodologyNotes",
-                        event.target.value
-                      );
+                        updateForm(
+                          "targetSampleSize",
+                          event.target.value
+                        );
+                      }
                     }
-                  }
 
-                  className="input"
-                />
-              </Field>
+                    className="program-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Purpose"
+                  span
+                >
+                  <textarea
+                    rows={3}
+
+                    value={
+                      form.purpose
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "purpose",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Methodology Notes"
+                  span
+                >
+                  <textarea
+                    rows={3}
+
+                    value={
+                      form.methodologyNotes
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "methodologyNotes",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="program-input"
+                  />
+                </Field>
+
+              </div>
 
             </div>
 
 
-            <div className="mt-6 flex justify-end">
+            <div className="program-create-footer">
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowCreate(
+                      false
+                    );
+                  }
+                }
+
+                className="program-cancel-button"
+              >
+                Cancel
+              </button>
+
 
               <button
                 type="button"
@@ -994,206 +1186,287 @@ const router =
                   createProgram
                 }
 
-                className="rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="program-submit-button"
               >
 
-                {saving
-                  ? "Creating..."
-                  : "Create Program"}
+                {saving ? (
+                  "Creating..."
+                ) : (
+                  <>
+                    <Plus size={15} />
+                    Create Program
+                  </>
+                )}
 
               </button>
 
             </div>
 
-          </div>
+          </section>
 
         )}
 
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* PROGRAM LIST */}
 
-          <div className="border-b border-slate-200 px-6 py-4">
+        <section className="program-list-panel">
 
-            <h2 className="font-semibold text-slate-900">
-              Survey Programs
-            </h2>
+          <div className="program-list-header">
+
+            <div>
+
+              <div className="programs-eyebrow">
+                RESEARCH PORTFOLIO
+              </div>
+
+              <h2>
+                Survey Programs
+              </h2>
+
+              <p>
+                Select a program to manage its
+                research iterations and execution.
+              </p>
+
+            </div>
+
+
+            <div className="program-count-pill">
+              {programs.length}
+              {" "}
+              {programs.length === 1
+                ? "Program"
+                : "Programs"}
+            </div>
 
           </div>
 
 
           {loading ? (
 
-            <div className="p-8 text-sm text-slate-500">
+            <div className="program-empty-state">
               Loading programs...
             </div>
 
           ) : programs.length === 0 ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              No programs created yet.
+            <div className="program-empty-state">
+
+              <div className="program-empty-icon">
+                <ClipboardList size={22} />
+              </div>
+
+              <strong>
+                No research programs yet
+              </strong>
+
+              <span>
+                Create your first program
+                to begin survey research.
+              </span>
+
             </div>
 
           ) : (
 
-            <div className="overflow-x-auto">
+            <div className="program-card-list">
 
-              <table className="w-full text-left">
+              {programs.map(
+                function (program) {
 
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                  return (
+                    <button
+                      type="button"
 
-                  <tr>
+                      key={
+                        program.id
+                      }
 
-                    <th className="px-5 py-3">
-                      Program
-                    </th>
+                      onClick={
+                        function () {
 
-                    <th className="px-5 py-3">
-                      Scope
-                    </th>
+                          router.push(
+                            `/programs/${program.id}`
+                          );
+                        }
+                      }
 
-                    <th className="px-5 py-3">
-                      Target
-                    </th>
+                      className="program-row-card"
+                    >
 
-                    <th className="px-5 py-3">
-                      Language
-                    </th>
+                      <div className="program-row-main">
 
-                    <th className="px-5 py-3">
-                      Status
-                    </th>
-
-                  </tr>
-
-                </thead>
-
-
-                <tbody>
-
-                  {programs.map(
-                    function (program) {
-
-                      return (
-                       
-			<tr
-  key={
-    program.id
-  }
-
-  onClick={
-    function () {
-
-      router.push(
-        `/programs/${program.id}`
-      );
-    }
-  }
-
-  className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
->
-			
-                 
-                          <td className="px-5 py-4">
-
-                            <div className="font-medium text-slate-900">
-                              {
-                                program.study_name
-                              }
-                            </div>
-
-                            <div className="mt-1 text-xs text-slate-500">
-                              {
-                                program.study_code
-                              }
-                            </div>
-
-                          </td>
+                        <div className="program-row-icon">
+                          <ClipboardList size={19} />
+                        </div>
 
 
-                          <td className="px-5 py-4 text-sm">
+                        <div className="program-row-title">
 
-                            {
-                              program
-                                .jurisdiction_name ||
-                              program
-                                .scope_mode ||
-                              "-"
-                            }
+                          <div className="program-row-topline">
 
-                          </td>
+                            <h3>
+                              {program.study_name}
+                            </h3>
 
-
-                          <td className="px-5 py-4 text-sm">
-
-                            {
-                              program
-                                .target_sample_size ??
-                              "-"
-                            }
-
-                          </td>
-
-
-                          <td className="px-5 py-4 text-sm">
-
-                            {
-                              program
-                                .primary_language ||
-                              "-"
-                            }
-
-                          </td>
-
-
-                          <td className="px-5 py-4">
-
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-
-                              {
+                            <StatusBadge
+                              status={
                                 program.status
                               }
+                            />
 
-                            </span>
+                          </div>
 
-                          </td>
 
-                        </tr>
-                      );
-                    }
-                  )}
+                          <div className="program-code">
+                            {program.study_code}
+                          </div>
 
-                </tbody>
 
-              </table>
+                          {program.purpose && (
+
+                            <p>
+                              {program.purpose}
+                            </p>
+
+                          )}
+
+                        </div>
+
+                      </div>
+
+
+                      <div className="program-row-metrics">
+
+                        <ProgramMetric
+                          icon={MapPinned}
+                          label="Scope"
+                          value={
+                            program.jurisdiction_name ||
+                            program.scope_mode ||
+                            "-"
+                          }
+                        />
+
+                        <ProgramMetric
+                          icon={Target}
+                          label="Target"
+                          value={
+                            program.target_sample_size
+                              ?.toLocaleString() ||
+                            "-"
+                          }
+                        />
+
+                        <ProgramMetric
+                          icon={Languages}
+                          label="Language"
+                          value={
+                            program.primary_language ||
+                            "-"
+                          }
+                        />
+
+                      </div>
+
+
+                      <div className="program-row-open">
+                        <span>
+                          Open
+                        </span>
+
+                        <ChevronRight size={17} />
+                      </div>
+
+                    </button>
+                  );
+                }
+              )}
 
             </div>
 
           )}
 
+        </section>
+
+
+        <div className="program-flow-note">
+
+          <span>
+            Research lifecycle
+          </span>
+
+          <strong>
+            Program
+          </strong>
+
+          <ArrowRight size={12} />
+
+          <strong>
+            Iteration
+          </strong>
+
+          <ArrowRight size={12} />
+
+          <strong>
+            Run
+          </strong>
+
+          <ArrowRight size={12} />
+
+          <strong>
+            Evidence
+          </strong>
+
+          <ArrowRight size={12} />
+
+          <strong>
+            Analysis
+          </strong>
+
         </div>
 
       </div>
 
-
-      <style jsx global>{`
-        .input {
-          width: 100%;
-          border: 1px solid #cbd5e1;
-          border-radius: 0.5rem;
-          padding: 0.65rem 0.75rem;
-          font-size: 0.875rem;
-          background: white;
-          color: #0f172a;
-          outline: none;
-        }
-
-        .input:focus {
-          border-color: #6366f1;
-          box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
-        }
-      `}</style>
-
     </AppShell>
+  );
+}
+
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+
+  return (
+    <div className="program-summary-card">
+
+      <div className="program-summary-icon">
+        <Icon size={17} />
+      </div>
+
+      <div>
+        <div className="program-summary-label">
+          {label}
+        </div>
+
+        <div className="program-summary-value">
+          {value}
+        </div>
+
+        <div className="program-summary-detail">
+          {detail}
+        </div>
+      </div>
+
+    </div>
   );
 }
 
@@ -1201,25 +1474,33 @@ const router =
 function Field({
   label,
   children,
-  span = false
+  span = false,
+  hint,
 }: {
   label: string;
   children: React.ReactNode;
   span?: boolean;
+  hint?: string;
 }) {
 
   return (
     <div
       className={
         span
-          ? "md:col-span-2"
-          : ""
+          ? "program-field program-field-span"
+          : "program-field"
       }
     >
 
-      <label className="mb-2 block text-sm font-medium text-slate-700">
+      <label>
         {label}
       </label>
+
+      {hint && (
+        <span className="program-field-hint">
+          {hint}
+        </span>
+      )}
 
       {children}
 
@@ -1229,24 +1510,87 @@ function Field({
 
 
 function ScopeMetric({
+  icon: Icon,
   label,
-  value
+  value,
 }: {
+  icon: React.ElementType;
   label: string;
   value: string;
 }) {
 
   return (
-    <div>
+    <div className="program-scope-metric">
 
-      <div className="text-xs font-medium uppercase text-indigo-600">
-        {label}
+      <div className="program-scope-metric-icon">
+        <Icon size={16} />
       </div>
 
-      <div className="mt-1 font-semibold text-slate-900">
-        {value}
+      <div>
+        <div className="program-scope-metric-label">
+          {label}
+        </div>
+
+        <div className="program-scope-metric-value">
+          {value}
+        </div>
       </div>
 
     </div>
+  );
+}
+
+
+function ProgramMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+
+  return (
+    <div className="program-row-metric">
+
+      <Icon size={14} />
+
+      <div>
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+      </div>
+
+    </div>
+  );
+}
+
+
+function StatusBadge({
+  status,
+}: {
+  status: string;
+}) {
+
+  const normalized =
+    status
+      .toUpperCase()
+      .replaceAll("_", " ");
+
+  return (
+    <span
+      className={
+        status === "ACTIVE"
+          ? "program-status program-status-active"
+          : "program-status"
+      }
+    >
+      {normalized}
+    </span>
   );
 }
