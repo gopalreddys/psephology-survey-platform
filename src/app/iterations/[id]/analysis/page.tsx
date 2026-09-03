@@ -6,6 +6,21 @@ import {
 } from "react";
 
 import {
+  Activity,
+  ArrowLeft,
+  BarChart3,
+  CheckCircle2,
+  CircleDot,
+  FileQuestion,
+  Gauge,
+  Layers3,
+  RefreshCw,
+  RotateCcw,
+  Target,
+  Users
+} from "lucide-react";
+
+import {
   useParams,
   useRouter
 } from "next/navigation";
@@ -65,64 +80,6 @@ type QuestionnaireAnalysis = {
 };
 
 
-function MetricCard({
-  label,
-  value,
-  detail
-}: {
-  label: string;
-  value: string | number;
-  detail?: string;
-}) {
-
-  return (
-    <div
-      className="
-        rounded-xl
-        border
-        border-slate-200
-        bg-white
-        p-5
-        shadow-sm
-      "
-    >
-      <div
-        className="
-          text-sm
-          font-medium
-          text-slate-500
-        "
-      >
-        {label}
-      </div>
-
-      <div
-        className="
-          mt-2
-          text-3xl
-          font-semibold
-          text-slate-900
-        "
-      >
-        {value}
-      </div>
-
-      {detail && (
-        <div
-          className="
-            mt-1
-            text-xs
-            text-slate-500
-          "
-        >
-          {detail}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
 export default function AnalysisPage() {
 
   const params =
@@ -143,7 +100,6 @@ export default function AnalysisPage() {
       null
     );
 
-
   const [
     questionnaire,
     setQuestionnaire
@@ -152,13 +108,11 @@ export default function AnalysisPage() {
       null
     );
 
-
   const [
     loading,
     setLoading
   ] =
     useState(true);
-
 
   const [
     error,
@@ -171,13 +125,8 @@ export default function AnalysisPage() {
 
   async function loadAnalysis() {
 
-    setLoading(
-      true
-    );
-
-    setError(
-      null
-    );
+    setLoading(true);
+    setError(null);
 
     try {
 
@@ -195,7 +144,6 @@ export default function AnalysisPage() {
             `/api/iterations/${iterationId}/questionnaire-analysis`
           )
         ]);
-
 
       setCoverage(
         coverageData
@@ -215,9 +163,7 @@ export default function AnalysisPage() {
 
     } finally {
 
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
@@ -239,13 +185,7 @@ export default function AnalysisPage() {
     return (
       <AppShell>
 
-        <div
-          className="
-            p-8
-            text-sm
-            text-slate-500
-          "
-        >
+        <div className="analysis-workbench-loading">
           Loading analysis...
         </div>
 
@@ -257,505 +197,359 @@ export default function AnalysisPage() {
   return (
     <AppShell>
 
-      <div
-        className="
-          mx-auto
-          max-w-7xl
-          p-8
-        "
-      >
+      <div className="analysis-workbench-page">
 
-        <div
-          className="
-            flex
-            items-start
-            justify-between
-            gap-6
-          "
+        <button
+          type="button"
+
+          onClick={
+            function () {
+              router.push(
+                `/iterations/${iterationId}`
+              );
+            }
+          }
+
+          className="analysis-workbench-back"
         >
+          <ArrowLeft size={15} />
+          Back to Iteration
+        </button>
+
+
+        <section className="analysis-workbench-header">
 
           <div>
 
-            <button
-              onClick={
-                () =>
-                  router.push(
-                    `/iterations/${iterationId}`
-                  )
-              }
-              className="
-                mb-3
-                text-sm
-                text-slate-500
-                hover:text-slate-900
-              "
-            >
-              ← Back to Iteration
-            </button>
+            <div className="analysis-workbench-eyebrow">
+              RESEARCH INTELLIGENCE
+            </div>
 
-            <h1
-              className="
-                text-3xl
-                font-semibold
-                text-slate-900
-              "
-            >
+            <h1>
               Survey Analysis
             </h1>
 
-            {coverage && (
-              <p
-                className="
-                  mt-2
-                  text-sm
-                  text-slate-500
-                "
-              >
-                Iteration {coverage.iteration.number}
-                {" · "}
-                {coverage.iteration.name}
-              </p>
-            )}
+            {
+              coverage && (
+
+                <div className="analysis-workbench-context">
+
+                  <span>
+                    Iteration {coverage.iteration.number}
+                  </span>
+
+                  <strong>
+                    {coverage.iteration.name}
+                  </strong>
+
+                  <span className="analysis-workbench-status">
+                    {
+                      formatLabel(
+                        coverage.iteration.status
+                      )
+                    }
+                  </span>
+
+                </div>
+
+              )
+            }
+
+            <p>
+              Evaluate survey coverage and the
+              question-level evidence captured from
+              analyzed conversations.
+            </p>
 
           </div>
 
 
           <button
+            type="button"
+
             onClick={
               loadAnalysis
             }
-            className="
-              rounded-lg
-              border
-              border-slate-300
-              bg-white
-              px-4
-              py-2
-              text-sm
-              font-medium
-              text-slate-700
-              hover:bg-slate-50
-            "
+
+            className="analysis-refresh-button"
           >
-            Refresh
+            <RefreshCw size={15} />
+            Refresh Analysis
           </button>
 
-        </div>
+        </section>
 
 
         {error && (
 
-          <div
-            className="
-              mt-6
-              rounded-lg
-              border
-              border-red-200
-              bg-red-50
-              p-4
-              text-sm
-              text-red-700
-            "
-          >
+          <div className="analysis-workbench-error">
             {error}
           </div>
+
         )}
 
 
         {coverage && (
 
           <>
-            <section
-              className="mt-8"
-            >
 
-              <div
-                className="
-                  mb-4
-                  flex
-                  items-end
-                  justify-between
-                "
-              >
+            <section className="analysis-primary-grid">
+
+              <AnalysisMetric
+                icon={Target}
+                label="Target Voters"
+                value={
+                  coverage.targetVoters
+                }
+                detail={
+                  `${coverage.selectedVoters} selected`
+                }
+              />
+
+              <AnalysisMetric
+                icon={Activity}
+                label="Attempted"
+                value={
+                  coverage.attemptedVoters
+                }
+                detail={
+                  `${coverage.attemptPct}% of target`
+                }
+              />
+
+              <AnalysisMetric
+                icon={CheckCircle2}
+                label="Successful Surveys"
+                value={
+                  coverage.successfulSurveys
+                }
+                detail={
+                  `${coverage.coveragePct}% coverage`
+                }
+                emphasis
+              />
+
+              <AnalysisMetric
+                icon={Users}
+                label="Remaining"
+                value={
+                  coverage.remainingVoters
+                }
+                detail="Target still to complete"
+              />
+
+            </section>
+
+
+            <section className="analysis-health-panel">
+
+              <div className="analysis-section-heading">
 
                 <div>
 
-                  <h2
-                    className="
-                      text-xl
-                      font-semibold
-                      text-slate-900
-                    "
-                  >
-                    Survey Health
+                  <div className="analysis-workbench-eyebrow">
+                    SURVEY HEALTH
+                  </div>
+
+                  <h2>
+                    Iteration Coverage
                   </h2>
 
-                  <p
-                    className="
-                      mt-1
-                      text-sm
-                      text-slate-500
-                    "
-                  >
-                    Operational progress for this iteration
+                  <p>
+                    Operational progress across the
+                    target population for this research iteration.
                   </p>
+
+                </div>
+
+
+                <div className="analysis-coverage-value">
+
+                  <strong>
+                    {coverage.coveragePct}%
+                  </strong>
+
+                  <span>
+                    successful coverage
+                  </span>
 
                 </div>
 
               </div>
 
 
-              <div
-                className="
-                  grid
-                  grid-cols-1
-                  gap-4
-                  md:grid-cols-2
-                  xl:grid-cols-4
-                "
-              >
+              <div className="analysis-progress-track">
 
-                <MetricCard
-                  label="Target Voters"
-                  value={
-                    coverage.targetVoters
-                  }
-                  detail={
-                    `${coverage.selectedVoters} selected`
-                  }
-                />
+                <div
+                  className="analysis-progress-fill"
 
-                <MetricCard
-                  label="Attempted"
-                  value={
-                    coverage.attemptedVoters
-                  }
-                  detail={
-                    `${coverage.attemptPct}% of target`
-                  }
-                />
-
-                <MetricCard
-                  label="Successful Surveys"
-                  value={
-                    coverage.successfulSurveys
-                  }
-                  detail={
-                    `${coverage.coveragePct}% coverage`
-                  }
-                />
-
-                <MetricCard
-                  label="Remaining"
-                  value={
-                    coverage.remainingVoters
-                  }
-                  detail="Target still to complete"
+                  style={{
+                    width:
+                      `${Math.min(
+                        coverage.coveragePct,
+                        100
+                      )}%`
+                  }}
                 />
 
               </div>
 
 
-              <div
-                className="
-                  mt-4
-                  grid
-                  grid-cols-1
-                  gap-4
-                  md:grid-cols-2
-                  xl:grid-cols-4
-                "
-              >
+              <div className="analysis-progress-caption">
 
-                <MetricCard
+                <span>
+                  {coverage.successfulSurveys}
+                  {" of "}
+                  {coverage.targetVoters}
+                  {" target voters successfully surveyed"}
+                </span>
+
+                <span>
+                  {coverage.remainingVoters}
+                  {" remaining"}
+                </span>
+
+              </div>
+
+
+              <div className="analysis-secondary-grid">
+
+                <SmallMetric
+                  icon={CircleDot}
                   label="Partial Surveys"
                   value={
                     coverage.partialSurveys
                   }
                 />
 
-                <MetricCard
+                <SmallMetric
+                  icon={RotateCcw}
                   label="Retry Pending"
                   value={
                     coverage.retryPending
                   }
                 />
 
-                <MetricCard
+                <SmallMetric
+                  icon={RotateCcw}
                   label="Retry Exhausted"
                   value={
                     coverage.retryExhausted
                   }
                 />
 
-                <MetricCard
+                <SmallMetric
+                  icon={Users}
                   label="Untouched"
                   value={
                     coverage.untouchedVoters
                   }
                 />
 
-              </div>
+                <SmallMetric
+                  icon={Layers3}
+                  label="Terminal Outcomes"
+                  value={
+                    coverage.terminalOutcomes
+                  }
+                />
 
-
-              <div
-                className="
-                  mt-4
-                  rounded-xl
-                  border
-                  border-slate-200
-                  bg-white
-                  p-5
-                  shadow-sm
-                "
-              >
-
-                <div
-                  className="
-                    flex
-                    items-center
-                    justify-between
-                  "
-                >
-
-                  <span
-                    className="
-                      text-sm
-                      font-medium
-                      text-slate-700
-                    "
-                  >
-                    Iteration Coverage
-                  </span>
-
-                  <span
-                    className="
-                      text-sm
-                      font-semibold
-                      text-slate-900
-                    "
-                  >
-                    {coverage.coveragePct}%
-                  </span>
-
-                </div>
-
-
-                <div
-                  className="
-                    mt-3
-                    h-3
-                    overflow-hidden
-                    rounded-full
-                    bg-slate-100
-                  "
-                >
-
-                  <div
-                    className="
-                      h-full
-                      rounded-full
-                      bg-slate-900
-                    "
-                    style={{
-                      width:
-                        `${Math.min(
-                          coverage.coveragePct,
-                          100
-                        )}%`
-                    }}
-                  />
-
-                </div>
-
-                <div
-                  className="
-                    mt-2
-                    text-xs
-                    text-slate-500
-                  "
-                >
-                  {coverage.successfulSurveys}
-                  {" of "}
-                  {coverage.targetVoters}
-                  {" target voters successfully surveyed"}
-                </div>
+                <SmallMetric
+                  icon={Gauge}
+                  label="Completion"
+                  value={
+                    `${coverage.completionPct}%`
+                  }
+                />
 
               </div>
 
             </section>
 
 
-            <section
-              className="mt-10"
-            >
+            <section className="analysis-evidence-panel">
 
-              <div>
+              <div className="analysis-evidence-header">
 
-                <h2
-                  className="
-                    text-xl
-                    font-semibold
-                    text-slate-900
-                  "
-                >
-                  Questionnaire Completion
-                </h2>
+                <div>
 
-                <p
-                  className="
-                    mt-1
-                    text-sm
-                    text-slate-500
-                  "
-                >
-                  Question-level evidence captured from analyzed conversations
-                </p>
+                  <div className="analysis-workbench-eyebrow">
+                    QUESTION-LEVEL EVIDENCE
+                  </div>
+
+                  <h2>
+                    Questionnaire Completion
+                  </h2>
+
+                  <p>
+                    Evidence coverage derived from
+                    analyzed survey conversations.
+                  </p>
+
+                </div>
+
+
+                <div className="analysis-respondent-count">
+
+                  <FileQuestion size={17} />
+
+                  <div>
+                    <span>Respondents analyzed</span>
+                    <strong>
+                      {
+                        questionnaire
+                          ?.respondentCount ||
+                        0
+                      }
+                    </strong>
+                  </div>
+
+                </div>
 
               </div>
 
 
-              <div
-                className="
-                  mt-4
-                  overflow-hidden
-                  rounded-xl
-                  border
-                  border-slate-200
-                  bg-white
-                  shadow-sm
-                "
-              >
+              <div className="analysis-question-table-wrap">
 
-                <div
-                  className="
-                    border-b
-                    border-slate-200
-                    px-5
-                    py-4
-                    text-sm
-                    text-slate-600
-                  "
-                >
-                  Respondents analyzed:
-                  {" "}
-                  <span
-                    className="
-                      font-semibold
-                      text-slate-900
-                    "
-                  >
-                    {questionnaire?.respondentCount || 0}
-                  </span>
-                </div>
+                <table className="analysis-question-table">
 
+                  <thead>
 
-                <div
-                  className="overflow-x-auto"
-                >
+                    <tr>
 
-                  <table
-                    className="
-                      min-w-full
-                      divide-y
-                      divide-slate-200
-                    "
-                  >
+                      <th>
+                        #
+                      </th>
 
-                    <thead
-                      className="bg-slate-50"
-                    >
+                      <th>
+                        Research Question
+                      </th>
 
-                      <tr>
+                      <th>
+                        Category
+                      </th>
 
-                        <th
-                          className="
-                            px-5
-                            py-3
-                            text-left
-                            text-xs
-                            font-semibold
-                            uppercase
-                            tracking-wide
-                            text-slate-500
-                          "
-                        >
-                          #
-                        </th>
+                      <th>
+                        Type
+                      </th>
 
-                        <th
-                          className="
-                            px-5
-                            py-3
-                            text-left
-                            text-xs
-                            font-semibold
-                            uppercase
-                            tracking-wide
-                            text-slate-500
-                          "
-                        >
-                          Question
-                        </th>
+                      <th className="numeric">
+                        Answered
+                      </th>
 
-                        <th
-                          className="
-                            px-5
-                            py-3
-                            text-left
-                            text-xs
-                            font-semibold
-                            uppercase
-                            tracking-wide
-                            text-slate-500
-                          "
-                        >
-                          Type
-                        </th>
+                      <th className="numeric">
+                        Completion
+                      </th>
 
-                        <th
-                          className="
-                            px-5
-                            py-3
-                            text-right
-                            text-xs
-                            font-semibold
-                            uppercase
-                            tracking-wide
-                            text-slate-500
-                          "
-                        >
-                          Answered
-                        </th>
+                    </tr>
 
-                        <th
-                          className="
-                            px-5
-                            py-3
-                            text-right
-                            text-xs
-                            font-semibold
-                            uppercase
-                            tracking-wide
-                            text-slate-500
-                          "
-                        >
-                          Completion
-                        </th>
-
-                      </tr>
-
-                    </thead>
+                  </thead>
 
 
-                    <tbody
-                      className="
-                        divide-y
-                        divide-slate-100
-                      "
-                    >
+                  <tbody>
 
-                      {questionnaire?.questions.map(
+                    {
+                      questionnaire?.questions.map(
                         function (question) {
 
                           return (
@@ -764,128 +558,322 @@ export default function AnalysisPage() {
                               key={
                                 question.questionId
                               }
-                              className="
-                                hover:bg-slate-50
-                              "
                             >
 
-                              <td
-                                className="
-                                  whitespace-nowrap
-                                  px-5
-                                  py-4
-                                  text-sm
-                                  font-medium
-                                  text-slate-700
-                                "
-                              >
-                                Q{question.questionOrder}
-                              </td>
+                              <td>
 
-
-                              <td
-                                className="
-                                  px-5
-                                  py-4
-                                "
-                              >
-
-                                <div
-                                  className="
-                                    text-sm
-                                    font-medium
-                                    text-slate-900
-                                  "
-                                >
-                                  {question.questionText}
-                                </div>
-
-                                <div
-                                  className="
-                                    mt-1
-                                    text-xs
-                                    text-slate-500
-                                  "
-                                >
-                                  {question.questionCode}
-
-                                  {question.required
-                                    ? " · Required"
-                                    : " · Optional"}
-                                </div>
-
-                              </td>
-
-
-                              <td
-                                className="
-                                  whitespace-nowrap
-                                  px-5
-                                  py-4
-                                  text-sm
-                                  text-slate-600
-                                "
-                              >
-                                {question.questionType}
-                              </td>
-
-
-                              <td
-                                className="
-                                  whitespace-nowrap
-                                  px-5
-                                  py-4
-                                  text-right
-                                  text-sm
-                                  text-slate-700
-                                "
-                              >
-                                {question.answeredCount}
-                                {" / "}
-                                {question.respondentCount}
-                              </td>
-
-
-                              <td
-                                className="
-                                  whitespace-nowrap
-                                  px-5
-                                  py-4
-                                  text-right
-                                "
-                              >
-
-                                <span
-                                  className="
-                                    text-sm
-                                    font-semibold
-                                    text-slate-900
-                                  "
-                                >
-                                  {question.answeredPct}%
+                                <span className="analysis-question-number">
+                                  Q{question.questionOrder}
                                 </span>
 
                               </td>
 
+
+                              <td>
+
+                                <div className="analysis-question-text">
+                                  {question.questionText}
+                                </div>
+
+                                <div className="analysis-question-meta">
+
+                                  <span>
+                                    {question.questionCode}
+                                  </span>
+
+                                  <span>
+                                    {
+                                      question.required
+                                        ? "Required"
+                                        : "Optional"
+                                    }
+                                  </span>
+
+                                </div>
+
+                              </td>
+
+
+                              <td>
+
+                                <span className="analysis-category-badge">
+                                  {
+                                    formatLabel(
+                                      question.analysisCategory ||
+                                      "GENERAL"
+                                    )
+                                  }
+                                </span>
+
+                              </td>
+
+
+                              <td>
+
+                                <span className="analysis-type-label">
+                                  {
+                                    formatLabel(
+                                      question.questionType
+                                    )
+                                  }
+                                </span>
+
+                              </td>
+
+
+                              <td className="numeric">
+
+                                <strong>
+                                  {question.answeredCount}
+                                </strong>
+
+                                <span className="analysis-denominator">
+                                  {" / "}
+                                  {question.respondentCount}
+                                </span>
+
+                              </td>
+
+
+                              <td className="numeric">
+
+                                <CompletionBadge
+                                  value={
+                                    question.answeredPct
+                                  }
+                                />
+
+                              </td>
+
                             </tr>
+
                           );
                         }
-                      )}
+                      )
+                    }
 
-                    </tbody>
+                  </tbody>
 
-                  </table>
-
-                </div>
+                </table>
 
               </div>
 
             </section>
+
+
+            <section className="analysis-future-grid">
+
+              <FutureModule
+                icon={BarChart3}
+                title="Voter Pulse"
+                description="Aggregate mood, government evaluation and political signals."
+              />
+
+              <FutureModule
+                icon={Layers3}
+                title="Issue Intelligence"
+                description="Rank concerns and development priorities by geography."
+              />
+
+              <FutureModule
+                icon={Activity}
+                title="Comparative Analysis"
+                description="Compare iterations, Mandals, villages and demographic cohorts."
+              />
+
+            </section>
+
+
+            <div className="analysis-future-note">
+              Advanced intelligence modules will activate
+              when their analysis datasets are available.
+              Current metrics above are derived from live
+              survey coverage and question-level evidence.
+            </div>
+
           </>
+
         )}
 
       </div>
 
     </AppShell>
   );
+}
+
+
+function AnalysisMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  emphasis = false
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  detail?: string;
+  emphasis?: boolean;
+}) {
+
+  return (
+
+    <div
+      className={
+        emphasis
+          ? "analysis-primary-card emphasis"
+          : "analysis-primary-card"
+      }
+    >
+
+      <div className="analysis-primary-icon">
+        <Icon size={17} />
+      </div>
+
+      <div className="analysis-primary-content">
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+        {
+          detail && (
+            <small>
+              {detail}
+            </small>
+          )
+        }
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function SmallMetric({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+}) {
+
+  return (
+
+    <div className="analysis-small-metric">
+
+      <Icon size={15} />
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function CompletionBadge({
+  value
+}: {
+  value: number;
+}) {
+
+  let level =
+    "low";
+
+  if (value >= 80) {
+    level = "high";
+  } else if (value >= 50) {
+    level = "medium";
+  }
+
+  return (
+
+    <span
+      className={
+        `analysis-completion-badge ${level}`
+      }
+    >
+      {value}%
+    </span>
+  );
+}
+
+
+function FutureModule({
+  icon: Icon,
+  title,
+  description
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) {
+
+  return (
+
+    <div className="analysis-future-module">
+
+      <div className="analysis-future-icon">
+        <Icon size={17} />
+      </div>
+
+      <div>
+
+        <div className="analysis-future-title">
+
+          <strong>
+            {title}
+          </strong>
+
+          <span>
+            Planned
+          </span>
+
+        </div>
+
+        <p>
+          {description}
+        </p>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function formatLabel(
+  value: string
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
 }

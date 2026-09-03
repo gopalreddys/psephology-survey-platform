@@ -6,6 +6,20 @@ import {
   useState
 } from "react";
 
+import {
+  Building2,
+  ChevronRight,
+  Database,
+  Home,
+  Landmark,
+  Map,
+  MapPin,
+  Plus,
+  Search,
+  Users,
+  X
+} from "lucide-react";
+
 import AppShell
   from "@/components/AppShell";
 
@@ -38,30 +52,15 @@ const geoTypes = [
 
 
 const parentRules:
-  Record<
-    string,
-    string | null
-  > = {
+  Record<string, string | null> = {
 
   STATE: null,
-
-  DISTRICT:
-    "STATE",
-
-  MANDAL:
-    "DISTRICT",
-
-  VILLAGE:
-    "MANDAL",
-
-  CORPORATION:
-    "DISTRICT",
-
-  DIVISION:
-    "CORPORATION",
-
-  WARD:
-    "DIVISION"
+  DISTRICT: "STATE",
+  MANDAL: "DISTRICT",
+  VILLAGE: "MANDAL",
+  CORPORATION: "DISTRICT",
+  DIVISION: "CORPORATION",
+  WARD: "DIVISION"
 };
 
 
@@ -71,10 +70,7 @@ export default function GeographyPage() {
     geographies,
     setGeographies
   ] =
-    useState<
-      Geography[]
-    >([]);
-
+    useState<Geography[]>([]);
 
   const [
     loading,
@@ -82,13 +78,11 @@ export default function GeographyPage() {
   ] =
     useState(true);
 
-
   const [
     showForm,
     setShowForm
   ] =
     useState(false);
-
 
   const [
     saving,
@@ -96,16 +90,25 @@ export default function GeographyPage() {
   ] =
     useState(false);
 
-
   const [
     message,
     setMessage
   ] =
-    useState<
-      string |
+    useState<string | null>(
       null
-    >(null);
+    );
 
+  const [
+    search,
+    setSearch
+  ] =
+    useState("");
+
+  const [
+    typeFilter,
+    setTypeFilter
+  ] =
+    useState("ALL");
 
   const [
     form,
@@ -113,35 +116,19 @@ export default function GeographyPage() {
   ] =
     useState({
 
-      name:
-        "",
-
-      geoType:
-        "STATE",
-
-      parentId:
-        "",
-
-      code:
-        "",
-
-      urbanRural:
-        "MIXED",
-
-      population:
-        "",
-
-      registeredVoters:
-        ""
+      name: "",
+      geoType: "STATE",
+      parentId: "",
+      code: "",
+      urbanRural: "MIXED",
+      population: "",
+      registeredVoters: ""
     });
 
 
   async function load() {
 
-    setLoading(
-      true
-    );
-
+    setLoading(true);
 
     try {
 
@@ -149,7 +136,6 @@ export default function GeographyPage() {
         await apiFetch(
           "/api/geographies"
         );
-
 
       setGeographies(
         data
@@ -165,18 +151,14 @@ export default function GeographyPage() {
 
     } finally {
 
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
 
   useEffect(
     function () {
-
       load();
-
     },
     []
   );
@@ -192,13 +174,9 @@ export default function GeographyPage() {
     useMemo(
       function () {
 
-        if (
-          !requiredParentType
-        ) {
-
+        if (!requiredParentType) {
           return [];
         }
-
 
         return geographies.filter(
           function (geo) {
@@ -211,7 +189,6 @@ export default function GeographyPage() {
         );
 
       },
-
       [
         geographies,
         requiredParentType
@@ -219,29 +196,72 @@ export default function GeographyPage() {
     );
 
 
+  const filteredGeographies =
+    useMemo(
+      function () {
+
+        const query =
+          search
+            .trim()
+            .toLowerCase();
+
+        return geographies.filter(
+          function (geo) {
+
+            const matchesType =
+              typeFilter === "ALL" ||
+              geo.geo_type === typeFilter;
+
+            if (!matchesType) {
+              return false;
+            }
+
+            if (!query) {
+              return true;
+            }
+
+            return [
+              geo.name,
+              geo.geo_type,
+              geo.code,
+              geo.urban_rural
+            ]
+              .filter(Boolean)
+              .some(
+                function (value) {
+
+                  return String(value)
+                    .toLowerCase()
+                    .includes(query);
+                }
+              );
+          }
+        );
+
+      },
+      [
+        geographies,
+        search,
+        typeFilter
+      ]
+    );
+
+
   async function createGeography(
-    event:
-      React.FormEvent
+    event: React.FormEvent
   ) {
 
     event.preventDefault();
 
-    setSaving(
-      true
-    );
-
-    setMessage(
-      null
-    );
-
+    setSaving(true);
+    setMessage(null);
 
     try {
 
       await apiFetch(
         "/api/geographies",
         {
-          method:
-            "POST",
+          method: "POST",
 
           body:
             JSON.stringify({
@@ -282,39 +302,20 @@ export default function GeographyPage() {
 
 
       setForm({
-
-        name:
-          "",
-
-        geoType:
-          "STATE",
-
-        parentId:
-          "",
-
-        code:
-          "",
-
-        urbanRural:
-          "MIXED",
-
-        population:
-          "",
-
-        registeredVoters:
-          ""
+        name: "",
+        geoType: "STATE",
+        parentId: "",
+        code: "",
+        urbanRural: "MIXED",
+        population: "",
+        registeredVoters: ""
       });
 
-
-      setShowForm(
-        false
-      );
-
+      setShowForm(false);
 
       setMessage(
         "Geography created successfully."
       );
-
 
       await load();
 
@@ -328,63 +329,211 @@ export default function GeographyPage() {
 
     } finally {
 
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
+
+
+  const mandalCount =
+    geographies.filter(
+      function (geo) {
+        return geo.geo_type === "MANDAL";
+      }
+    ).length;
+
+  const villageCount =
+    geographies.filter(
+      function (geo) {
+        return geo.geo_type === "VILLAGE";
+      }
+    ).length;
+
+  const districtCount =
+    geographies.filter(
+      function (geo) {
+        return geo.geo_type === "DISTRICT";
+      }
+    ).length;
+
+  const registeredVoters =
+    geographies
+      .filter(
+        function (geo) {
+          return geo.geo_type === "VILLAGE";
+        }
+      )
+      .reduce(
+        function (sum, geo) {
+          return (
+            sum +
+            Number(
+              geo.registered_voters ||
+              0
+            )
+          );
+        },
+        0
+      );
 
 
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="geography-page">
 
-        <div className="flex items-start justify-between">
+        <section className="geography-header">
 
           <div>
 
-            <p className="text-sm font-medium text-indigo-600">
-              Administration
-            </p>
+            <div className="geography-eyebrow">
+              GEOGRAPHIC ADMINISTRATION
+            </div>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <h1>
               Geography Management
             </h1>
 
-            <p className="mt-2 text-slate-500">
-              Manage state, district, mandal,
-              village, corporation, division
-              and ward hierarchy.
+            <p>
+              Maintain the geographic hierarchy used
+              for voter mapping, survey execution,
+              coverage and research analysis.
             </p>
 
           </div>
 
 
           <button
+            type="button"
+
             onClick={
               function () {
-
                 setShowForm(
                   !showForm
                 );
               }
             }
-            className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white"
+
+            className="geography-add-button"
           >
-            + Add Geography
+            <Plus size={16} />
+            Add Geography
           </button>
 
-        </div>
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="geography-message">
             {message}
           </div>
 
         )}
+
+
+        <section className="geography-summary-grid">
+
+          <SummaryCard
+            icon={Map}
+            label="Geography Records"
+            value={
+              String(
+                geographies.length
+              )
+            }
+          />
+
+          <SummaryCard
+            icon={Landmark}
+            label="Districts"
+            value={
+              String(
+                districtCount
+              )
+            }
+          />
+
+          <SummaryCard
+            icon={MapPin}
+            label="Mandals"
+            value={
+              String(
+                mandalCount
+              )
+            }
+            emphasis
+          />
+
+          <SummaryCard
+            icon={Home}
+            label="Villages"
+            value={
+              String(
+                villageCount
+              )
+            }
+          />
+
+          <SummaryCard
+            icon={Users}
+            label="Village Voter Base"
+            value={
+              registeredVoters
+                ? registeredVoters
+                    .toLocaleString()
+                : "—"
+            }
+          />
+
+        </section>
+
+
+        <section className="geography-hierarchy-strip">
+
+          <HierarchyNode
+            label="State"
+          />
+
+          <ChevronRight size={14} />
+
+          <HierarchyNode
+            label="District"
+          />
+
+          <ChevronRight size={14} />
+
+          <HierarchyNode
+            label="Mandal"
+            emphasis
+          />
+
+          <ChevronRight size={14} />
+
+          <HierarchyNode
+            label="Village"
+          />
+
+          <span className="geography-hierarchy-divider">
+            or
+          </span>
+
+          <HierarchyNode
+            label="Corporation"
+          />
+
+          <ChevronRight size={14} />
+
+          <HierarchyNode
+            label="Division"
+          />
+
+          <ChevronRight size={14} />
+
+          <HierarchyNode
+            label="Ward"
+          />
+
+        </section>
 
 
         {showForm && (
@@ -393,289 +542,336 @@ export default function GeographyPage() {
             onSubmit={
               createGeography
             }
-            className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+
+            className="geography-create-panel"
           >
 
-            <h2 className="text-lg font-semibold">
-              Add Geography
-            </h2>
+            <div className="geography-create-header">
 
+              <div>
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+                <div className="geography-eyebrow">
+                  GEOGRAPHY MASTER
+                </div>
 
-              <Field
-                label="Name"
-              >
+                <h2>
+                  Add Geography
+                </h2>
 
-                <input
-                  required
+                <p>
+                  Add a geographic unit and place it
+                  within the correct parent hierarchy.
+                </p>
 
-                  value={
-                    form.name
-                  }
+              </div>
 
-                  onChange={
-                    function (e) {
-
-                      setForm({
-                        ...form,
-                        name:
-                          e.target.value
-                      });
-                    }
-                  }
-
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-
-              </Field>
-
-
-              <Field
-                label="Type"
-              >
-
-                <select
-                  value={
-                    form.geoType
-                  }
-
-                  onChange={
-                    function (e) {
-
-                      setForm({
-                        ...form,
-                        geoType:
-                          e.target.value,
-                        parentId:
-                          ""
-                      });
-                    }
-                  }
-
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-
-                  {geoTypes.map(
-                    function (type) {
-
-                      return (
-                        <option
-                          key={
-                            type
-                          }
-                          value={
-                            type
-                          }
-                        >
-                          {type}
-                        </option>
-                      );
-                    }
-                  )}
-
-                </select>
-
-              </Field>
-
-
-              {requiredParentType && (
-
-                <Field
-                  label={
-                    `Parent ${requiredParentType}`
-                  }
-                >
-
-                  <select
-                    required
-
-                    value={
-                      form.parentId
-                    }
-
-                    onChange={
-                      function (e) {
-
-                        setForm({
-                          ...form,
-                          parentId:
-                            e.target.value
-                        });
-                      }
-                    }
-
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  >
-
-                    <option value="">
-                      Select parent
-                    </option>
-
-                    {parentOptions.map(
-                      function (geo) {
-
-                        return (
-                          <option
-                            key={
-                              geo.id
-                            }
-                            value={
-                              geo.id
-                            }
-                          >
-                            {geo.name}
-                          </option>
-                        );
-                      }
-                    )}
-
-                  </select>
-
-                </Field>
-
-              )}
-
-
-              <Field
-                label="Code"
-              >
-
-                <input
-                  value={
-                    form.code
-                  }
-
-                  onChange={
-                    function (e) {
-
-                      setForm({
-                        ...form,
-                        code:
-                          e.target.value
-                      });
-                    }
-                  }
-
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-
-              </Field>
-
-
-              <Field
-                label="Urban / Rural"
-              >
-
-                <select
-                  value={
-                    form.urbanRural
-                  }
-
-                  onChange={
-                    function (e) {
-
-                      setForm({
-                        ...form,
-                        urbanRural:
-                          e.target.value
-                      });
-                    }
-                  }
-
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-
-                  <option value="URBAN">
-                    Urban
-                  </option>
-
-                  <option value="RURAL">
-                    Rural
-                  </option>
-
-                  <option value="MIXED">
-                    Mixed
-                  </option>
-
-                </select>
-
-              </Field>
-
-
-              <Field
-                label="Population"
-              >
-
-                <input
-                  type="number"
-
-                  value={
-                    form.population
-                  }
-
-                  onChange={
-                    function (e) {
-
-                      setForm({
-                        ...form,
-                        population:
-                          e.target.value
-                      });
-                    }
-                  }
-
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-
-              </Field>
-
-
-              <Field
-                label="Registered Voters"
-              >
-
-                <input
-                  type="number"
-
-                  value={
-                    form.registeredVoters
-                  }
-
-                  onChange={
-                    function (e) {
-
-                      setForm({
-                        ...form,
-                        registeredVoters:
-                          e.target.value
-                      });
-                    }
-                  }
-
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-
-              </Field>
-
-            </div>
-
-
-            <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
 
                 onClick={
                   function () {
-
-                    setShowForm(
-                      false
-                    );
+                    setShowForm(false);
                   }
                 }
 
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+                className="geography-close-button"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+
+            <div className="geography-create-body">
+
+              <div className="geography-form-heading">
+
+                <div className="geography-form-icon">
+                  <MapPin size={17} />
+                </div>
+
+                <div>
+                  <h3>
+                    Geographic Identity
+                  </h3>
+                  <p>
+                    Define the unit, hierarchy,
+                    classification and voter base.
+                  </p>
+                </div>
+
+              </div>
+
+
+              <div className="geography-form-grid">
+
+                <Field label="Name">
+
+                  <input
+                    required
+
+                    value={
+                      form.name
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          name:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="geography-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Type">
+
+                  <select
+                    value={
+                      form.geoType
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          geoType:
+                            event.target.value,
+                          parentId:
+                            ""
+                        });
+                      }
+                    }
+
+                    className="geography-input"
+                  >
+
+                    {
+                      geoTypes.map(
+                        function (type) {
+
+                          return (
+
+                            <option
+                              key={type}
+                              value={type}
+                            >
+                              {
+                                formatLabel(
+                                  type
+                                )
+                              }
+                            </option>
+
+                          );
+                        }
+                      )
+                    }
+
+                  </select>
+
+                </Field>
+
+
+                {requiredParentType && (
+
+                  <Field
+                    label={
+                      `Parent ${formatLabel(
+                        requiredParentType
+                      )}`
+                    }
+                  >
+
+                    <select
+                      required
+
+                      value={
+                        form.parentId
+                      }
+
+                      onChange={
+                        function (event) {
+
+                          setForm({
+                            ...form,
+                            parentId:
+                              event.target.value
+                          });
+                        }
+                      }
+
+                      className="geography-input"
+                    >
+
+                      <option value="">
+                        Select parent
+                      </option>
+
+                      {
+                        parentOptions.map(
+                          function (geo) {
+
+                            return (
+
+                              <option
+                                key={geo.id}
+                                value={geo.id}
+                              >
+                                {geo.name}
+                              </option>
+
+                            );
+                          }
+                        )
+                      }
+
+                    </select>
+
+                  </Field>
+
+                )}
+
+
+                <Field label="Code">
+
+                  <input
+                    value={
+                      form.code
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          code:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="geography-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Urban / Rural">
+
+                  <select
+                    value={
+                      form.urbanRural
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          urbanRural:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="geography-input"
+                  >
+
+                    <option value="URBAN">
+                      Urban
+                    </option>
+
+                    <option value="RURAL">
+                      Rural
+                    </option>
+
+                    <option value="MIXED">
+                      Mixed
+                    </option>
+
+                  </select>
+
+                </Field>
+
+
+                <Field label="Population">
+
+                  <input
+                    type="number"
+
+                    value={
+                      form.population
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          population:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="geography-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Registered Voters">
+
+                  <input
+                    type="number"
+
+                    value={
+                      form.registeredVoters
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          registeredVoters:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="geography-input"
+                  />
+
+                </Field>
+
+              </div>
+
+            </div>
+
+
+            <div className="geography-create-footer">
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowForm(false);
+                  }
+                }
+
+                className="geography-cancel-button"
               >
                 Cancel
               </button>
@@ -688,11 +884,18 @@ export default function GeographyPage() {
 
                 type="submit"
 
-                className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="geography-save-button"
               >
-                {saving
-                  ? "Saving..."
-                  : "Create"}
+                {
+                  saving
+                    ? "Saving..."
+                    : (
+                      <>
+                        <Plus size={15} />
+                        Create Geography
+                      </>
+                    )
+                }
               </button>
 
             </div>
@@ -702,109 +905,370 @@ export default function GeographyPage() {
         )}
 
 
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="geography-master-panel">
 
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="geography-master-toolbar">
 
-            <h2 className="font-semibold">
-              Geography Master
-            </h2>
+            <div>
+
+              <div className="geography-eyebrow">
+                GEOGRAPHY MASTER
+              </div>
+
+              <h2>
+                Geographic Units
+              </h2>
+
+              <p>
+                Search and review geographic units
+                available to the survey platform.
+              </p>
+
+            </div>
+
+
+            <div className="geography-toolbar-actions">
+
+              <div className="geography-search">
+
+                <Search size={15} />
+
+                <input
+                  value={
+                    search
+                  }
+
+                  onChange={
+                    function (event) {
+                      setSearch(
+                        event.target.value
+                      );
+                    }
+                  }
+
+                  placeholder="Search geography"
+                />
+
+              </div>
+
+
+              <select
+                value={
+                  typeFilter
+                }
+
+                onChange={
+                  function (event) {
+                    setTypeFilter(
+                      event.target.value
+                    );
+                  }
+                }
+
+                className="geography-type-filter"
+              >
+
+                <option value="ALL">
+                  All Types
+                </option>
+
+                {
+                  geoTypes.map(
+                    function (type) {
+
+                      return (
+
+                        <option
+                          key={type}
+                          value={type}
+                        >
+                          {formatLabel(type)}
+                        </option>
+
+                      );
+                    }
+                  )
+                }
+
+              </select>
+
+            </div>
 
           </div>
 
 
-          {loading ? (
+          {
+            loading
+              ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              Loading geography...
-            </div>
+                <div className="geography-loading">
+                  Loading geography...
+                </div>
 
-          ) : (
+              )
+              : filteredGeographies.length === 0
+                ? (
 
-            <div className="overflow-x-auto">
+                  <div className="geography-empty">
 
-              <table className="w-full text-left">
+                    <MapPin size={26} />
 
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <strong>
+                      No matching geography
+                    </strong>
 
-                  <tr>
+                    <span>
+                      Try another search or geography type.
+                    </span>
 
-                    <th className="px-6 py-3">
-                      Name
-                    </th>
+                  </div>
 
-                    <th className="px-6 py-3">
-                      Type
-                    </th>
+                )
+                : (
 
-                    <th className="px-6 py-3">
-                      Code
-                    </th>
+                  <div className="geography-table-wrap">
 
-                    <th className="px-6 py-3">
-                      Area
-                    </th>
+                    <table className="geography-table">
 
-                    <th className="px-6 py-3">
-                      Registered Voters
-                    </th>
+                      <thead>
 
-                  </tr>
+                        <tr>
 
-                </thead>
+                          <th>
+                            Geography
+                          </th>
 
+                          <th>
+                            Type
+                          </th>
 
-                <tbody>
+                          <th>
+                            Code
+                          </th>
 
-                  {geographies.map(
-                    function (geo) {
+                          <th>
+                            Classification
+                          </th>
 
-                      return (
-                        <tr
-                          key={
-                            geo.id
-                          }
-                          className="border-t border-slate-100"
-                        >
+                          <th className="numeric">
+                            Population
+                          </th>
 
-                          <td className="px-6 py-4 text-sm font-medium">
-                            {geo.name}
-                          </td>
-
-                          <td className="px-6 py-4 text-sm">
-                            {geo.geo_type}
-                          </td>
-
-                          <td className="px-6 py-4 text-sm">
-                            {geo.code || "-"}
-                          </td>
-
-                          <td className="px-6 py-4 text-sm">
-                            {geo.urban_rural || "-"}
-                          </td>
-
-                          <td className="px-6 py-4 text-sm">
-                            {geo.registered_voters ?? "-"}
-                          </td>
+                          <th className="numeric">
+                            Registered Voters
+                          </th>
 
                         </tr>
-                      );
-                    }
-                  )}
 
-                </tbody>
+                      </thead>
 
-              </table>
 
-            </div>
+                      <tbody>
 
-          )}
+                        {
+                          filteredGeographies.map(
+                            function (geo) {
 
-        </div>
+                              return (
+
+                                <tr key={geo.id}>
+
+                                  <td>
+
+                                    <div className="geography-name-cell">
+
+                                      <div
+                                        className={
+                                          geo.geo_type === "MANDAL"
+                                            ? "geography-row-icon mandal"
+                                            : "geography-row-icon"
+                                        }
+                                      >
+                                        {
+                                          geographyIcon(
+                                            geo.geo_type
+                                          )
+                                        }
+                                      </div>
+
+                                      <div>
+
+                                        <strong>
+                                          {geo.name}
+                                        </strong>
+
+                                        {
+                                          geo.geo_type === "MANDAL"
+                                            ? (
+                                              <span>
+                                                Survey control geography
+                                              </span>
+                                            )
+                                            : null
+                                        }
+
+                                      </div>
+
+                                    </div>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <span
+                                      className={
+                                        geo.geo_type === "MANDAL"
+                                          ? "geography-type-badge mandal"
+                                          : "geography-type-badge"
+                                      }
+                                    >
+                                      {
+                                        formatLabel(
+                                          geo.geo_type
+                                        )
+                                      }
+                                    </span>
+
+                                  </td>
+
+
+                                  <td>
+                                    {geo.code || "-"}
+                                  </td>
+
+
+                                  <td>
+                                    {
+                                      formatLabel(
+                                        geo.urban_rural ||
+                                        "-"
+                                      )
+                                    }
+                                  </td>
+
+
+                                  <td className="numeric">
+                                    {
+                                      geo.population != null
+                                        ? geo.population
+                                            .toLocaleString()
+                                        : "-"
+                                    }
+                                  </td>
+
+
+                                  <td className="numeric">
+
+                                    {
+                                      geo.registered_voters != null
+                                        ? geo.registered_voters
+                                            .toLocaleString()
+                                        : "-"
+                                    }
+
+                                  </td>
+
+                                </tr>
+
+                              );
+                            }
+                          )
+                        }
+
+                      </tbody>
+
+                    </table>
+
+                  </div>
+
+                )
+          }
+
+
+          <div className="geography-platform-note">
+
+            <Database size={14} />
+
+            <span>
+              Geography provides the common spatial
+              reference for voter mapping, Runs,
+              coverage and aggregated research analysis.
+            </span>
+
+          </div>
+
+        </section>
 
       </div>
 
     </AppShell>
+  );
+}
+
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  emphasis = false
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+
+  return (
+
+    <div
+      className={
+        emphasis
+          ? "geography-summary-card emphasis"
+          : "geography-summary-card"
+      }
+    >
+
+      <div className="geography-summary-icon">
+        <Icon size={17} />
+      </div>
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function HierarchyNode({
+  label,
+  emphasis = false
+}: {
+  label: string;
+  emphasis?: boolean;
+}) {
+
+  return (
+
+    <span
+      className={
+        emphasis
+          ? "geography-hierarchy-node emphasis"
+          : "geography-hierarchy-node"
+      }
+    >
+      {label}
+    </span>
   );
 }
 
@@ -814,14 +1278,14 @@ function Field({
   children
 }: {
   label: string;
-  children:
-    React.ReactNode;
+  children: React.ReactNode;
 }) {
 
   return (
-    <label className="block">
 
-      <span className="mb-2 block text-sm font-medium text-slate-700">
+    <label className="geography-field">
+
+      <span>
         {label}
       </span>
 
@@ -829,4 +1293,53 @@ function Field({
 
     </label>
   );
+}
+
+
+function geographyIcon(
+  type: string
+) {
+
+  switch (type) {
+
+    case "STATE":
+      return <Map size={15} />;
+
+    case "DISTRICT":
+      return <Landmark size={15} />;
+
+    case "MANDAL":
+      return <MapPin size={15} />;
+
+    case "VILLAGE":
+      return <Home size={15} />;
+
+    case "CORPORATION":
+    case "DIVISION":
+    case "WARD":
+      return <Building2 size={15} />;
+
+    default:
+      return <MapPin size={15} />;
+  }
+}
+
+
+function formatLabel(
+  value: string
+) {
+
+  if (!value || value === "-") {
+    return value || "-";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
 }

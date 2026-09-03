@@ -1,8 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import AppShell from "@/components/AppShell";
-import { apiFetch } from "@/lib/api";
+import {
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+
+import {
+  CheckCircle2,
+  Mail,
+  Phone,
+  Plus,
+  Search,
+  ShieldCheck,
+  UserCog,
+  Users,
+  X
+} from "lucide-react";
+
+import AppShell
+  from "@/components/AppShell";
+
+import {
+  apiFetch
+} from "@/lib/api";
+
 
 type UserRow = {
   id: string;
@@ -15,98 +37,150 @@ type UserRow = {
   created_at: string;
 };
 
+
 const roleOptions = [
   {
     code: "ADMIN",
-    label: "Admin",
+    label: "Admin"
   },
   {
     code: "CAMPAIGN_MANAGER",
-    label: "Campaign Manager",
+    label: "Campaign Manager"
   },
   {
     code: "CAMPAIGNER",
-    label: "Campaigner",
-  },
+    label: "Campaigner"
+  }
 ];
 
+
 export default function UsersPage() {
-  const [users, setUsers] =
+
+  const [
+    users,
+    setUsers
+  ] =
     useState<UserRow[]>([]);
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading
+  ] =
     useState(true);
 
-  const [showForm, setShowForm] =
+  const [
+    showForm,
+    setShowForm
+  ] =
     useState(false);
 
-  const [saving, setSaving] =
+  const [
+    saving,
+    setSaving
+  ] =
     useState(false);
 
-  const [message, setMessage] =
-    useState<string | null>(null);
+  const [
+    message,
+    setMessage
+  ] =
+    useState<string | null>(
+      null
+    );
 
-  const [form, setForm] =
+  const [
+    search,
+    setSearch
+  ] =
+    useState("");
+
+  const [
+    roleFilter,
+    setRoleFilter
+  ] =
+    useState("ALL");
+
+  const [
+    form,
+    setForm
+  ] =
     useState({
       fullName: "",
       email: "",
       phoneNumber: "",
-      roleCode: "ADMIN",
+      roleCode: "ADMIN"
     });
 
+
   async function loadUsers() {
+
     setLoading(true);
 
     try {
+
       const data =
-        await apiFetch("/api/users");
+        await apiFetch(
+          "/api/users"
+        );
 
       setUsers(data);
+
     } catch (error) {
+
       setMessage(
         error instanceof Error
           ? error.message
           : "Unable to load users"
       );
+
     } finally {
+
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+
+  useEffect(
+    function () {
+      loadUsers();
+    },
+    []
+  );
+
 
   async function createUser(
     event: React.FormEvent
   ) {
+
     event.preventDefault();
 
     setSaving(true);
     setMessage(null);
 
     try {
+
       await apiFetch(
         "/api/users",
         {
           method: "POST",
 
-          body: JSON.stringify({
-            fullName:
-              form.fullName,
+          body:
+            JSON.stringify({
+              fullName:
+                form.fullName,
 
-            email:
-              form.email,
+              email:
+                form.email,
 
-            phoneNumber:
-              form.phoneNumber,
+              phoneNumber:
+                form.phoneNumber,
 
-            roleCode:
-              form.roleCode,
+              roleCode:
+                form.roleCode,
 
-            accessLevel:
-              "FULL"
-          })
+              accessLevel:
+                "FULL"
+            })
         }
       );
 
@@ -126,6 +200,7 @@ export default function UsersPage() {
       await loadUsers();
 
     } catch (error) {
+
       setMessage(
         error instanceof Error
           ? error.message
@@ -133,178 +208,468 @@ export default function UsersPage() {
       );
 
     } finally {
+
       setSaving(false);
     }
   }
 
+
+  const filteredUsers =
+    useMemo(
+      function () {
+
+        const query =
+          search
+            .trim()
+            .toLowerCase();
+
+        return users.filter(
+          function (user) {
+
+            const roleMatches =
+              roleFilter === "ALL" ||
+              user.role_code === roleFilter;
+
+            if (!roleMatches) {
+              return false;
+            }
+
+            if (!query) {
+              return true;
+            }
+
+            return [
+              user.full_name,
+              user.email,
+              user.phone_number,
+              user.role_name,
+              user.role_code,
+              user.status
+            ]
+              .filter(Boolean)
+              .some(
+                function (value) {
+
+                  return String(value)
+                    .toLowerCase()
+                    .includes(query);
+                }
+              );
+          }
+        );
+
+      },
+      [
+        users,
+        search,
+        roleFilter
+      ]
+    );
+
+
+  const activeUsers =
+    users.filter(
+      function (user) {
+        return user.status === "ACTIVE";
+      }
+    ).length;
+
+
+  const administrators =
+    users.filter(
+      function (user) {
+        return user.role_code === "ADMIN";
+      }
+    ).length;
+
+
+  const campaignManagers =
+    users.filter(
+      function (user) {
+        return user.role_code === "CAMPAIGN_MANAGER";
+      }
+    ).length;
+
+
+  const campaigners =
+    users.filter(
+      function (user) {
+        return user.role_code === "CAMPAIGNER";
+      }
+    ).length;
+
+
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="users-admin-page">
 
-        <div className="flex items-start justify-between">
+        <section className="users-admin-header">
 
           <div>
-            <p className="text-sm font-medium text-indigo-600">
-              Administration
-            </p>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <div className="users-admin-eyebrow">
+              PLATFORM ADMINISTRATION
+            </div>
+
+            <h1>
               Users & Roles
             </h1>
 
-            <p className="mt-2 text-slate-500">
-              Create and manage platform administrators,
-              campaign managers and campaigners.
+            <p>
+              Manage authorized platform users and
+              assign operational roles across research,
+              survey execution and administration.
             </p>
+
           </div>
+
 
           <button
-            onClick={() =>
-              setShowForm(
-                !showForm
-              )
+            type="button"
+
+            onClick={
+              function () {
+                setShowForm(
+                  !showForm
+                );
+              }
             }
-            className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-700"
+
+            className="users-create-button"
           >
-            + Create User
+            <Plus size={16} />
+            Create User
           </button>
 
-        </div>
+        </section>
+
 
         {message && (
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+
+          <div className="users-admin-message">
             {message}
           </div>
+
         )}
+
+
+        <section className="users-summary-grid">
+
+          <UserMetric
+            icon={Users}
+            label="Platform Users"
+            value={
+              String(
+                users.length
+              )
+            }
+          />
+
+          <UserMetric
+            icon={CheckCircle2}
+            label="Active Users"
+            value={
+              String(
+                activeUsers
+              )
+            }
+          />
+
+          <UserMetric
+            icon={ShieldCheck}
+            label="Administrators"
+            value={
+              String(
+                administrators
+              )
+            }
+            emphasis
+          />
+
+          <UserMetric
+            icon={UserCog}
+            label="Campaign Managers"
+            value={
+              String(
+                campaignManagers
+              )
+            }
+          />
+
+          <UserMetric
+            icon={Users}
+            label="Campaigners"
+            value={
+              String(
+                campaigners
+              )
+            }
+          />
+
+        </section>
+
 
         {showForm && (
 
           <form
-            onSubmit={createUser}
-            className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            onSubmit={
+              createUser
+            }
+
+            className="users-create-panel"
           >
 
-            <h2 className="text-lg font-semibold text-slate-900">
-              Create New User
-            </h2>
+            <div className="users-create-header">
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              <div>
 
-              <Field
-                label="Full Name"
-              >
-                <input
-                  required
-                  value={
-                    form.fullName
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      fullName:
-                        e.target.value
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </Field>
+                <div className="users-admin-eyebrow">
+                  ACCESS MANAGEMENT
+                </div>
 
-              <Field
-                label="Email"
-              >
-                <input
-                  required
-                  type="email"
-                  value={
-                    form.email
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      email:
-                        e.target.value
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </Field>
+                <h2>
+                  Create New User
+                </h2>
 
-              <Field
-                label="Phone Number"
-              >
-                <input
-                  value={
-                    form.phoneNumber
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      phoneNumber:
-                        e.target.value
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </Field>
+                <p>
+                  Add an authorized user and assign
+                  the appropriate platform role.
+                </p>
 
-              <Field
-                label="Role"
-              >
-                <select
-                  value={
-                    form.roleCode
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      roleCode:
-                        e.target.value
-                    })
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  {roleOptions.map(
-                    (role) => (
-                      <option
-                        key={
-                          role.code
-                        }
-                        value={
-                          role.code
-                        }
-                      >
-                        {role.label}
-                      </option>
-                    )
-                  )}
-                </select>
-              </Field>
+              </div>
 
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowForm(
-                    false
-                  )
+
+                onClick={
+                  function () {
+                    setShowForm(false);
+                  }
                 }
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+
+                className="users-close-button"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+
+            <div className="users-create-body">
+
+              <div className="users-form-heading">
+
+                <div className="users-form-icon">
+                  <UserCog size={17} />
+                </div>
+
+                <div>
+
+                  <h3>
+                    User Identity & Access
+                  </h3>
+
+                  <p>
+                    Define user identity, contact
+                    information and platform role.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div className="users-form-grid">
+
+                <Field label="Full Name">
+
+                  <input
+                    required
+
+                    value={
+                      form.fullName
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          fullName:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="users-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Email">
+
+                  <input
+                    required
+                    type="email"
+
+                    value={
+                      form.email
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          email:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="users-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Phone Number">
+
+                  <input
+                    value={
+                      form.phoneNumber
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          phoneNumber:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="users-input"
+                  />
+
+                </Field>
+
+
+                <Field label="Role">
+
+                  <select
+                    value={
+                      form.roleCode
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        setForm({
+                          ...form,
+                          roleCode:
+                            event.target.value
+                        });
+                      }
+                    }
+
+                    className="users-input"
+                  >
+
+                    {
+                      roleOptions.map(
+                        function (role) {
+
+                          return (
+
+                            <option
+                              key={
+                                role.code
+                              }
+                              value={
+                                role.code
+                              }
+                            >
+                              {role.label}
+                            </option>
+
+                          );
+                        }
+                      )
+                    }
+
+                  </select>
+
+                </Field>
+
+              </div>
+
+
+              <div className="users-role-guidance">
+
+                <RoleGuidance
+                  title="Admin"
+                  description="Platform administration and configuration."
+                />
+
+                <RoleGuidance
+                  title="Campaign Manager"
+                  description="Research and survey execution management."
+                />
+
+                <RoleGuidance
+                  title="Campaigner"
+                  description="Operational survey execution access."
+                />
+
+              </div>
+
+            </div>
+
+
+            <div className="users-create-footer">
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowForm(false);
+                  }
+                }
+
+                className="users-cancel-button"
               >
                 Cancel
               </button>
 
+
               <button
-                disabled={saving}
+                disabled={
+                  saving
+                }
+
                 type="submit"
-                className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
+
+                className="users-save-button"
               >
-                {saving
-                  ? "Creating..."
-                  : "Create User"}
+
+                {
+                  saving
+                    ? "Creating..."
+                    : (
+                      <>
+                        <Plus size={15} />
+                        Create User
+                      </>
+                    )
+                }
+
               </button>
 
             </div>
@@ -313,110 +678,390 @@ export default function UsersPage() {
 
         )}
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-          <div className="border-b border-slate-200 px-6 py-4">
+        <section className="users-master-panel">
 
-            <h2 className="font-semibold text-slate-900">
-              Platform Users
-            </h2>
+          <div className="users-master-toolbar">
+
+            <div>
+
+              <div className="users-admin-eyebrow">
+                ACCESS DIRECTORY
+              </div>
+
+              <h2>
+                Platform Users
+              </h2>
+
+              <p>
+                Review user identities, assigned
+                roles and current account status.
+              </p>
+
+            </div>
+
+
+            <div className="users-toolbar-actions">
+
+              <div className="users-search">
+
+                <Search size={15} />
+
+                <input
+                  value={
+                    search
+                  }
+
+                  onChange={
+                    function (event) {
+                      setSearch(
+                        event.target.value
+                      );
+                    }
+                  }
+
+                  placeholder="Search users"
+                />
+
+              </div>
+
+
+              <select
+                value={
+                  roleFilter
+                }
+
+                onChange={
+                  function (event) {
+                    setRoleFilter(
+                      event.target.value
+                    );
+                  }
+                }
+
+                className="users-role-filter"
+              >
+
+                <option value="ALL">
+                  All Roles
+                </option>
+
+                {
+                  roleOptions.map(
+                    function (role) {
+
+                      return (
+
+                        <option
+                          key={
+                            role.code
+                          }
+                          value={
+                            role.code
+                          }
+                        >
+                          {role.label}
+                        </option>
+
+                      );
+                    }
+                  )
+                }
+
+              </select>
+
+            </div>
 
           </div>
 
-          {loading ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              Loading users...
-            </div>
+          {
+            loading
+              ? (
 
-          ) : (
+                <div className="users-loading">
+                  Loading users...
+                </div>
 
-            <div className="overflow-x-auto">
+              )
+              : filteredUsers.length === 0
+                ? (
 
-              <table className="w-full text-left">
+                  <div className="users-empty">
 
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <Users size={27} />
 
-                  <tr>
-                    <th className="px-6 py-3">
-                      Name
-                    </th>
+                    <strong>
+                      No matching users
+                    </strong>
 
-                    <th className="px-6 py-3">
-                      Email
-                    </th>
+                    <span>
+                      Try another name, email or role.
+                    </span>
 
-                    <th className="px-6 py-3">
-                      Role
-                    </th>
+                  </div>
 
-                    <th className="px-6 py-3">
-                      Status
-                    </th>
-                  </tr>
+                )
+                : (
 
-                </thead>
+                  <div className="users-table-wrap">
 
-                <tbody>
+                    <table className="users-table">
 
-                  {users.map(
-                    (user) => (
+                      <thead>
 
-                      <tr
-                        key={
-                          user.id
-                        }
-                        className="border-t border-slate-100"
-                      >
+                        <tr>
 
-                        <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                          {
-                            user.full_name
-                          }
-                        </td>
+                          <th>
+                            User
+                          </th>
 
-                        <td className="px-6 py-4 text-sm text-slate-600">
-                          {
-                            user.email
-                          }
-                        </td>
+                          <th>
+                            Contact
+                          </th>
 
-                        <td className="px-6 py-4 text-sm text-slate-600">
-                          {
-                            user.role_name
-                          }
-                        </td>
+                          <th>
+                            Role
+                          </th>
 
-                        <td className="px-6 py-4">
+                          <th>
+                            Status
+                          </th>
 
-                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                            {
-                              user.status
+                          <th>
+                            Created
+                          </th>
+
+                        </tr>
+
+                      </thead>
+
+
+                      <tbody>
+
+                        {
+                          filteredUsers.map(
+                            function (user) {
+
+                              return (
+
+                                <tr key={user.id}>
+
+                                  <td>
+
+                                    <div className="users-user-cell">
+
+                                      <div className="users-avatar">
+
+                                        {
+                                          getInitials(
+                                            user.full_name
+                                          )
+                                        }
+
+                                      </div>
+
+                                      <div>
+
+                                        <strong>
+                                          {
+                                            user.full_name
+                                          }
+                                        </strong>
+
+                                        <span>
+                                          {
+                                            user.role_code
+                                          }
+                                        </span>
+
+                                      </div>
+
+                                    </div>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="users-contact">
+
+                                      <span>
+                                        <Mail size={12} />
+                                        {user.email}
+                                      </span>
+
+                                      {
+                                        user.phone_number
+                                          ? (
+                                            <span>
+                                              <Phone size={12} />
+                                              {user.phone_number}
+                                            </span>
+                                          )
+                                          : null
+                                      }
+
+                                    </div>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <span className="users-role-badge">
+                                      {
+                                        user.role_name ||
+                                        formatLabel(
+                                          user.role_code
+                                        )
+                                      }
+                                    </span>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <span
+                                      className={
+                                        user.status === "ACTIVE"
+                                          ? "users-status active"
+                                          : "users-status"
+                                      }
+                                    >
+                                      {
+                                        formatLabel(
+                                          user.status
+                                        )
+                                      }
+                                    </span>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <span className="users-created">
+                                      {
+                                        formatDate(
+                                          user.created_at
+                                        )
+                                      }
+                                    </span>
+
+                                  </td>
+
+                                </tr>
+
+                              );
                             }
-                          </span>
+                          )
+                        }
 
-                        </td>
+                      </tbody>
 
-                      </tr>
+                    </table>
 
-                    )
-                  )}
+                  </div>
 
-                </tbody>
+                )
+          }
 
-              </table>
 
-            </div>
+          <div className="users-access-note">
 
-          )}
+            <ShieldCheck size={14} />
 
-        </div>
+            <span>
+              Platform permissions continue to be
+              enforced by authenticated role-based access.
+            </span>
+
+          </div>
+
+        </section>
 
       </div>
 
     </AppShell>
   );
 }
+
+
+function UserMetric({
+  icon: Icon,
+  label,
+  value,
+  emphasis = false
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+
+  return (
+
+    <div
+      className={
+        emphasis
+          ? "users-summary-card emphasis"
+          : "users-summary-card"
+      }
+    >
+
+      <div className="users-summary-icon">
+        <Icon size={17} />
+      </div>
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function RoleGuidance({
+  title,
+  description
+}: {
+  title: string;
+  description: string;
+}) {
+
+  return (
+
+    <div className="users-role-guidance-card">
+
+      <ShieldCheck size={14} />
+
+      <div>
+
+        <strong>
+          {title}
+        </strong>
+
+        <span>
+          {description}
+        </span>
+
+      </div>
+
+    </div>
+  );
+}
+
 
 function Field({
   label,
@@ -425,10 +1070,12 @@ function Field({
   label: string;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="block">
 
-      <span className="mb-2 block text-sm font-medium text-slate-700">
+  return (
+
+    <label className="users-field">
+
+      <span>
         {label}
       </span>
 
@@ -436,4 +1083,76 @@ function Field({
 
     </label>
   );
+}
+
+
+function getInitials(
+  value: string
+) {
+
+  if (!value) {
+    return "?";
+  }
+
+  return value
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(
+      function (part) {
+        return part.charAt(0);
+      }
+    )
+    .join("")
+    .toUpperCase();
+}
+
+
+function formatDate(
+  value: string
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return date.toLocaleDateString(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }
+  );
+}
+
+
+function formatLabel(
+  value: string
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
 }
