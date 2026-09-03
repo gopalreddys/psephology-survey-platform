@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import {
@@ -170,6 +171,9 @@ function AuthenticatedShell({
     signOut
   } = useAuthenticator();
 
+  const pathname =
+    usePathname();
+
   const {
     user,
     loading,
@@ -228,42 +232,81 @@ function AuthenticatedShell({
 
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-shell">
 
-      <aside className="fixed left-0 top-0 flex h-screen w-64 flex-col bg-slate-950 text-white">
+      <aside className="app-sidebar">
 
-        <div className="border-b border-slate-800 px-6 py-6">
+        <div className="app-sidebar-brand">
 
-          <div className="text-lg font-bold">
-            Psephology AI
+          <div className="app-brand-icon">
+            <BarChart3 size={22} />
           </div>
 
-          <div className="mt-1 text-xs text-slate-400">
-            Survey Platform
+          <div>
+            <div className="app-brand-name">
+              Psephology AI
+            </div>
+
+            <div className="app-brand-subtitle">
+              Survey Intelligence
+            </div>
           </div>
 
         </div>
 
 
-        <nav className="flex-1 space-y-1 px-3 py-5">
+        <div className="app-nav-label">
+          WORKSPACE
+        </div>
+
+
+        <nav className="app-nav">
 
           {visibleMenu.map(
             (item) => {
+
               const Icon =
                 item.icon;
+
+              const active =
+                Boolean(
+                  item.href &&
+                  (
+                    pathname === item.href ||
+                    (
+                      item.href !== "/" &&
+                      pathname.startsWith(
+                        item.href + "/"
+                      )
+                    )
+                  )
+                );
+
 
               if (item.href) {
                 return (
                   <Link
                     key={item.label}
                     href={item.href}
-                    className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                    className={
+                      active
+                        ? "app-nav-item app-nav-item-active"
+                        : "app-nav-item"
+                    }
                   >
-                    <Icon size={19} />
+
+                    <div className="app-nav-icon">
+                      <Icon size={18} />
+                    </div>
 
                     <span>
                       {item.label}
                     </span>
+
+                    {active && (
+                      <div className="app-nav-active-dot" />
+                    )}
+
                   </Link>
                 );
               }
@@ -272,13 +315,21 @@ function AuthenticatedShell({
               return (
                 <div
                   key={item.label}
-                  className="flex w-full cursor-default items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-slate-500"
+                  className="app-nav-item app-nav-item-disabled"
                 >
-                  <Icon size={19} />
+
+                  <div className="app-nav-icon">
+                    <Icon size={18} />
+                  </div>
 
                   <span>
                     {item.label}
                   </span>
+
+                  <span className="app-coming-soon">
+                    Soon
+                  </span>
+
                 </div>
               );
             }
@@ -287,20 +338,28 @@ function AuthenticatedShell({
         </nav>
 
 
-        <div className="border-t border-slate-800 p-4">
+        <div className="app-sidebar-footer">
 
-          <div className="px-2">
+          <div className="app-user-card">
 
-            <div className="truncate text-sm font-medium text-white">
-              {user.name}
+            <div className="app-user-avatar">
+              {
+                user.name
+                  ?.charAt(0)
+                  .toUpperCase()
+              }
             </div>
 
-            <div className="mt-1 text-xs text-slate-400">
-              {user.role.name}
-            </div>
+            <div className="app-user-info">
 
-            <div className="mt-1 truncate text-xs text-slate-500">
-              {user.email}
+              <div className="app-user-name">
+                {user.name}
+              </div>
+
+              <div className="app-user-role">
+                {user.role.name}
+              </div>
+
             </div>
 
           </div>
@@ -309,9 +368,9 @@ function AuthenticatedShell({
           <button
             type="button"
             onClick={signOut}
-            className="mt-4 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+            className="app-signout-button"
           >
-            <LogOut size={18} />
+            <LogOut size={17} />
 
             <span>
               Sign out
@@ -323,9 +382,64 @@ function AuthenticatedShell({
       </aside>
 
 
-      <main className="ml-64 min-h-screen">
-        {children}
-      </main>
+      <div className="app-content-shell">
+
+        <header className="app-topbar">
+
+          <div>
+
+            <div className="app-topbar-eyebrow">
+              PSEPHOLOGY SURVEY PLATFORM
+            </div>
+
+            <div className="app-topbar-title">
+              Research Workspace
+            </div>
+
+          </div>
+
+
+          <div className="app-topbar-right">
+
+            <div className="app-status-pill">
+              <span className="app-status-dot" />
+              Secure Session
+            </div>
+
+            <div className="app-topbar-user">
+
+              <div className="app-topbar-avatar">
+                {
+                  user.name
+                    ?.charAt(0)
+                    .toUpperCase()
+                }
+              </div>
+
+              <div className="app-topbar-user-copy">
+
+                <span>
+                  {user.name}
+                </span>
+
+                <small>
+                  {user.email}
+                </small>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </header>
+
+
+        <main className="app-main">
+          {children}
+        </main>
+
+      </div>
 
     </div>
   );
