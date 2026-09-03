@@ -5,6 +5,19 @@ import {
   useState
 } from "react";
 
+import {
+  CheckCircle2,
+  Database,
+  FileSpreadsheet,
+  MapPinned,
+  Phone,
+  RefreshCw,
+  ShieldCheck,
+  Upload,
+  UserCheck,
+  Users
+} from "lucide-react";
+
 import AppShell
   from "@/components/AppShell";
 
@@ -278,342 +291,591 @@ export default function VotersPage() {
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="voter-master-page">
 
-        <div>
+        <section className="voter-master-header">
 
-          <p className="text-sm font-medium text-indigo-600">
-            Voter Data
-          </p>
+          <div>
 
-          <h1 className="mt-1 text-3xl font-bold text-slate-900">
-            Voter Master
-          </h1>
+            <div className="voter-master-eyebrow">
+              VOTER DATA MANAGEMENT
+            </div>
 
-          <p className="mt-2 text-slate-500">
-            Manage the canonical voter database
-            used for survey programs and campaigns.
-          </p>
+            <h1>
+              Voter Master
+            </h1>
 
-        </div>
+            <p>
+              Manage the canonical voter database used for
+              survey sampling, geography mapping and
+              AI voice survey execution.
+            </p>
+
+          </div>
+
+
+          <button
+            type="button"
+
+            onClick={
+              loadData
+            }
+
+            className="voter-refresh-button"
+          >
+            <RefreshCw size={15} />
+            Refresh
+          </button>
+
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="voter-message">
             {message}
           </div>
 
         )}
 
 
-        <div className="mt-8 grid gap-4 md:grid-cols-5">
+        <section className="voter-summary-grid">
 
-          <Metric
+          <SummaryMetric
+            icon={Database}
             title="Total Voters"
             value={
               summary?.total_voters ?? 0
             }
           />
 
-          <Metric
+          <SummaryMetric
+            icon={UserCheck}
             title="Active"
             value={
               summary?.active_voters ?? 0
             }
           />
 
-          <Metric
+          <SummaryMetric
+            icon={Phone}
             title="With Phone"
             value={
               summary?.voters_with_phone ?? 0
             }
           />
 
-          <Metric
+          <SummaryMetric
+            icon={MapPinned}
             title="Geo Mapped"
             value={
               summary?.geography_mapped ?? 0
             }
           />
 
-          <Metric
+          <SummaryMetric
+            icon={ShieldCheck}
             title="Constituency Mapped"
             value={
               summary?.jurisdiction_mapped ?? 0
             }
           />
 
-        </div>
+        </section>
 
 
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="voter-upload-panel">
 
-          <h2 className="text-lg font-semibold text-slate-900">
-            Upload Voter Data
-          </h2>
+          <div className="voter-upload-header">
 
-          <p className="mt-1 text-sm text-slate-500">
-            Supported formats:
-            XLSX, XLS and CSV
-          </p>
+            <div className="voter-upload-icon">
+              <FileSpreadsheet size={19} />
+            </div>
 
 
-          <div className="mt-5 flex items-center gap-4">
+            <div>
 
-            <input
-              type="file"
+              <div className="voter-master-eyebrow">
+                DATA INGESTION
+              </div>
 
-              accept=".xlsx,.xls,.csv"
+              <h2>
+                Upload Voter Data
+              </h2>
 
-              onChange={
-                function (event) {
+              <p>
+                Validate and load voter records into the
+                canonical voter master.
+              </p>
 
-                  setFile(
-                    event.target
-                      .files?.[0] ||
-                    null
-                  );
+            </div>
+
+          </div>
+
+
+          <div className="voter-upload-content">
+
+            <div className="voter-upload-zone">
+
+              <div>
+
+                <strong>
+                  Select voter data file
+                </strong>
+
+                <span>
+                  Supported formats: XLSX, XLS and CSV
+                </span>
+
+              </div>
+
+
+              <input
+                id="voter-file-input"
+
+                type="file"
+
+                accept=".xlsx,.xls,.csv"
+
+                onChange={
+                  function (event) {
+
+                    setFile(
+                      event.target
+                        .files?.[0] ||
+                      null
+                    );
+                  }
                 }
-              }
 
-              className="block text-sm"
-            />
+                className="voter-file-input"
+              />
 
 
-            <button
-              type="button"
+              <label
+                htmlFor="voter-file-input"
+                className="voter-file-button"
+              >
+                <Upload size={15} />
 
-              disabled={
-                !file ||
-                uploading
-              }
+                {
+                  file
+                    ? "Change File"
+                    : "Choose File"
+                }
+              </label>
 
-              onClick={
-                uploadFile
-              }
+            </div>
 
-              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
 
-              {uploading
-                ? "Processing..."
-                : "Validate & Upload"}
+            {file && (
 
-            </button>
+              <div className="voter-selected-file">
+
+                <FileSpreadsheet size={16} />
+
+                <span>
+                  {file.name}
+                </span>
+
+              </div>
+
+            )}
+
+
+            <div className="voter-upload-actions">
+
+              <div className="voter-upload-note">
+                Uploaded records are validated before
+                insertion or update.
+              </div>
+
+
+              <button
+                type="button"
+
+                disabled={
+                  !file ||
+                  uploading
+                }
+
+                onClick={
+                  uploadFile
+                }
+
+                className="voter-upload-submit"
+              >
+
+                {
+                  uploading
+                    ? (
+                      <>
+                        <RefreshCw
+                          size={15}
+                          className="voter-spin"
+                        />
+                        Processing...
+                      </>
+                    )
+                    : (
+                      <>
+                        <CheckCircle2 size={15} />
+                        Validate & Upload
+                      </>
+                    )
+                }
+
+              </button>
+
+            </div>
 
           </div>
 
 
           {uploadResult && (
 
-            <div className="mt-6 grid gap-3 md:grid-cols-4">
+            <div className="voter-upload-results">
 
-              <Result
-                label="Received"
-                value={
-                  uploadResult.received
-                }
-              />
+              <div className="voter-upload-results-title">
+                Upload Processing Summary
+              </div>
 
-              <Result
-                label="Valid"
-                value={
-                  uploadResult.valid
-                }
-              />
 
-              <Result
-                label="Inserted"
-                value={
-                  uploadResult.inserted
-                }
-              />
+              <div className="voter-result-grid">
 
-              <Result
-                label="Updated"
-                value={
-                  uploadResult.updated
-                }
-              />
+                <Result
+                  label="Received"
+                  value={
+                    uploadResult.received
+                  }
+                />
 
-              <Result
-                label="Duplicates"
-                value={
-                  uploadResult.duplicates
-                }
-              />
+                <Result
+                  label="Valid"
+                  value={
+                    uploadResult.valid
+                  }
+                />
 
-              <Result
-                label="Rejected"
-                value={
-                  uploadResult.rejected
-                }
-              />
+                <Result
+                  label="Inserted"
+                  value={
+                    uploadResult.inserted
+                  }
+                />
 
-              <Result
-                label="Geo Unmapped"
-                value={
-                  uploadResult
-                    .unmappedGeography
-                }
-              />
+                <Result
+                  label="Updated"
+                  value={
+                    uploadResult.updated
+                  }
+                />
 
-              <Result
-                label="Jurisdiction Unmapped"
-                value={
-                  uploadResult
-                    .unmappedJurisdiction
-                }
-              />
+                <Result
+                  label="Duplicates"
+                  value={
+                    uploadResult.duplicates
+                  }
+                />
+
+                <Result
+                  label="Rejected"
+                  value={
+                    uploadResult.rejected
+                  }
+                />
+
+                <Result
+                  label="Geo Unmapped"
+                  value={
+                    uploadResult
+                      .unmappedGeography
+                  }
+                />
+
+                <Result
+                  label="Jurisdiction Unmapped"
+                  value={
+                    uploadResult
+                      .unmappedJurisdiction
+                  }
+                />
+
+              </div>
 
             </div>
 
           )}
 
-        </div>
+        </section>
 
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="voter-records-panel">
 
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="voter-records-header">
 
-            <h2 className="font-semibold text-slate-900">
-              Voter Records
-            </h2>
+            <div>
+
+              <div className="voter-master-eyebrow">
+                MASTER RECORDS
+              </div>
+
+              <h2>
+                Voter Records
+              </h2>
+
+              <p>
+                Showing up to 100 records from the
+                canonical voter master.
+              </p>
+
+            </div>
+
+
+            <div className="voter-record-count">
+              <Users size={14} />
+              {voters.length} Loaded
+            </div>
 
           </div>
 
 
-          {loading ? (
+          {
+            loading
+              ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              Loading voters...
-            </div>
+                <div className="voter-loading">
+                  Loading voters...
+                </div>
 
-          ) : (
+              )
+              : voters.length === 0
+                ? (
 
-            <div className="overflow-x-auto">
+                  <div className="voter-empty">
 
-              <table className="w-full text-left">
+                    <Users size={24} />
 
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <strong>
+                      No voter records available
+                    </strong>
 
-                  <tr>
+                    <span>
+                      Upload a voter dataset to begin.
+                    </span>
 
-                    <th className="px-5 py-3">
-                      EPIC
-                    </th>
+                  </div>
 
-                    <th className="px-5 py-3">
-                      Name
-                    </th>
+                )
+                : (
 
-                    <th className="px-5 py-3">
-                      Age / Gender
-                    </th>
+                  <div className="voter-table-wrap">
 
-                    <th className="px-5 py-3">
-                      Mandal
-                    </th>
+                    <table className="voter-table">
 
-                    <th className="px-5 py-3">
-                      Assembly
-                    </th>
+                      <thead>
 
-                    <th className="px-5 py-3">
-                      Qualification
-                    </th>
+                        <tr>
 
-                    <th className="px-5 py-3">
-                      Phone
-                    </th>
+                          <th>
+                            EPIC
+                          </th>
 
-                  </tr>
+                          <th>
+                            Voter
+                          </th>
 
-                </thead>
+                          <th>
+                            Age / Gender
+                          </th>
 
+                          <th>
+                            Mandal
+                          </th>
 
-                <tbody>
+                          <th>
+                            Assembly
+                          </th>
 
-                  {voters.map(
-                    function (voter) {
+                          <th>
+                            Qualification
+                          </th>
 
-                      return (
-                        <tr
-                          key={
-                            voter.id
-                          }
-                          className="border-t border-slate-100"
-                        >
-
-                          <td className="px-5 py-4 text-sm">
-                            {
-                              voter.epic_number ||
-                              "-"
-                            }
-                          </td>
-
-                          <td className="px-5 py-4 text-sm font-medium">
-                            {
-                              voter.full_name
-                            }
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {
-                              voter.age ??
-                              "-"
-                            }
-                            {" / "}
-                            {
-                              voter.gender ||
-                              "-"
-                            }
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {
-                              voter.mandal_name_source ||
-                              "-"
-                            }
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {
-                              voter.assembly_constituency_name ||
-                              "-"
-                            }
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {
-                              voter.qualification ||
-                              "-"
-                            }
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {
-                              voter.phone_number ||
-                              "-"
-                            }
-                          </td>
+                          <th>
+                            Phone
+                          </th>
 
                         </tr>
-                      );
-                    }
-                  )}
 
-                </tbody>
+                      </thead>
 
-              </table>
 
-            </div>
+                      <tbody>
 
-          )}
+                        {
+                          voters.map(
+                            function (voter) {
 
-        </div>
+                              return (
+
+                                <tr
+                                  key={
+                                    voter.id
+                                  }
+                                >
+
+                                  <td>
+
+                                    <span className="voter-epic">
+                                      {
+                                        voter.epic_number ||
+                                        voter.app_id ||
+                                        "-"
+                                      }
+                                    </span>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="voter-name">
+                                      {voter.full_name}
+                                    </div>
+
+                                    <div className="voter-secondary">
+                                      {
+                                        voter.preferred_language ||
+                                        "Language not set"
+                                      }
+                                    </div>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="voter-cell-primary">
+                                      {
+                                        voter.age ??
+                                        "-"
+                                      }
+                                      {" / "}
+                                      {
+                                        voter.gender ||
+                                        "-"
+                                      }
+                                    </div>
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="voter-cell-primary">
+                                      {
+                                        voter.mandal_name_source ||
+                                        "-"
+                                      }
+                                    </div>
+
+                                    {
+                                      voter.geography_name &&
+                                      voter.geography_name !==
+                                      voter.mandal_name_source
+                                        ? (
+
+                                          <div className="voter-secondary">
+                                            {voter.geography_name}
+                                          </div>
+
+                                        )
+                                        : null
+                                    }
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="voter-cell-primary">
+                                      {
+                                        voter.assembly_constituency_name ||
+                                        "-"
+                                      }
+                                    </div>
+
+                                    {
+                                      voter.assembly_constituency_no
+                                        ? (
+
+                                          <div className="voter-secondary">
+                                            AC-
+                                            {
+                                              voter.assembly_constituency_no
+                                            }
+                                          </div>
+
+                                        )
+                                        : null
+                                    }
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="voter-cell-primary">
+                                      {
+                                        voter.qualification ||
+                                        "-"
+                                      }
+                                    </div>
+
+                                    {
+                                      voter.occupation
+                                        ? (
+
+                                          <div className="voter-secondary">
+                                            {voter.occupation}
+                                          </div>
+
+                                        )
+                                        : null
+                                    }
+
+                                  </td>
+
+
+                                  <td>
+
+                                    <div className="voter-phone">
+                                      <Phone size={13} />
+
+                                      {
+                                        voter.phone_number ||
+                                        "-"
+                                      }
+                                    </div>
+
+                                  </td>
+
+                                </tr>
+                              );
+                            }
+                          )
+                        }
+
+                      </tbody>
+
+                    </table>
+
+                  </div>
+
+                )
+          }
+
+        </section>
 
       </div>
 
@@ -622,23 +884,35 @@ export default function VotersPage() {
 }
 
 
-function Metric({
+function SummaryMetric({
+  icon: Icon,
   title,
   value
 }: {
+  icon: React.ElementType;
   title: string;
   value: number;
 }) {
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
-      <div className="text-sm text-slate-500">
-        {title}
+    <div className="voter-summary-card">
+
+      <div className="voter-summary-icon">
+        <Icon size={17} />
       </div>
 
-      <div className="mt-2 text-2xl font-bold text-slate-900">
-        {value.toLocaleString()}
+
+      <div>
+
+        <span>
+          {title}
+        </span>
+
+        <strong>
+          {value.toLocaleString()}
+        </strong>
+
       </div>
 
     </div>
@@ -655,15 +929,16 @@ function Result({
 }) {
 
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
 
-      <div className="text-xs text-slate-500">
+    <div className="voter-result-card">
+
+      <span>
         {label}
-      </div>
+      </span>
 
-      <div className="mt-1 text-lg font-semibold">
+      <strong>
         {value ?? 0}
-      </div>
+      </strong>
 
     </div>
   );
