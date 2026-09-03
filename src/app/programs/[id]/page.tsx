@@ -6,16 +6,26 @@ import {
 } from "react";
 
 import {
+  ArrowLeft,
+  CalendarDays,
+  ChevronRight,
+  ClipboardList,
+  Flag,
+  Languages,
+  MapPinned,
+  Plus,
+  Target,
+  Users,
+  X
+} from "lucide-react";
+
+import {
   useParams,
   useRouter
 } from "next/navigation";
 
-import AppShell
-  from "@/components/AppShell";
-
-import {
-  apiFetch
-} from "@/lib/api";
+import AppShell from "@/components/AppShell";
+import { apiFetch } from "@/lib/api";
 
 
 type Program = {
@@ -60,7 +70,6 @@ export default function ProgramDetailPage() {
   const router =
     useRouter();
 
-
   const programId =
     params.id as string;
 
@@ -69,9 +78,7 @@ export default function ProgramDetailPage() {
     program,
     setProgram
   ] =
-    useState<Program | null>(
-      null
-    );
+    useState<Program | null>(null);
 
 
   const [
@@ -106,9 +113,7 @@ export default function ProgramDetailPage() {
     message,
     setMessage
   ] =
-    useState<string | null>(
-      null
-    );
+    useState<string | null>(null);
 
 
   const [
@@ -116,31 +121,15 @@ export default function ProgramDetailPage() {
     setForm
   ] =
     useState({
-
-      iterationNumber:
-        "1",
-
-      iterationName:
-        "Baseline / Natural Pulse",
-
-      researchPhase:
-        "BASELINE",
-
+      iterationNumber: "1",
+      iterationName: "Baseline / Natural Pulse",
+      researchPhase: "BASELINE",
       objective:
         "Understand the natural voter pulse before election-period influence intensifies.",
-
-      sampleDesignType:
-        "REPEATED_CROSS_SECTION",
-
-      targetSampleSize:
-        "30",
-
-      plannedStartDate:
-        "",
-
-      plannedEndDate:
-        ""
-
+      sampleDesignType: "REPEATED_CROSS_SECTION",
+      targetSampleSize: "30",
+      plannedStartDate: "",
+      plannedEndDate: ""
     });
 
 
@@ -151,17 +140,13 @@ export default function ProgramDetailPage() {
         `/api/programs/${programId}`
       );
 
-    setProgram(
-      data
-    );
-
+    setProgram(data);
 
     setForm(
       function (current) {
 
         return {
           ...current,
-
           targetSampleSize:
             String(
               data.target_sample_size ||
@@ -180,17 +165,13 @@ export default function ProgramDetailPage() {
         `/api/programs/${programId}/iterations`
       );
 
-    setIterations(
-      data
-    );
+    setIterations(data);
   }
 
 
   async function loadData() {
 
-    setLoading(
-      true
-    );
+    setLoading(true);
 
     try {
 
@@ -209,9 +190,7 @@ export default function ProgramDetailPage() {
 
     } finally {
 
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
@@ -240,8 +219,7 @@ export default function ProgramDetailPage() {
 
         return {
           ...current,
-          [key]:
-            value
+          [key]: value
         };
       }
     );
@@ -264,13 +242,8 @@ export default function ProgramDetailPage() {
     }
 
 
-    setSaving(
-      true
-    );
-
-    setMessage(
-      null
-    );
+    setSaving(true);
+    setMessage(null);
 
 
     try {
@@ -278,8 +251,7 @@ export default function ProgramDetailPage() {
       await apiFetch(
         `/api/programs/${programId}/iterations`,
         {
-          method:
-            "POST",
+          method: "POST",
 
           body:
             JSON.stringify({
@@ -323,7 +295,6 @@ export default function ProgramDetailPage() {
 
               callingProfile:
                 {}
-
             })
         }
       );
@@ -333,14 +304,9 @@ export default function ProgramDetailPage() {
         "Iteration created successfully."
       );
 
-
-      setShowCreate(
-        false
-      );
-
+      setShowCreate(false);
 
       await loadIterations();
-
 
     } catch (error) {
 
@@ -352,9 +318,7 @@ export default function ProgramDetailPage() {
 
     } finally {
 
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
 
@@ -364,7 +328,7 @@ export default function ProgramDetailPage() {
     return (
       <AppShell>
 
-        <div className="p-8 text-sm text-slate-500">
+        <div className="program-detail-loading">
           Loading program...
         </div>
 
@@ -378,9 +342,9 @@ export default function ProgramDetailPage() {
     return (
       <AppShell>
 
-        <div className="p-8">
+        <div className="program-detail-page">
 
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="program-detail-error">
             Program not found.
           </div>
 
@@ -394,41 +358,41 @@ export default function ProgramDetailPage() {
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="program-detail-page">
 
         <button
           type="button"
 
           onClick={
             function () {
-
               router.push(
                 "/programs"
               );
             }
           }
 
-          className="text-sm font-medium text-indigo-600"
+          className="program-detail-back"
         >
-          ← Back to Programs
+          <ArrowLeft size={15} />
+          Back to Programs
         </button>
 
 
-        <div className="mt-5 flex items-start justify-between">
+        <section className="program-detail-header">
 
           <div>
 
-            <p className="text-sm font-medium text-indigo-600">
-              Program
-            </p>
+            <div className="program-detail-eyebrow">
+              RESEARCH PROGRAM
+            </div>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <h1>
               {program.study_name}
             </h1>
 
-            <p className="mt-2 text-slate-500">
+            <div className="program-detail-code">
               {program.study_code}
-            </p>
+            </div>
 
           </div>
 
@@ -439,32 +403,45 @@ export default function ProgramDetailPage() {
             onClick={
               function () {
 
-                setShowCreate(
-                  true
+                setShowCreate(true);
+
+                setForm(
+                  function (current) {
+
+                    return {
+                      ...current,
+                      iterationNumber:
+                        String(
+                          iterations.length + 1
+                        )
+                    };
+                  }
                 );
               }
             }
 
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
+            className="program-detail-create-button"
           >
-            + Create Iteration
+            <Plus size={16} />
+            Create Iteration
           </button>
 
-        </div>
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="program-detail-message">
             {message}
           </div>
 
         )}
 
 
-        <div className="mt-8 grid gap-4 md:grid-cols-5">
+        <section className="program-detail-metrics">
 
-          <Metric
+          <ProgramMetric
+            icon={MapPinned}
             label="Constituency"
             value={
               program.jurisdiction_name ||
@@ -472,17 +449,18 @@ export default function ProgramDetailPage() {
             }
           />
 
-          <Metric
+          <ProgramMetric
+            icon={Target}
             label="Target Sample"
             value={
-              String(
-                program.target_sample_size ??
-                "-"
-              )
+              program.target_sample_size
+                ?.toLocaleString() ||
+              "-"
             }
           />
 
-          <Metric
+          <ProgramMetric
+            icon={Languages}
             label="Language"
             value={
               program.primary_language ||
@@ -490,7 +468,8 @@ export default function ProgramDetailPage() {
             }
           />
 
-          <Metric
+          <ProgramMetric
+            icon={ClipboardList}
             label="Iterations"
             value={
               String(
@@ -499,47 +478,65 @@ export default function ProgramDetailPage() {
             }
           />
 
-          <Metric
+          <ProgramMetric
+            icon={Flag}
             label="Status"
             value={
               program.status
             }
           />
 
-        </div>
+        </section>
 
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="program-purpose-card">
 
-          <h2 className="font-semibold text-slate-900">
-            Research Purpose
-          </h2>
+          <div className="program-purpose-icon">
+            <ClipboardList size={19} />
+          </div>
 
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {
-              program.purpose ||
-              "No purpose defined."
-            }
-          </p>
+          <div>
 
-        </div>
+            <div className="program-detail-eyebrow">
+              RESEARCH PURPOSE
+            </div>
+
+            <h2>
+              Program Objective
+            </h2>
+
+            <p>
+              {
+                program.purpose ||
+                "No purpose defined."
+              }
+            </p>
+
+          </div>
+
+        </section>
 
 
         {showCreate && (
 
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="iteration-create-panel">
 
-            <div className="flex items-start justify-between">
+            <div className="iteration-create-header">
 
               <div>
 
-                <h2 className="text-xl font-semibold text-slate-900">
+                <div className="program-detail-eyebrow">
+                  NEW RESEARCH ITERATION
+                </div>
+
+                <h2>
                   Create Iteration
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Define the research wave
-                  within this Program.
+                <p>
+                  Define the research objective,
+                  phase, sample and planned timing
+                  for this iteration.
                 </p>
 
               </div>
@@ -550,281 +547,330 @@ export default function ProgramDetailPage() {
 
                 onClick={
                   function () {
-
-                    setShowCreate(
-                      false
-                    );
+                    setShowCreate(false);
                   }
                 }
 
-                className="text-sm text-slate-500"
+                className="iteration-close-button"
               >
-                Close
+                <X size={18} />
               </button>
 
             </div>
 
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <div className="iteration-form-section">
 
-              <Field
-                label="Iteration Number"
-              >
+              <div className="iteration-form-heading">
 
-                <input
-                  type="number"
+                <div className="iteration-form-icon">
+                  <ClipboardList size={17} />
+                </div>
 
-                  min={1}
+                <div>
 
-                  value={
-                    form.iterationNumber
-                  }
+                  <h3>
+                    Research Definition
+                  </h3>
 
-                  onChange={
-                    function (event) {
+                  <p>
+                    Identify this research cycle
+                    and the phase it represents.
+                  </p>
 
-                      updateForm(
-                        "iterationNumber",
-                        event.target.value
-                      );
-                    }
-                  }
+                </div>
 
-                  className="input"
-                />
-
-              </Field>
+              </div>
 
 
-              <Field
-                label="Iteration Name"
-              >
+              <div className="iteration-form-grid">
 
-                <input
-                  value={
-                    form.iterationName
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "iterationName",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field
-                label="Research Phase"
-              >
-
-                <select
-                  value={
-                    form.researchPhase
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "researchPhase",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
+                <Field
+                  label="Iteration Number"
                 >
+                  <input
+                    type="number"
+                    min={1}
 
-                  <option value="BASELINE">
-                    Baseline / Natural Pulse
-                  </option>
-
-                  <option value="TRACKING">
-                    Tracking
-                  </option>
-
-                  <option value="PRE_ELECTION">
-                    Pre-Election
-                  </option>
-
-                  <option value="FINAL_PULSE">
-                    Final Pulse
-                  </option>
-
-                  <option value="POST_ELECTION">
-                    Post-Election
-                  </option>
-
-                  <option value="CUSTOM">
-                    Custom
-                  </option>
-
-                </select>
-
-              </Field>
-
-
-              <Field
-                label="Sample Design"
-              >
-
-                <select
-                  value={
-                    form.sampleDesignType
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "sampleDesignType",
-                        event.target.value
-                      );
+                    value={
+                      form.iterationNumber
                     }
-                  }
 
-                  className="input"
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "iterationNumber",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="iteration-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Iteration Name"
                 >
-
-                  <option value="REPEATED_CROSS_SECTION">
-                    Repeated Cross Section
-                  </option>
-
-                  <option value="PANEL">
-                    Panel
-                  </option>
-
-                  <option value="HYBRID">
-                    Hybrid
-                  </option>
-
-                </select>
-
-              </Field>
-
-
-              <Field
-                label="Target Sample"
-              >
-
-                <input
-                  type="number"
-
-                  min={1}
-
-                  value={
-                    form.targetSampleSize
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "targetSampleSize",
-                        event.target.value
-                      );
+                  <input
+                    value={
+                      form.iterationName
                     }
-                  }
 
-                  className="input"
-                />
+                    onChange={
+                      function (event) {
 
-              </Field>
-
-
-              <Field
-                label="Planned Start Date"
-              >
-
-                <input
-                  type="date"
-
-                  value={
-                    form.plannedStartDate
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "plannedStartDate",
-                        event.target.value
-                      );
+                        updateForm(
+                          "iterationName",
+                          event.target.value
+                        );
+                      }
                     }
-                  }
 
-                  className="input"
-                />
-
-              </Field>
+                    className="iteration-input"
+                  />
+                </Field>
 
 
-              <Field
-                label="Planned End Date"
-              >
-
-                <input
-                  type="date"
-
-                  value={
-                    form.plannedEndDate
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "plannedEndDate",
-                        event.target.value
-                      );
+                <Field
+                  label="Research Phase"
+                >
+                  <select
+                    value={
+                      form.researchPhase
                     }
-                  }
 
-                  className="input"
-                />
+                    onChange={
+                      function (event) {
 
-              </Field>
-
-
-              <Field
-                label="Objective"
-                span
-              >
-
-                <textarea
-                  rows={4}
-
-                  value={
-                    form.objective
-                  }
-
-                  onChange={
-                    function (event) {
-
-                      updateForm(
-                        "objective",
-                        event.target.value
-                      );
+                        updateForm(
+                          "researchPhase",
+                          event.target.value
+                        );
+                      }
                     }
-                  }
 
-                  className="input"
-                />
+                    className="iteration-input"
+                  >
+                    <option value="BASELINE">
+                      Baseline / Natural Pulse
+                    </option>
 
-              </Field>
+                    <option value="TRACKING">
+                      Tracking
+                    </option>
+
+                    <option value="PRE_ELECTION">
+                      Pre-Election
+                    </option>
+
+                    <option value="FINAL_PULSE">
+                      Final Pulse
+                    </option>
+
+                    <option value="POST_ELECTION">
+                      Post-Election
+                    </option>
+
+                    <option value="CUSTOM">
+                      Custom
+                    </option>
+                  </select>
+                </Field>
+
+
+                <Field
+                  label="Sample Design"
+                >
+                  <select
+                    value={
+                      form.sampleDesignType
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "sampleDesignType",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="iteration-input"
+                  >
+                    <option value="REPEATED_CROSS_SECTION">
+                      Repeated Cross Section
+                    </option>
+
+                    <option value="PANEL">
+                      Panel
+                    </option>
+
+                    <option value="HYBRID">
+                      Hybrid
+                    </option>
+                  </select>
+                </Field>
+
+              </div>
 
             </div>
 
 
-            <div className="mt-6 flex justify-end">
+            <div className="iteration-form-section">
+
+              <div className="iteration-form-heading">
+
+                <div className="iteration-form-icon">
+                  <Target size={17} />
+                </div>
+
+                <div>
+
+                  <h3>
+                    Sampling & Schedule
+                  </h3>
+
+                  <p>
+                    Set target size and planned
+                    research period.
+                  </p>
+
+                </div>
+
+              </div>
+
+
+              <div className="iteration-form-grid">
+
+                <Field
+                  label="Target Sample"
+                >
+                  <input
+                    type="number"
+                    min={1}
+
+                    value={
+                      form.targetSampleSize
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "targetSampleSize",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="iteration-input"
+                  />
+                </Field>
+
+
+                <div />
+
+
+                <Field
+                  label="Planned Start Date"
+                >
+                  <input
+                    type="date"
+
+                    value={
+                      form.plannedStartDate
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "plannedStartDate",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="iteration-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Planned End Date"
+                >
+                  <input
+                    type="date"
+
+                    value={
+                      form.plannedEndDate
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "plannedEndDate",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="iteration-input"
+                  />
+                </Field>
+
+
+                <Field
+                  label="Research Objective"
+                  span
+                >
+                  <textarea
+                    rows={4}
+
+                    value={
+                      form.objective
+                    }
+
+                    onChange={
+                      function (event) {
+
+                        updateForm(
+                          "objective",
+                          event.target.value
+                        );
+                      }
+                    }
+
+                    className="iteration-input"
+                  />
+                </Field>
+
+              </div>
+
+            </div>
+
+
+            <div className="iteration-create-footer">
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowCreate(false);
+                  }
+                }
+
+                className="iteration-cancel-button"
+              >
+                Cancel
+              </button>
+
 
               <button
                 type="button"
@@ -837,31 +883,58 @@ export default function ProgramDetailPage() {
                   createIteration
                 }
 
-                className="rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="iteration-submit-button"
               >
-
                 {
                   saving
                     ? "Creating..."
-                    : "Create Iteration"
+                    : (
+                      <>
+                        <Plus size={15} />
+                        Create Iteration
+                      </>
+                    )
                 }
-
               </button>
 
             </div>
 
-          </div>
+          </section>
 
         )}
 
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="iterations-panel">
 
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="iterations-header">
 
-            <h2 className="font-semibold text-slate-900">
-              Iterations
-            </h2>
+            <div>
+
+              <div className="program-detail-eyebrow">
+                RESEARCH CYCLES
+              </div>
+
+              <h2>
+                Iterations
+              </h2>
+
+              <p>
+                Each iteration represents a distinct
+                research objective within this Program.
+              </p>
+
+            </div>
+
+
+            <div className="iterations-count">
+              {iterations.length}
+              {" "}
+              {
+                iterations.length === 1
+                  ? "Iteration"
+                  : "Iterations"
+              }
+            </div>
 
           </div>
 
@@ -870,14 +943,25 @@ export default function ProgramDetailPage() {
             iterations.length === 0
               ? (
 
-                <div className="p-8 text-sm text-slate-500">
-                  No iterations created yet.
+                <div className="iterations-empty">
+
+                  <ClipboardList size={24} />
+
+                  <strong>
+                    No research iterations yet
+                  </strong>
+
+                  <span>
+                    Create an iteration to begin
+                    research execution.
+                  </span>
+
                 </div>
 
               )
               : (
 
-                <div className="divide-y divide-slate-100">
+                <div className="iterations-list">
 
                   {
                     iterations.map(
@@ -885,114 +969,128 @@ export default function ProgramDetailPage() {
 
                         return (
 
-                          <div
-  key={
-    iteration.id
-  }
+                          <button
+                            type="button"
 
-  onClick={
-    function () {
+                            key={
+                              iteration.id
+                            }
 
-      router.push(
-        `/iterations/${iteration.id}`
-      );
-    }
-  }
+                            onClick={
+                              function () {
 
-  className="cursor-pointer flex items-center justify-between px-6 py-5 hover:bg-slate-50"
->
+                                router.push(
+                                  `/iterations/${iteration.id}`
+                                );
+                              }
+                            }
 
-                            <div>
+                            className="iteration-row"
+                          >
 
-                              <div className="flex items-center gap-3">
+                            <div className="iteration-row-main">
 
-                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-600">
+                              <div className="iteration-number">
+                                {
+                                  iteration.iteration_number
+                                }
+                              </div>
 
-                                  {
-                                    iteration.iteration_number
-                                  }
 
-                                </div>
+                              <div className="iteration-row-copy">
 
-                                <div>
+                                <div className="iteration-row-title">
 
-                                  <div className="font-semibold text-slate-900">
-
+                                  <h3>
                                     {
                                       iteration.iteration_name
                                     }
+                                  </h3>
 
-                                  </div>
-
-                                  <div className="mt-1 text-xs text-slate-500">
-
-                                    {
-                                      iteration.research_phase
+                                  <IterationStatus
+                                    status={
+                                      iteration.status
                                     }
-
-                                    {" • "}
-
-                                    {
-                                      iteration.sample_design_type
-                                    }
-
-                                  </div>
+                                  />
 
                                 </div>
 
-                              </div>
 
+                                <div className="iteration-row-meta">
 
-                              {
-                                iteration.objective && (
-
-                                  <p className="mt-3 max-w-3xl text-sm text-slate-600">
-
+                                  <span>
                                     {
-                                      iteration.objective
+                                      formatLabel(
+                                        iteration.research_phase
+                                      )
                                     }
+                                  </span>
 
-                                  </p>
+                                  <span>
+                                    {
+                                      formatLabel(
+                                        iteration.sample_design_type
+                                      )
+                                    }
+                                  </span>
 
-                                )
-                              }
-
-                            </div>
-
-
-                            <div className="flex items-center gap-6">
-
-                              <div className="text-right">
-
-                                <div className="text-xs uppercase text-slate-400">
-                                  Target
                                 </div>
 
-                                <div className="mt-1 font-semibold">
-                                  {
-                                    iteration.target_sample_size ??
-                                    "-"
-                                  }
-                                </div>
 
-                              </div>
+                                {
+                                  iteration.objective && (
 
+                                    <p>
+                                      {
+                                        iteration.objective
+                                      }
+                                    </p>
 
-                              <div>
-
-                                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-
-                                  {
-                                    iteration.status
-                                  }
-
-                                </span>
+                                  )
+                                }
 
                               </div>
 
                             </div>
 
-                          </div>
+
+                            <div className="iteration-row-details">
+
+                              <IterationDetail
+                                icon={Target}
+                                label="Target"
+                                value={
+                                  iteration.target_sample_size
+                                    ?.toLocaleString() ||
+                                  "-"
+                                }
+                              />
+
+
+                              <IterationDetail
+                                icon={CalendarDays}
+                                label="Planned Start"
+                                value={
+                                  formatDate(
+                                    iteration.planned_start_date
+                                  )
+                                }
+                              />
+
+                            </div>
+
+
+                            <div className="iteration-open">
+
+                              <span>
+                                Open
+                              </span>
+
+                              <ChevronRight size={17} />
+
+                            </div>
+
+                          </button>
 
                         );
                       }
@@ -1004,58 +1102,45 @@ export default function ProgramDetailPage() {
               )
           }
 
-        </div>
+        </section>
 
       </div>
-
-
-      <style jsx global>{`
-        .input {
-          width: 100%;
-          border: 1px solid #cbd5e1;
-          border-radius: 0.5rem;
-          padding: 0.65rem 0.75rem;
-          font-size: 0.875rem;
-          background: white;
-          color: #0f172a;
-          outline: none;
-        }
-
-        .input:focus {
-          border-color: #6366f1;
-          box-shadow:
-            0 0 0 2px
-            rgba(99, 102, 241, 0.12);
-        }
-      `}</style>
 
     </AppShell>
   );
 }
 
 
-function Metric({
+function ProgramMetric({
+  icon: Icon,
   label,
   value
 }: {
+  icon: React.ElementType;
   label: string;
   value: string;
 }) {
 
   return (
+    <div className="program-detail-metric">
 
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
-      <div className="text-xs font-medium uppercase text-slate-400">
-        {label}
+      <div className="program-detail-metric-icon">
+        <Icon size={17} />
       </div>
 
-      <div className="mt-2 font-semibold text-slate-900">
-        {value}
+      <div>
+
+        <div className="program-detail-metric-label">
+          {label}
+        </div>
+
+        <div className="program-detail-metric-value">
+          {value}
+        </div>
+
       </div>
 
     </div>
-
   );
 }
 
@@ -1071,22 +1156,113 @@ function Field({
 }) {
 
   return (
-
     <div
       className={
         span
-          ? "md:col-span-2"
-          : ""
+          ? "iteration-field iteration-field-span"
+          : "iteration-field"
       }
     >
 
-      <label className="mb-2 block text-sm font-medium text-slate-700">
+      <label>
         {label}
       </label>
 
       {children}
 
     </div>
-
   );
+}
+
+
+function IterationStatus({
+  status
+}: {
+  status: string;
+}) {
+
+  return (
+    <span className="iteration-status">
+      {
+        formatLabel(
+          status
+        )
+      }
+    </span>
+  );
+}
+
+
+function IterationDetail({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+
+  return (
+    <div className="iteration-detail">
+
+      <Icon size={14} />
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function formatLabel(
+  value: string | null
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
+}
+
+
+function formatDate(
+  value: string | null
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return date.toLocaleDateString();
 }
