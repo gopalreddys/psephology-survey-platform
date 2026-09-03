@@ -359,22 +359,44 @@ export default function IterationPage() {
           </div>
 
 
-          <button
-            type="button"
+          <div className="flex items-center gap-3">
 
-            onClick={
-              function () {
+            <button
+              type="button"
 
-                setShowCreate(
-                  true
-                );
+              onClick={
+                function () {
+
+                  router.push(
+                    `/iterations/${iterationId}/analysis`
+                  );
+                }
               }
-            }
 
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
-          >
-            + Create Run
-          </button>
+              className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              View Analysis
+            </button>
+
+
+            <button
+              type="button"
+
+              onClick={
+                function () {
+
+                  setShowCreate(
+                    true
+                  );
+                }
+              }
+
+              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
+            >
+              + Create Run
+            </button>
+
+          </div>
 
         </div>
 
