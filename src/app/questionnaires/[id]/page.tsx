@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useState
 } from "react";
 
@@ -9,6 +10,19 @@ import {
   useParams,
   useRouter
 } from "next/navigation";
+
+import {
+  ArrowLeft,
+  CheckCircle2,
+  FileText,
+  Languages,
+  ListChecks,
+  Plus,
+  Search,
+  Settings2,
+  Tag,
+  X
+} from "lucide-react";
 
 import AppShell
   from "@/components/AppShell";
@@ -96,6 +110,12 @@ export default function QuestionnaireDetailPage() {
     );
 
   const [
+    search,
+    setSearch
+  ] =
+    useState("");
+
+  const [
     form,
     setForm
   ] =
@@ -124,16 +144,13 @@ export default function QuestionnaireDetailPage() {
           `/api/questionnaires/${questionnaireId}`
         );
 
-      setQuestionnaire(
-        data
-      );
+      setQuestionnaire(data);
 
       setForm(
         function (current) {
 
           return {
             ...current,
-
             questionOrder:
               String(
                 (data.questions?.length || 0) + 1
@@ -188,9 +205,7 @@ export default function QuestionnaireDetailPage() {
 
   function buildOptions() {
 
-    if (
-      !form.optionsText.trim()
-    ) {
+    if (!form.optionsText.trim()) {
       return [];
     }
 
@@ -278,7 +293,6 @@ export default function QuestionnaireDetailPage() {
         }
       );
 
-
       setMessage(
         "Question added successfully."
       );
@@ -319,11 +333,59 @@ export default function QuestionnaireDetailPage() {
   }
 
 
+  const filteredQuestions =
+    useMemo(
+      function () {
+
+        if (!questionnaire) {
+          return [];
+        }
+
+        const query =
+          search
+            .trim()
+            .toLowerCase();
+
+        if (!query) {
+          return questionnaire.questions;
+        }
+
+        return questionnaire.questions.filter(
+          function (question) {
+
+            return [
+              question.question_code,
+              question.question_text,
+              question.metadata?.question_text_telugu,
+              question.analysis_category,
+              question.metadata?.section,
+              question.question_type
+            ]
+              .filter(Boolean)
+              .some(
+                function (value) {
+
+                  return String(value)
+                    .toLowerCase()
+                    .includes(query);
+                }
+              );
+          }
+        );
+
+      },
+      [
+        questionnaire,
+        search
+      ]
+    );
+
+
   if (loading) {
 
     return (
       <AppShell>
-        <div className="p-8 text-sm text-slate-500">
+        <div className="question-detail-loading">
           Loading questionnaire...
         </div>
       </AppShell>
@@ -335,7 +397,7 @@ export default function QuestionnaireDetailPage() {
 
     return (
       <AppShell>
-        <div className="p-8">
+        <div className="question-detail-loading">
           Questionnaire not found.
         </div>
       </AppShell>
@@ -343,10 +405,29 @@ export default function QuestionnaireDetailPage() {
   }
 
 
+  const requiredCount =
+    questionnaire.questions.filter(
+      function (question) {
+        return question.required;
+      }
+    ).length;
+
+
+  const completionCount =
+    questionnaire.questions.filter(
+      function (question) {
+        return Boolean(
+          question.metadata
+            ?.required_for_completion
+        );
+      }
+    ).length;
+
+
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="question-detail-page">
 
         <button
           type="button"
@@ -359,29 +440,60 @@ export default function QuestionnaireDetailPage() {
             }
           }
 
-          className="text-sm font-medium text-indigo-600"
+          className="question-detail-back"
         >
-          ← Back to Questionnaires
+          <ArrowLeft size={15} />
+          Back to Questionnaires
         </button>
 
 
-        <div className="mt-5 flex items-start justify-between">
+        <section className="question-detail-header">
 
           <div>
 
-            <p className="text-sm font-medium text-indigo-600">
-              Questionnaire
-            </p>
+            <div className="question-detail-eyebrow">
+              RESEARCH INSTRUMENT
+            </div>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <h1>
               {questionnaire.questionnaire_name}
             </h1>
 
-            <p className="mt-2 text-slate-500">
-              {questionnaire.questionnaire_code}
-              {" • Version "}
-              {questionnaire.version_number}
-            </p>
+            <div className="question-detail-meta">
+
+              <span>
+                {questionnaire.questionnaire_code}
+              </span>
+
+              <span className="question-detail-dot" />
+
+              <span>
+                Version {questionnaire.version_number}
+              </span>
+
+              <span className="question-detail-dot" />
+
+              <span>
+                {questionnaire.primary_language || "Language not set"}
+              </span>
+
+              <span
+                className="question-detail-status"
+              >
+                {formatLabel(
+                  questionnaire.status
+                )}
+              </span>
+
+            </div>
+
+            {questionnaire.description && (
+
+              <p className="question-detail-description">
+                {questionnaire.description}
+              </p>
+
+            )}
 
           </div>
 
@@ -395,26 +507,28 @@ export default function QuestionnaireDetailPage() {
               }
             }
 
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
+            className="question-detail-add-button"
           >
-            + Add Question
+            <Plus size={16} />
+            Add Question
           </button>
 
-        </div>
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="question-detail-message">
             {message}
           </div>
 
         )}
 
 
-        <div className="mt-8 grid gap-4 md:grid-cols-4">
+        <section className="question-detail-metrics">
 
-          <Metric
+          <QuestionMetric
+            icon={ListChecks}
             label="Questions"
             value={
               String(
@@ -423,326 +537,58 @@ export default function QuestionnaireDetailPage() {
             }
           />
 
-          <Metric
-            label="Language"
+          <QuestionMetric
+            icon={CheckCircle2}
+            label="Required"
+            value={
+              String(requiredCount)
+            }
+          />
+
+          <QuestionMetric
+            icon={Settings2}
+            label="Completion Themes"
+            value={
+              String(completionCount)
+            }
+            emphasis
+          />
+
+          <QuestionMetric
+            icon={Languages}
+            label="Primary Language"
             value={
               questionnaire.primary_language ||
               "-"
             }
           />
 
-          <Metric
-            label="Version"
-            value={
-              String(
-                questionnaire.version_number
-              )
-            }
-          />
-
-          <Metric
-            label="Status"
-            value={
-              questionnaire.status
-            }
-          />
-
-        </div>
+        </section>
 
 
         {showAdd && (
 
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="question-add-panel">
 
-            <h2 className="text-xl font-semibold text-slate-900">
-              Add Question
-            </h2>
+            <div className="question-add-header">
 
+              <div>
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+                <div className="question-detail-eyebrow">
+                  QUESTION MANAGEMENT
+                </div>
 
-              <Field label="Question Order">
+                <h2>
+                  Add Survey Question
+                </h2>
 
-                <input
-                  type="number"
-                  min={1}
-
-                  value={
-                    form.questionOrder
-                  }
-
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "questionOrder",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field label="Question Code">
-
-                <input
-                  value={
-                    form.questionCode
-                  }
-
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "questionCode",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field label="Question Type">
-
-                <select
-                  value={
-                    form.questionType
-                  }
-
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "questionType",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                >
-
-                  <option value="OPEN_TEXT">
-                    Open Text
-                  </option>
-
-                  <option value="YES_NO">
-                    Yes / No
-                  </option>
-
-                  <option value="SINGLE_CHOICE">
-                    Single Choice
-                  </option>
-
-                  <option value="MULTI_CHOICE">
-                    Multi Choice
-                  </option>
-
-                  <option value="RATING">
-                    Rating
-                  </option>
-
-                  <option value="NUMERIC">
-                    Numeric
-                  </option>
-
-                </select>
-
-              </Field>
-
-
-              <Field label="Analysis Category">
-
-                <input
-                  value={
-                    form.analysisCategory
-                  }
-
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "analysisCategory",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <Field label="Section">
-
-                <input
-                  value={
-                    form.section
-                  }
-
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "section",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
-
-
-              <div className="flex items-center gap-6 pt-7">
-
-                <label className="flex items-center gap-2 text-sm">
-
-                  <input
-                    type="checkbox"
-
-                    checked={
-                      form.required
-                    }
-
-                    onChange={
-                      function (event) {
-                        updateForm(
-                          "required",
-                          event.target.checked
-                        );
-                      }
-                    }
-                  />
-
-                  Required
-
-                </label>
-
-
-                <label className="flex items-center gap-2 text-sm">
-
-                  <input
-                    type="checkbox"
-
-                    checked={
-                      form.requiredForCompletion
-                    }
-
-                    onChange={
-                      function (event) {
-                        updateForm(
-                          "requiredForCompletion",
-                          event.target.checked
-                        );
-                      }
-                    }
-                  />
-
-                  Required for Completion
-
-                </label>
+                <p>
+                  Define question structure, wording
+                  and completion requirements.
+                </p>
 
               </div>
 
-
-              <div className="md:col-span-2">
-
-                <Field label="English Question">
-
-                  <textarea
-                    rows={3}
-
-                    value={
-                      form.questionText
-                    }
-
-                    onChange={
-                      function (event) {
-                        updateForm(
-                          "questionText",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="input"
-                  />
-
-                </Field>
-
-              </div>
-
-
-              <div className="md:col-span-2">
-
-                <Field label="Telugu Question">
-
-                  <textarea
-                    rows={3}
-
-                    value={
-                      form.questionTextTelugu
-                    }
-
-                    onChange={
-                      function (event) {
-                        updateForm(
-                          "questionTextTelugu",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="input"
-                  />
-
-                </Field>
-
-              </div>
-
-
-              <div className="md:col-span-2">
-
-                <Field label="Options — one per line">
-
-                  <textarea
-                    rows={5}
-
-                    value={
-                      form.optionsText
-                    }
-
-                    onChange={
-                      function (event) {
-                        updateForm(
-                          "optionsText",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    placeholder={
-                      "Satisfied\nNeutral\nDissatisfied"
-                    }
-
-                    className="input"
-                  />
-
-                </Field>
-
-              </div>
-
-            </div>
-
-
-            <div className="mt-6 flex justify-end gap-3">
 
               <button
                 type="button"
@@ -753,10 +599,365 @@ export default function QuestionnaireDetailPage() {
                   }
                 }
 
-                className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm"
+                className="question-add-close"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+
+            <div className="question-add-body">
+
+              <QuestionFormSection
+                icon={Settings2}
+                title="Question Structure"
+                description="Configure sequence, type and analytical classification."
+              >
+
+                <div className="question-form-grid">
+
+                  <Field label="Question Order">
+
+                    <input
+                      type="number"
+                      min={1}
+
+                      value={
+                        form.questionOrder
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionOrder",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="question-input"
+                    />
+
+                  </Field>
+
+
+                  <Field label="Question Code">
+
+                    <input
+                      value={
+                        form.questionCode
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionCode",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      placeholder="Q_GENERAL_CONCERN"
+
+                      className="question-input"
+                    />
+
+                  </Field>
+
+
+                  <Field label="Question Type">
+
+                    <select
+                      value={
+                        form.questionType
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionType",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="question-input"
+                    >
+
+                      <option value="OPEN_TEXT">
+                        Open Text
+                      </option>
+
+                      <option value="YES_NO">
+                        Yes / No
+                      </option>
+
+                      <option value="SINGLE_CHOICE">
+                        Single Choice
+                      </option>
+
+                      <option value="MULTI_CHOICE">
+                        Multi Choice
+                      </option>
+
+                      <option value="RATING">
+                        Rating
+                      </option>
+
+                      <option value="NUMERIC">
+                        Numeric
+                      </option>
+
+                    </select>
+
+                  </Field>
+
+
+                  <Field label="Section">
+
+                    <input
+                      value={
+                        form.section
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "section",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="question-input"
+                    />
+
+                  </Field>
+
+
+                  <div className="question-field-wide">
+
+                    <Field label="Analysis Category">
+
+                      <input
+                        value={
+                          form.analysisCategory
+                        }
+
+                        onChange={
+                          function (event) {
+                            updateForm(
+                              "analysisCategory",
+                              event.target.value
+                            );
+                          }
+                        }
+
+                        placeholder="GENERAL_CONCERN"
+
+                        className="question-input"
+                      />
+
+                    </Field>
+
+                  </div>
+
+                </div>
+
+              </QuestionFormSection>
+
+
+              <QuestionFormSection
+                icon={FileText}
+                title="Question Wording"
+                description="Maintain the research question in English and Telugu."
+              >
+
+                <div className="question-form-stack">
+
+                  <Field label="English Question">
+
+                    <textarea
+                      rows={3}
+
+                      value={
+                        form.questionText
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionText",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="question-input"
+                    />
+
+                  </Field>
+
+
+                  <Field label="Telugu Question">
+
+                    <textarea
+                      rows={3}
+
+                      value={
+                        form.questionTextTelugu
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionTextTelugu",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="question-input"
+                    />
+
+                  </Field>
+
+                </div>
+
+              </QuestionFormSection>
+
+
+              <QuestionFormSection
+                icon={CheckCircle2}
+                title="Completion & Response Rules"
+                description="Define survey completion requirements and available response choices."
+              >
+
+                <div className="question-rule-grid">
+
+                  <label className="question-rule-card">
+
+                    <input
+                      type="checkbox"
+
+                      checked={
+                        form.required
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "required",
+                            event.target.checked
+                          );
+                        }
+                      }
+                    />
+
+                    <div>
+
+                      <strong>
+                        Required Question
+                      </strong>
+
+                      <span>
+                        Expected during the survey conversation.
+                      </span>
+
+                    </div>
+
+                  </label>
+
+
+                  <label className="question-rule-card">
+
+                    <input
+                      type="checkbox"
+
+                      checked={
+                        form.requiredForCompletion
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "requiredForCompletion",
+                            event.target.checked
+                          );
+                        }
+                      }
+                    />
+
+                    <div>
+
+                      <strong>
+                        Required for Completion
+                      </strong>
+
+                      <span>
+                        Contributes to questionnaire completion coverage.
+                      </span>
+
+                    </div>
+
+                  </label>
+
+                </div>
+
+
+                <div className="question-options-field">
+
+                  <Field label="Answer Options — one per line">
+
+                    <textarea
+                      rows={5}
+
+                      value={
+                        form.optionsText
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "optionsText",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      placeholder={
+                        "Satisfied\nNeutral\nDissatisfied"
+                      }
+
+                      className="question-input"
+                    />
+
+                  </Field>
+
+                </div>
+
+              </QuestionFormSection>
+
+            </div>
+
+
+            <div className="question-add-footer">
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowAdd(false);
+                  }
+                }
+
+                className="question-cancel-button"
               >
                 Cancel
               </button>
+
 
               <button
                 type="button"
@@ -769,88 +970,219 @@ export default function QuestionnaireDetailPage() {
                   addQuestion
                 }
 
-                className="rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="question-save-button"
               >
+
                 {saving
                   ? "Saving..."
-                  : "Add Question"}
+                  : (
+                    <>
+                      <Plus size={15} />
+                      Add Question
+                    </>
+                  )}
+
               </button>
+
+            </div>
+
+          </section>
+
+        )}
+
+
+        <section className="question-list-panel">
+
+          <div className="question-list-toolbar">
+
+            <div>
+
+              <div className="question-detail-eyebrow">
+                SURVEY QUESTIONS
+              </div>
+
+              <h2>
+                Question Framework
+              </h2>
+
+              <p>
+                Review question wording, analytical
+                categories and completion rules.
+              </p>
+
+            </div>
+
+
+            <div className="question-detail-search">
+
+              <Search size={15} />
+
+              <input
+                value={
+                  search
+                }
+
+                onChange={
+                  function (event) {
+                    setSearch(
+                      event.target.value
+                    );
+                  }
+                }
+
+                placeholder="Search questions"
+              />
 
             </div>
 
           </div>
 
-        )}
 
+          <div className="question-list-content">
 
-        <div className="mt-8 space-y-4">
+            {filteredQuestions.length === 0
+              ? (
 
-          {questionnaire.questions.map(
-            function (question) {
+                <div className="question-empty-state">
 
-              return (
+                  <ListChecks size={28} />
 
-                <div
-                  key={question.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-                >
+                  <strong>
+                    No matching questions
+                  </strong>
 
-                  <div className="flex items-start justify-between">
+                  <span>
+                    Try another question, category or section.
+                  </span>
 
-                    <div className="flex gap-4">
+                </div>
 
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 font-bold text-indigo-600">
+              )
+              : filteredQuestions.map(
+                function (question) {
+
+                  return (
+
+                    <article
+                      key={question.id}
+                      className="question-card"
+                    >
+
+                      <div className="question-card-number">
                         {question.question_order}
                       </div>
 
-                      <div>
 
-                        <div className="text-xs font-medium uppercase text-indigo-600">
-                          {question.analysis_category ||
-                            "GENERAL"}
+                      <div className="question-card-main">
+
+                        <div className="question-card-labels">
+
+                          <span className="question-category-badge">
+                            <Tag size={11} />
+                            {formatLabel(
+                              question.analysis_category ||
+                              "GENERAL"
+                            )}
+                          </span>
+
+                          {question.metadata?.section && (
+
+                            <span className="question-section-badge">
+                              {formatLabel(
+                                question.metadata.section
+                              )}
+                            </span>
+
+                          )}
+
                         </div>
 
-                        <div className="mt-1 text-lg font-semibold text-slate-900">
+
+                        <h3>
                           {question.question_text}
-                        </div>
+                        </h3>
+
 
                         {question.metadata
                           ?.question_text_telugu && (
 
-                          <div className="mt-2 text-sm text-slate-600">
+                          <p className="question-telugu">
                             {
                               question.metadata
                                 .question_text_telugu
                             }
+                          </p>
+
+                        )}
+
+
+                        <div className="question-card-code">
+
+                          <span>
+                            Code
+                          </span>
+
+                          <strong>
+                            {question.question_code || "-"}
+                          </strong>
+
+                        </div>
+
+
+                        {Array.isArray(
+                          question.options
+                        ) &&
+                          question.options.length > 0 && (
+
+                          <div className="question-option-list">
+
+                            {question.options.map(
+                              function (
+                                option,
+                                index
+                              ) {
+
+                                return (
+
+                                  <span key={index}>
+                                    {option.label ||
+                                      option.value}
+                                  </span>
+
+                                );
+                              }
+                            )}
+
                           </div>
 
                         )}
 
                       </div>
 
-                    </div>
 
+                      <div className="question-card-rules">
 
-                    <div className="text-right">
+                        <span className="question-type-badge">
+                          {formatLabel(
+                            question.question_type
+                          )}
+                        </span>
 
-                      <div className="text-xs font-medium text-slate-500">
-                        {question.question_type}
-                      </div>
-
-                      <div className="mt-2 flex gap-2">
 
                         {question.required && (
 
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs">
+                          <span className="question-required-badge">
                             Required
                           </span>
 
                         )}
 
+
                         {question.metadata
                           ?.required_for_completion && (
 
-                          <span className="rounded-full bg-green-50 px-2 py-1 text-xs text-green-700">
+                          <span className="question-completion-badge">
+                            <CheckCircle2 size={11} />
                             Completion
                           </span>
 
@@ -858,68 +1190,48 @@ export default function QuestionnaireDetailPage() {
 
                       </div>
 
-                    </div>
+                    </article>
 
-                  </div>
+                  );
+                }
+              )}
 
-
-                  {Array.isArray(
-                    question.options
-                  ) &&
-                    question.options.length > 0 && (
-
-                    <div className="mt-4 flex flex-wrap gap-2">
-
-                      {question.options.map(
-                        function (
-                          option,
-                          index
-                        ) {
-
-                          return (
-                            <span
-                              key={index}
-                              className="rounded-lg border border-slate-200 px-3 py-1 text-xs text-slate-600"
-                            >
-                              {option.label ||
-                                option.value}
-                            </span>
-                          );
-                        }
-                      )}
-
-                    </div>
-
-                  )}
-
-                </div>
-
-              );
-            }
-          )}
-
-        </div>
+          </div>
 
 
-        <style jsx global>{`
-          .input {
-            width: 100%;
-            border: 1px solid #cbd5e1;
-            border-radius: 0.5rem;
-            padding: 0.65rem 0.75rem;
-            font-size: 0.875rem;
-            background: white;
-            color: #0f172a;
-            outline: none;
-          }
+          <div className="question-lifecycle">
 
-          .input:focus {
-            border-color: #6366f1;
-            box-shadow:
-              0 0 0 2px
-              rgba(99, 102, 241, 0.12);
-          }
-        `}</style>
+            <span>
+              Research Objective
+            </span>
+
+            <strong>→</strong>
+
+            <span>
+              Questionnaire
+            </span>
+
+            <strong>→</strong>
+
+            <span>
+              Questions & Completion Rules
+            </span>
+
+            <strong>→</strong>
+
+            <span>
+              AI Interview
+            </span>
+
+            <strong>→</strong>
+
+            <span>
+              Evidence
+            </span>
+
+          </div>
+
+        </section>
 
       </div>
 
@@ -928,26 +1240,88 @@ export default function QuestionnaireDetailPage() {
 }
 
 
-function Metric({
+function QuestionMetric({
+  icon: Icon,
   label,
-  value
+  value,
+  emphasis = false
 }: {
+  icon: React.ElementType;
   label: string;
   value: string;
+  emphasis?: boolean;
 }) {
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
 
-      <div className="text-xs uppercase text-slate-400">
-        {label}
+    <div
+      className={
+        emphasis
+          ? "question-detail-metric emphasis"
+          : "question-detail-metric"
+      }
+    >
+
+      <div className="question-metric-icon">
+        <Icon size={17} />
       </div>
 
-      <div className="mt-1 font-semibold text-slate-900">
-        {value}
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
       </div>
 
     </div>
+  );
+}
+
+
+function QuestionFormSection({
+  icon: Icon,
+  title,
+  description,
+  children
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+
+  return (
+
+    <section className="question-form-section">
+
+      <div className="question-form-section-header">
+
+        <div className="question-form-section-icon">
+          <Icon size={16} />
+        </div>
+
+        <div>
+
+          <h3>
+            {title}
+          </h3>
+
+          <p>
+            {description}
+          </p>
+
+        </div>
+
+      </div>
+
+      {children}
+
+    </section>
   );
 }
 
@@ -961,14 +1335,35 @@ function Field({
 }) {
 
   return (
-    <div>
 
-      <label className="mb-2 block text-sm font-medium text-slate-700">
+    <label className="question-field">
+
+      <span>
         {label}
-      </label>
+      </span>
 
       {children}
 
-    </div>
+    </label>
   );
+}
+
+
+function formatLabel(
+  value: string
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
 }
