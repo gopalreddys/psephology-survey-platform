@@ -2,8 +2,21 @@
 
 import {
   useEffect,
+  useMemo,
   useState
 } from "react";
+
+import {
+  BookOpen,
+  ChevronRight,
+  FileText,
+  Languages,
+  Layers3,
+  Plus,
+  Search,
+  Sparkles,
+  X
+} from "lucide-react";
 
 import {
   useRouter
@@ -65,6 +78,12 @@ export default function QuestionnairesPage() {
     useState<string | null>(
       null
     );
+
+  const [
+    search,
+    setSearch
+  ] =
+    useState("");
 
   const [
     form,
@@ -201,29 +220,89 @@ export default function QuestionnairesPage() {
   }
 
 
+  const filteredQuestionnaires =
+    useMemo(
+      function () {
+
+        const query =
+          search
+            .trim()
+            .toLowerCase();
+
+        if (!query) {
+          return questionnaires;
+        }
+
+        return questionnaires.filter(
+          function (item) {
+
+            return [
+              item.questionnaire_name,
+              item.questionnaire_code,
+              item.primary_language,
+              item.status,
+              item.description
+            ]
+              .filter(Boolean)
+              .some(
+                function (value) {
+
+                  return String(value)
+                    .toLowerCase()
+                    .includes(query);
+                }
+              );
+          }
+        );
+      },
+      [
+        questionnaires,
+        search
+      ]
+    );
+
+
+  const totalQuestions =
+    questionnaires.reduce(
+      function (sum, item) {
+
+        return (
+          sum +
+          Number(
+            item.question_count ||
+            0
+          )
+        );
+      },
+      0
+    );
+
+
   return (
     <AppShell>
 
-      <div className="p-8">
+      <div className="questionnaire-library-page">
 
-        <div className="flex items-start justify-between">
+        <section className="questionnaire-library-header">
 
           <div>
 
-            <p className="text-sm font-medium text-indigo-600">
-              Research Design
-            </p>
+            <div className="questionnaire-eyebrow">
+              RESEARCH DESIGN
+            </div>
 
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">
+            <h1>
               Questionnaires
             </h1>
 
-            <p className="mt-2 text-slate-500">
-              Manage survey versions, questions,
-              answer types and completion rules.
+            <p>
+              Design and manage survey instruments,
+              versions, questions, languages and
+              completion structures.
             </p>
 
           </div>
+
 
           <button
             type="button"
@@ -234,144 +313,283 @@ export default function QuestionnairesPage() {
               }
             }
 
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white"
+            className="questionnaire-create-button"
           >
-            + Create Questionnaire
+            <Plus size={16} />
+            Create Questionnaire
           </button>
 
-        </div>
+        </section>
 
 
         {message && (
 
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          <div className="questionnaire-message">
             {message}
           </div>
 
         )}
 
 
+        <section className="questionnaire-summary-grid">
+
+          <SummaryCard
+            icon={BookOpen}
+            label="Questionnaires"
+            value={
+              String(
+                questionnaires.length
+              )
+            }
+          />
+
+          <SummaryCard
+            icon={FileText}
+            label="Questions"
+            value={
+              String(
+                totalQuestions
+              )
+            }
+          />
+
+          <SummaryCard
+            icon={Layers3}
+            label="Versioned Instruments"
+            value={
+              String(
+                questionnaires.length
+              )
+            }
+          />
+
+          <SummaryCard
+            icon={Languages}
+            label="Languages"
+            value={
+              String(
+                new Set(
+                  questionnaires
+                    .map(
+                      function (item) {
+                        return item.primary_language;
+                      }
+                    )
+                    .filter(Boolean)
+                ).size
+              )
+            }
+          />
+
+        </section>
+
+
         {showCreate && (
 
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="questionnaire-create-panel">
 
-            <h2 className="text-xl font-semibold text-slate-900">
-              Create Questionnaire
-            </h2>
+            <div className="questionnaire-create-header">
 
-            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              <div>
 
-              <Field label="Questionnaire Code">
+                <div className="questionnaire-eyebrow">
+                  NEW RESEARCH INSTRUMENT
+                </div>
 
-                <input
-                  value={
-                    form.questionnaireCode
+                <h2>
+                  Create Questionnaire
+                </h2>
+
+                <p>
+                  Create the questionnaire shell first.
+                  Questions can be configured after creation.
+                </p>
+
+              </div>
+
+
+              <button
+                type="button"
+
+                onClick={
+                  function () {
+                    setShowCreate(false);
                   }
+                }
 
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "questionnaireCode",
-                        event.target.value
-                      );
-                    }
-                  }
+                className="questionnaire-close-button"
+              >
+                <X size={18} />
+              </button>
 
-                  className="input"
-                />
-
-              </Field>
+            </div>
 
 
-              <Field label="Questionnaire Name">
+            <div className="questionnaire-create-body">
 
-                <input
-                  value={
-                    form.questionnaireName
-                  }
+              <div className="questionnaire-form-section">
 
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "questionnaireName",
-                        event.target.value
-                      );
-                    }
-                  }
+                <div className="questionnaire-form-heading">
 
-                  className="input"
-                />
+                  <div className="questionnaire-form-icon">
+                    <FileText size={17} />
+                  </div>
 
-              </Field>
+                  <div>
 
+                    <h3>
+                      Instrument Identity
+                    </h3>
 
-              <Field label="Version">
+                    <p>
+                      Define the questionnaire code,
+                      name and version.
+                    </p>
 
-                <input
-                  type="number"
-                  min={1}
+                  </div>
 
-                  value={
-                    form.versionNumber
-                  }
-
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "versionNumber",
-                        event.target.value
-                      );
-                    }
-                  }
-
-                  className="input"
-                />
-
-              </Field>
+                </div>
 
 
-              <Field label="Primary Language">
+                <div className="questionnaire-form-grid">
 
-                <select
-                  value={
-                    form.primaryLanguage
-                  }
+                  <Field label="Questionnaire Code">
 
-                  onChange={
-                    function (event) {
-                      updateForm(
-                        "primaryLanguage",
-                        event.target.value
-                      );
-                    }
-                  }
+                    <input
+                      value={
+                        form.questionnaireCode
+                      }
 
-                  className="input"
-                >
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionnaireCode",
+                            event.target.value
+                          );
+                        }
+                      }
 
-                  <option value="Telugu">
-                    Telugu
-                  </option>
+                      className="questionnaire-input"
+                    />
 
-                  <option value="English">
-                    English
-                  </option>
-
-                  <option value="Hindi">
-                    Hindi
-                  </option>
-
-                </select>
-
-              </Field>
+                  </Field>
 
 
-              <div className="md:col-span-2">
+                  <Field label="Questionnaire Name">
+
+                    <input
+                      value={
+                        form.questionnaireName
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "questionnaireName",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="questionnaire-input"
+                    />
+
+                  </Field>
+
+
+                  <Field label="Version">
+
+                    <input
+                      type="number"
+                      min={1}
+
+                      value={
+                        form.versionNumber
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "versionNumber",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="questionnaire-input"
+                    />
+
+                  </Field>
+
+
+                  <Field label="Primary Language">
+
+                    <select
+                      value={
+                        form.primaryLanguage
+                      }
+
+                      onChange={
+                        function (event) {
+                          updateForm(
+                            "primaryLanguage",
+                            event.target.value
+                          );
+                        }
+                      }
+
+                      className="questionnaire-input"
+                    >
+
+                      <option value="Telugu">
+                        Telugu
+                      </option>
+
+                      <option value="English">
+                        English
+                      </option>
+
+                      <option value="Hindi">
+                        Hindi
+                      </option>
+
+                    </select>
+
+                  </Field>
+
+                </div>
+
+              </div>
+
+
+              <div className="questionnaire-form-section">
+
+                <div className="questionnaire-form-heading">
+
+                  <div className="questionnaire-form-icon">
+                    <Sparkles size={17} />
+                  </div>
+
+                  <div>
+
+                    <h3>
+                      Research Description
+                    </h3>
+
+                    <p>
+                      Document the purpose and intended
+                      use of this questionnaire version.
+                    </p>
+
+                  </div>
+
+                </div>
+
 
                 <Field label="Description">
 
                   <textarea
-                    rows={3}
+                    rows={4}
 
                     value={
                       form.description
@@ -386,7 +604,7 @@ export default function QuestionnairesPage() {
                       }
                     }
 
-                    className="input"
+                    className="questionnaire-input questionnaire-textarea"
                   />
 
                 </Field>
@@ -396,7 +614,7 @@ export default function QuestionnairesPage() {
             </div>
 
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="questionnaire-create-footer">
 
               <button
                 type="button"
@@ -407,10 +625,11 @@ export default function QuestionnairesPage() {
                   }
                 }
 
-                className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm"
+                className="questionnaire-cancel-button"
               >
                 Cancel
               </button>
+
 
               <button
                 type="button"
@@ -421,152 +640,274 @@ export default function QuestionnairesPage() {
                   createQuestionnaire
                 }
 
-                className="rounded-lg bg-slate-950 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                className="questionnaire-submit-button"
               >
-                {saving
-                  ? "Creating..."
-                  : "Create"}
+
+                {
+                  saving
+                    ? "Creating..."
+                    : (
+                      <>
+                        <Plus size={15} />
+                        Create Questionnaire
+                      </>
+                    )
+                }
+
               </button>
 
             </div>
 
-          </div>
+          </section>
 
         )}
 
 
-        <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="questionnaire-library-panel">
 
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="questionnaire-library-toolbar">
 
-            <h2 className="font-semibold text-slate-900">
-              Questionnaire Library
-            </h2>
+            <div>
+
+              <div className="questionnaire-eyebrow">
+                RESEARCH INSTRUMENT LIBRARY
+              </div>
+
+              <h2>
+                Questionnaire Library
+              </h2>
+
+              <p>
+                Select an instrument to manage its
+                questions and configuration.
+              </p>
+
+            </div>
+
+
+            <div className="questionnaire-search">
+
+              <Search size={15} />
+
+              <input
+                value={search}
+
+                onChange={
+                  function (event) {
+                    setSearch(
+                      event.target.value
+                    );
+                  }
+                }
+
+                placeholder="Search questionnaires"
+              />
+
+            </div>
 
           </div>
 
 
-          {loading ? (
+          {
+            loading
+              ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              Loading questionnaires...
-            </div>
+                <div className="questionnaire-loading">
+                  Loading questionnaires...
+                </div>
 
-          ) : questionnaires.length === 0 ? (
+              )
+              : filteredQuestionnaires.length === 0
+                ? (
 
-            <div className="p-8 text-sm text-slate-500">
-              No questionnaires available.
-            </div>
+                  <div className="questionnaire-empty">
 
-          ) : (
+                    <BookOpen size={26} />
 
-            <div className="divide-y divide-slate-100">
+                    <strong>
+                      {
+                        search
+                          ? "No matching questionnaires"
+                          : "No questionnaires available"
+                      }
+                    </strong>
 
-              {questionnaires.map(
-                function (item) {
+                    <span>
+                      {
+                        search
+                          ? "Try a different search term."
+                          : "Create your first research instrument."
+                      }
+                    </span>
 
-                  return (
+                  </div>
 
-                    <div
-                      key={item.id}
+                )
+                : (
 
-                      onClick={
-                        function () {
-                          router.push(
-                            `/questionnaires/${item.id}`
+                  <div className="questionnaire-list">
+
+                    {
+                      filteredQuestionnaires.map(
+                        function (item) {
+
+                          return (
+
+                            <button
+                              type="button"
+
+                              key={item.id}
+
+                              onClick={
+                                function () {
+                                  router.push(
+                                    `/questionnaires/${item.id}`
+                                  );
+                                }
+                              }
+
+                              className="questionnaire-card"
+                            >
+
+                              <div className="questionnaire-card-main">
+
+                                <div className="questionnaire-card-icon">
+                                  <FileText size={18} />
+                                </div>
+
+
+                                <div className="questionnaire-card-content">
+
+                                  <div className="questionnaire-card-title-row">
+
+                                    <h3>
+                                      {
+                                        item.questionnaire_name
+                                      }
+                                    </h3>
+
+                                    <span className="questionnaire-status">
+                                      {
+                                        formatLabel(
+                                          item.status
+                                        )
+                                      }
+                                    </span>
+
+                                  </div>
+
+
+                                  <div className="questionnaire-card-code">
+                                    {
+                                      item.questionnaire_code
+                                    }
+                                    {" · Version "}
+                                    {
+                                      item.version_number
+                                    }
+                                  </div>
+
+
+                                  {
+                                    item.description
+                                      ? (
+
+                                        <p>
+                                          {item.description}
+                                        </p>
+
+                                      )
+                                      : null
+                                  }
+
+                                </div>
+
+
+                                <ChevronRight
+                                  size={18}
+                                  className="questionnaire-card-arrow"
+                                />
+
+                              </div>
+
+
+                              <div className="questionnaire-card-stats">
+
+                                <QuestionnaireMetric
+                                  label="Questions"
+                                  value={
+                                    String(
+                                      item.question_count ||
+                                      0
+                                    )
+                                  }
+                                />
+
+                                <QuestionnaireMetric
+                                  label="Language"
+                                  value={
+                                    item.primary_language ||
+                                    "-"
+                                  }
+                                />
+
+                                <QuestionnaireMetric
+                                  label="Version"
+                                  value={
+                                    String(
+                                      item.version_number
+                                    )
+                                  }
+                                />
+
+                              </div>
+
+                            </button>
+
                           );
                         }
-                      }
+                      )
+                    }
 
-                      className="cursor-pointer px-6 py-5 hover:bg-slate-50"
-                    >
+                  </div>
 
-                      <div className="flex items-center justify-between">
-
-                        <div>
-
-                          <div className="font-semibold text-slate-900">
-                            {item.questionnaire_name}
-                          </div>
-
-                          <div className="mt-1 text-xs text-slate-500">
-                            {item.questionnaire_code}
-                            {" • Version "}
-                            {item.version_number}
-                          </div>
-
-                        </div>
-
-
-                        <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-                          {item.status}
-                        </span>
-
-                      </div>
-
-
-                      <div className="mt-4 grid gap-4 md:grid-cols-3">
-
-                        <Metric
-                          label="Questions"
-                          value={
-                            String(
-                              item.question_count || 0
-                            )
-                          }
-                        />
-
-                        <Metric
-                          label="Language"
-                          value={
-                            item.primary_language ||
-                            "-"
-                          }
-                        />
-
-                        <Metric
-                          label="Version"
-                          value={
-                            String(
-                              item.version_number
-                            )
-                          }
-                        />
-
-                      </div>
-
-                    </div>
-
-                  );
-                }
-              )}
-
-            </div>
-
-          )}
-
-        </div>
-
-
-        <style jsx global>{`
-          .input {
-            width: 100%;
-            border: 1px solid #cbd5e1;
-            border-radius: 0.5rem;
-            padding: 0.65rem 0.75rem;
-            font-size: 0.875rem;
-            background: white;
-            color: #0f172a;
-            outline: none;
+                )
           }
 
-          .input:focus {
-            border-color: #6366f1;
-            box-shadow:
-              0 0 0 2px
-              rgba(99, 102, 241, 0.12);
-          }
-        `}</style>
+
+          <div className="questionnaire-lifecycle">
+
+            <span>
+              Research Objective
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Questionnaire
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Questions
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              AI Interview Context
+            </span>
+
+            <ChevronRight size={13} />
+
+            <span>
+              Response Evidence
+            </span>
+
+          </div>
+
+        </section>
 
       </div>
 
@@ -575,7 +916,42 @@ export default function QuestionnairesPage() {
 }
 
 
-function Metric({
+function SummaryCard({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+
+  return (
+
+    <div className="questionnaire-summary-card">
+
+      <div className="questionnaire-summary-icon">
+        <Icon size={17} />
+      </div>
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+function QuestionnaireMetric({
   label,
   value
 }: {
@@ -584,15 +960,16 @@ function Metric({
 }) {
 
   return (
-    <div className="rounded-xl bg-slate-50 p-4">
 
-      <div className="text-xs uppercase text-slate-400">
+    <div className="questionnaire-metric">
+
+      <span>
         {label}
-      </div>
+      </span>
 
-      <div className="mt-1 font-semibold text-slate-900">
+      <strong>
         {value}
-      </div>
+      </strong>
 
     </div>
   );
@@ -608,9 +985,10 @@ function Field({
 }) {
 
   return (
-    <div>
 
-      <label className="mb-2 block text-sm font-medium text-slate-700">
+    <div className="questionnaire-field">
+
+      <label>
         {label}
       </label>
 
@@ -618,4 +996,27 @@ function Field({
 
     </div>
   );
+}
+
+
+function formatLabel(
+  value: string
+) {
+
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .replaceAll(
+      "_",
+      " "
+    )
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      function (character) {
+        return character.toUpperCase();
+      }
+    );
 }
