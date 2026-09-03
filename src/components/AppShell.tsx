@@ -21,7 +21,11 @@ import {
   Phone,
   Settings,
   Users,
-  ClipboardList
+  ClipboardList,
+  ShieldCheck,
+  MapPinned,
+  BrainCircuit,
+  PhoneCall
 } from "lucide-react";
 
 import {
@@ -328,21 +332,222 @@ function AuthenticatedShell({
 }
 
 
+function LoginExperience() {
+  return (
+    <div className="login-page">
+
+      <section className="login-brand-panel">
+
+        <div className="login-brand-inner">
+
+          <div className="login-brand-mark">
+            <BarChart3 size={26} />
+          </div>
+
+          <div className="login-brand-copy">
+            <span className="login-eyebrow">
+              PSEPHOLOGY AI
+            </span>
+
+            <h1>
+              Survey intelligence for better
+              electoral research.
+            </h1>
+
+            <p>
+              Manage voter research, AI voice surveys,
+              field coverage and analytical insights
+              from one secure platform.
+            </p>
+          </div>
+
+
+          <div className="login-capabilities">
+
+            <div className="login-capability">
+              <div className="login-capability-icon">
+                <PhoneCall size={18} />
+              </div>
+
+              <div>
+                <strong>
+                  AI Voice Surveys
+                </strong>
+
+                <span>
+                  Execute structured multilingual
+                  research at scale.
+                </span>
+              </div>
+            </div>
+
+
+            <div className="login-capability">
+              <div className="login-capability-icon">
+                <MapPinned size={18} />
+              </div>
+
+              <div>
+                <strong>
+                  Geography Intelligence
+                </strong>
+
+                <span>
+                  Understand outcomes from constituency
+                  to Mandal and village.
+                </span>
+              </div>
+            </div>
+
+
+            <div className="login-capability">
+              <div className="login-capability-icon">
+                <BrainCircuit size={18} />
+              </div>
+
+              <div>
+                <strong>
+                  Research Analytics
+                </strong>
+
+                <span>
+                  Convert survey evidence into measurable
+                  trends and research insights.
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+
+          <div className="login-brand-footer">
+            <ShieldCheck size={17} />
+
+            <span>
+              Secure, role-based access
+            </span>
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <section className="login-form-panel">
+
+        <div className="login-form-wrapper">
+
+          <div className="login-mobile-brand">
+            <div className="login-mobile-mark">
+              <BarChart3 size={22} />
+            </div>
+
+            <div>
+              <span>
+                PSEPHOLOGY AI
+              </span>
+
+              <small>
+                Survey & Voice Intelligence
+              </small>
+            </div>
+          </div>
+
+
+          <div className="login-form-heading">
+
+            <span className="login-form-eyebrow">
+              SECURE ACCESS
+            </span>
+
+            <h2>
+              Welcome back
+            </h2>
+
+            <p>
+              Sign in with your registered platform
+              account to continue.
+            </p>
+
+          </div>
+
+
+          <div className="login-authenticator">
+
+            <Authenticator
+              hideSignUp={true}
+              loginMechanisms={[
+                "email"
+              ]}
+            />
+
+          </div>
+
+
+          <div className="login-security-note">
+            <ShieldCheck size={16} />
+
+            <span>
+              Authentication is protected through
+              AWS Cognito.
+            </span>
+          </div>
+
+
+          <div className="login-version">
+            Psephology Survey Platform · Demo Environment
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+  );
+}
+
+
 export default function AppShell({
   children
 }: {
   children: ReactNode;
 }) {
+  const {
+    authStatus
+  } = useAuthenticator(
+    function (context) {
+      return [
+        context.authStatus
+      ];
+    }
+  );
+
+
+  if (
+    authStatus ===
+    "configuring"
+  ) {
+    return (
+      <div className="login-loading">
+        Loading secure access...
+      </div>
+    );
+  }
+
+
+  if (
+    authStatus !==
+    "authenticated"
+  ) {
+    return (
+      <LoginExperience />
+    );
+  }
+
+
   return (
-    <Authenticator
-      hideSignUp={true}
-      loginMechanisms={[
-        "email"
-      ]}
-    >
-      <AuthenticatedShell>
-        {children}
-      </AuthenticatedShell>
-    </Authenticator>
+    <AuthenticatedShell>
+      {children}
+    </AuthenticatedShell>
   );
 }
