@@ -463,3 +463,273 @@ body {
 
 }
 
+
+
+/* =========================================================
+   Psephology AI — Warm Pastel Brand Theme
+   ========================================================= */
+
+:root {
+  --ps-cream: #fff8f3;
+  --ps-soft-cream: #fff1e8;
+
+  --ps-baby-pink: #fce7ec;
+  --ps-rose: #f4c6ce;
+  --ps-dusty-rose: #d98e9b;
+
+  --ps-coral: #e87878;
+  --ps-muted-red: #c95d67;
+
+  --ps-burgundy: #6f3542;
+  --ps-plum: #3d2630;
+
+  --ps-text: #35282d;
+  --ps-muted-text: #806c73;
+}
+
+
+/* LEFT BRAND PANEL */
+
+.login-brand-panel {
+  background:
+    radial-gradient(
+      circle at 14% 16%,
+      rgba(244, 198, 206, 0.30),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 90% 82%,
+      rgba(232, 120, 120, 0.20),
+      transparent 34%
+    ),
+    linear-gradient(
+      145deg,
+      #3d2630 0%,
+      #623541 52%,
+      #7b414b 100%
+    );
+}
+
+
+.login-brand-mark {
+  color: #fff8f3;
+
+  background:
+    rgba(255, 241, 232, 0.12);
+
+  border-color:
+    rgba(252, 231, 236, 0.22);
+}
+
+
+.login-eyebrow {
+  color: #f4c6ce;
+}
+
+
+.login-brand-copy p {
+  color: #f1dfe2;
+}
+
+
+/* CAPABILITY CARDS */
+
+.login-capability {
+  background:
+    rgba(255, 248, 243, 0.075);
+
+  border-color:
+    rgba(252, 231, 236, 0.15);
+}
+
+
+.login-capability:hover {
+  background:
+    rgba(255, 248, 243, 0.105);
+
+  border-color:
+    rgba(244, 198, 206, 0.26);
+}
+
+
+.login-capability-icon {
+  color: #ffd5dc;
+
+  background:
+    rgba(232, 120, 120, 0.17);
+}
+
+
+.login-capability span {
+  color: #e9d5da;
+}
+
+
+.login-brand-footer {
+  color: #ddc6cc;
+}
+
+
+/* RIGHT LOGIN PANEL */
+
+.login-page {
+  background:
+    linear-gradient(
+      135deg,
+      #fff8f3 0%,
+      #fffdfb 55%,
+      #fff1e8 100%
+    );
+}
+
+
+.login-form-panel {
+  background:
+    radial-gradient(
+      circle at 90% 10%,
+      rgba(252, 231, 236, 0.42),
+      transparent 26%
+    ),
+    linear-gradient(
+      145deg,
+      #fffdfb 0%,
+      #fff8f3 100%
+    );
+}
+
+
+.login-form-eyebrow {
+  color: #c95d67;
+}
+
+
+.login-form-heading h2 {
+  color: #3d2630;
+}
+
+
+.login-form-heading p {
+  color: #806c73;
+}
+
+
+/* FORM */
+
+.login-authenticator .amplify-label {
+  color: #584249;
+}
+
+
+.login-authenticator .amplify-input {
+  border-color: #ead7d9;
+  background: #fffdfb;
+  color: #35282d;
+}
+
+
+.login-authenticator .amplify-input:hover {
+  border-color: #d9aeb5;
+}
+
+
+.login-authenticator .amplify-input:focus {
+  border-color: #d98e9b;
+
+  box-shadow:
+    0 0 0 3px
+    rgba(217, 142, 155, 0.15);
+}
+
+
+/* PRIMARY ACTION */
+
+.login-authenticator
+.amplify-button--primary {
+  background:
+    linear-gradient(
+      135deg,
+      #6f3542,
+      #8a4550
+    );
+
+  box-shadow:
+    0 8px 22px
+    rgba(111, 53, 66, 0.16);
+}
+
+
+.login-authenticator
+.amplify-button--primary:hover {
+  background:
+    linear-gradient(
+      135deg,
+      #61303a,
+      #793b46
+    );
+
+  transform:
+    translateY(-1px);
+}
+
+
+/* LINKS */
+
+.login-authenticator
+.amplify-button--link {
+  color: #c95d67;
+}
+
+
+.login-authenticator
+.amplify-button--link:hover {
+  color: #9f4652;
+}
+
+
+/* SECURITY + FOOTER */
+
+.login-security-note {
+  border-color: #f0dedf;
+  color: #806c73;
+}
+
+
+.login-security-note svg {
+  color: #c95d67;
+}
+
+
+.login-version {
+  color: #aa9299;
+}
+
+
+/* MOBILE BRAND */
+
+.login-mobile-mark {
+  background:
+    linear-gradient(
+      135deg,
+      #6f3542,
+      #9b5360
+    );
+}
+
+
+.login-mobile-brand span {
+  color: #3d2630;
+}
+
+
+.login-mobile-brand small {
+  color: #806c73;
+}
+
+
+/* AUTH LOADING */
+
+.login-loading {
+  background: #fff8f3;
+  color: #806c73;
+}
+
