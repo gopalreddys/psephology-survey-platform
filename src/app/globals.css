@@ -3165,3 +3165,308 @@ textarea.program-input {
 
 }
 
+
+
+/* =========================================================
+   Psephology Platform Typography Standard V1
+   Desktop readability baseline
+   ========================================================= */
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+
+/* ---------- APPLICATION SHELL ---------- */
+
+.app-brand-name {
+  font-size: 16px;
+}
+
+.app-brand-subtitle {
+  font-size: 12px;
+}
+
+.app-nav-label {
+  font-size: 11px;
+}
+
+.app-nav-item {
+  font-size: 14px;
+}
+
+.app-coming-soon {
+  font-size: 11px;
+}
+
+.app-user-name {
+  font-size: 13px;
+}
+
+.app-user-role {
+  font-size: 11px;
+}
+
+.app-signout-button {
+  font-size: 13px;
+}
+
+.app-topbar-eyebrow {
+  font-size: 11px;
+}
+
+.app-topbar-title {
+  font-size: 18px;
+}
+
+.app-status-pill {
+  font-size: 11px;
+}
+
+.app-topbar-user-copy span {
+  font-size: 12px;
+}
+
+.app-topbar-user-copy small {
+  font-size: 11px;
+}
+
+
+/* ---------- DASHBOARD ---------- */
+
+.dashboard-eyebrow,
+.dashboard-section-label {
+  font-size: 11px;
+}
+
+.dashboard-title {
+  font-size: 30px;
+}
+
+.dashboard-description {
+  font-size: 14px;
+}
+
+.dashboard-primary-button,
+.dashboard-secondary-button {
+  font-size: 13px;
+}
+
+.dashboard-metric-top {
+  font-size: 11px;
+}
+
+.dashboard-metric-label {
+  font-size: 13px;
+}
+
+.dashboard-metric-value {
+  font-size: 30px;
+}
+
+.dashboard-metric-detail {
+  font-size: 12px;
+}
+
+.dashboard-panel-header h2,
+.dashboard-insight-panel h2 {
+  font-size: 17px;
+}
+
+.dashboard-panel-header p {
+  font-size: 12px;
+}
+
+.dashboard-lifecycle-number {
+  font-size: 11px;
+}
+
+.dashboard-lifecycle-step h3 {
+  font-size: 14px;
+}
+
+.dashboard-lifecycle-step p {
+  font-size: 12px;
+}
+
+.dashboard-lifecycle-status {
+  font-size: 11px;
+}
+
+.dashboard-quick-action h3 {
+  font-size: 13px;
+}
+
+.dashboard-quick-action p {
+  font-size: 11px;
+}
+
+.dashboard-health-copy strong {
+  font-size: 13px;
+}
+
+.dashboard-health-copy span {
+  font-size: 11px;
+}
+
+.dashboard-health-status {
+  font-size: 11px;
+}
+
+.dashboard-insight-panel p {
+  font-size: 13px;
+}
+
+.dashboard-evidence-flow {
+  font-size: 11px;
+}
+
+.dashboard-demo-note {
+  font-size: 11px;
+}
+
+
+/* ---------- PROGRAMS ---------- */
+
+.programs-eyebrow {
+  font-size: 11px;
+}
+
+.programs-header h1 {
+  font-size: 30px;
+}
+
+.programs-header p {
+  font-size: 14px;
+}
+
+.programs-create-button,
+.program-submit-button {
+  font-size: 13px;
+}
+
+.program-summary-label {
+  font-size: 12px;
+}
+
+.program-summary-value {
+  font-size: 24px;
+}
+
+.program-summary-detail {
+  font-size: 11px;
+}
+
+.programs-message {
+  font-size: 13px;
+}
+
+
+/* Create Program */
+
+.program-create-header h2,
+.program-list-header h2 {
+  font-size: 18px;
+}
+
+.program-create-header p,
+.program-list-header p {
+  font-size: 12px;
+}
+
+.program-form-section-heading h3 {
+  font-size: 15px;
+}
+
+.program-form-section-heading p {
+  font-size: 12px;
+}
+
+.program-field label {
+  font-size: 13px;
+}
+
+.program-field-hint {
+  font-size: 11px;
+}
+
+.program-input {
+  font-size: 14px;
+}
+
+.program-scope-label {
+  font-size: 11px;
+}
+
+.program-scope-header strong {
+  font-size: 14px;
+}
+
+.program-scope-metric-label {
+  font-size: 11px;
+}
+
+.program-scope-metric-value {
+  font-size: 13px;
+}
+
+.program-cancel-button {
+  font-size: 13px;
+}
+
+
+/* Program Portfolio */
+
+.program-count-pill {
+  font-size: 11px;
+}
+
+.program-row-title h3 {
+  font-size: 14px;
+}
+
+.program-code {
+  font-size: 11px;
+}
+
+.program-row-title p {
+  font-size: 12px;
+}
+
+.program-status {
+  font-size: 10px;
+}
+
+.program-row-metric span {
+  font-size: 11px;
+}
+
+.program-row-metric strong {
+  font-size: 12px;
+}
+
+.program-row-open {
+  font-size: 12px;
+}
+
+.program-empty-state {
+  font-size: 13px;
+}
+
+.program-empty-state strong {
+  font-size: 15px;
+}
+
+.program-empty-state span {
+  font-size: 12px;
+}
+
+.program-flow-note {
+  font-size: 11px;
+}
+
