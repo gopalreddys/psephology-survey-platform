@@ -251,6 +251,13 @@ export default function GeographyPage() {
             .trim()
             .toLowerCase();
 
+        const hierarchyOrder: Record<string, number> = {
+          STATE: 0,
+          DISTRICT: 1,
+          MANDAL: 2,
+          VILLAGE: 3
+        };
+
         return geographies.filter(
           function (geo) {
 
@@ -290,7 +297,18 @@ export default function GeographyPage() {
                 }
               );
           }
-        );
+        ).sort(function (left, right) {
+          const typeDifference =
+            (hierarchyOrder[left.geo_type] ?? geoTypes.length) -
+            (hierarchyOrder[right.geo_type] ?? geoTypes.length);
+
+          if (typeDifference !== 0) return typeDifference;
+
+          return left.name.localeCompare(right.name, "en", {
+            numeric: true,
+            sensitivity: "base"
+          });
+        });
 
       },
       [

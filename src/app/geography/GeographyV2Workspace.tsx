@@ -23,19 +23,33 @@ export type GeographyDimension =
   | "LOCAL_BODY";
 
 type Overview = {
+  administrative: {
+    total_units: number | string;
+  };
   electoral: {
-    total_constituencies: number;
-    mapped_constituencies: number;
+    total_constituencies: number | string;
+    mapped_constituencies: number | string;
   };
   localBody: {
-    total_bodies: number;
-    total_areas: number;
+    total_bodies: number | string;
+    zilla_parishads: number | string;
+    mandal_praja_parishads: number | string;
+    gram_panchayats: number | string;
+    municipal_corporations: number | string;
+    municipalities: number | string;
+    total_areas: number | string;
+    urban_wards: number | string;
   };
   crosswalk: {
-    local_body_mappings: number;
-    local_body_area_mappings: number;
+    local_body_mappings: number | string;
+    local_body_area_mappings: number | string;
   };
 };
+
+function asCount(value: number | string | null | undefined) {
+  const count = Number(value);
+  return Number.isFinite(count) ? count : 0;
+}
 
 type Jurisdiction = {
   id: string;
@@ -147,9 +161,9 @@ export function AlternativeGeographyPage({
   }, [recordType, search]);
 
   const visibleRecords = filteredRecords.slice(0, visibleCount);
-  const liveElectoralCount = overview?.electoral.total_constituencies || jurisdictions.length;
-  const liveLocalBodyCount = overview?.localBody.total_bodies || 0;
-  const liveLocalAreaCount = overview?.localBody.total_areas || 0;
+  const liveElectoralCount = asCount(overview?.electoral.total_constituencies) || jurisdictions.length;
+  const liveLocalBodyCount = asCount(overview?.localBody.total_bodies);
+  const liveLocalAreaCount = asCount(overview?.localBody.total_areas);
 
   return (
     <AppShell>
@@ -262,7 +276,9 @@ export function AlternativeGeographyPage({
           </div>
 
           <div className="geography-table-wrap">
-            {isElectoral ? <LegislativeTable records={visibleRecords} /> : <LocalBodyTable />}
+            {isElectoral
+              ? <LegislativeTable records={visibleRecords} />
+              : <LocalBodyTable liveCounts={overview?.localBody || null} />}
           </div>
 
           {isElectoral && visibleRecords.length < filteredRecords.length && (
@@ -281,17 +297,18 @@ export function AlternativeGeographyPage({
 
 export function DatasetStatus({ masterCount, liveCount, noun }: {
   masterCount: number;
-  liveCount: number;
+  liveCount: number | string;
   noun: string;
 }) {
-  const synchronized = masterCount === liveCount;
+  const normalizedLiveCount = asCount(liveCount);
+  const synchronized = normalizedLiveCount >= masterCount;
 
   return (
     <section className={styles.datasetStatus}>
       <span className={styles.datasetStatusIcon}><CheckCircle2 size={18} /></span>
       <div>
         <strong>Telangana source master loaded</strong>
-        <span>{masterCount.toLocaleString()} {noun} in source · {liveCount.toLocaleString()} synchronized to database</span>
+        <span>{masterCount.toLocaleString()} {noun} in source · {normalizedLiveCount.toLocaleString()} available in database</span>
       </div>
       <em className={synchronized ? styles.synced : styles.pending}>
         {synchronized ? "Synchronized" : "Import pending"}
@@ -332,7 +349,18 @@ function LegislativeTable({ records }: { records: LegislativeRecord[] }) {
   );
 }
 
-function LocalBodyTable() {
+function LocalBodyTable({ liveCounts }: {
+  liveCounts: Overview["localBody"] | null;
+}) {
+  const synchronizedByDataset: Record<string, number> = {
+    "Zilla Parishads": asCount(liveCounts?.zilla_parishads),
+    "Mandal Praja Parishads": asCount(liveCounts?.mandal_praja_parishads),
+    "Gram Panchayats": asCount(liveCounts?.gram_panchayats),
+    "Municipal Corporations": asCount(liveCounts?.municipal_corporations),
+    "Municipalities": asCount(liveCounts?.municipalities),
+    "Urban Divisions / Wards": asCount(liveCounts?.urban_wards)
+  };
+
   return (
     <table className="geography-table">
       <thead>
@@ -343,6 +371,16 @@ function LocalBodyTable() {
       </thead>
       <tbody>
         {localBodyDatasets.map(function (dataset) {
+          const synchronizedCount = synchronizedByDataset[dataset.name] || 0;
+          const synchronized = dataset.count !== null && synchronizedCount >= dataset.count;
+          const status = synchronized
+            ? dataset.name === "Gram Panchayats"
+              ? "Synchronized · 8,409 source rows consolidated to 8,366 unique GP codes"
+              : dataset.name === "Urban Divisions / Wards"
+                ? "Synchronized · 25 ULBs require ward verification"
+                : "Synchronized"
+            : dataset.status;
+
           return (
             <tr key={dataset.name}>
               <td>
@@ -354,7 +392,7 @@ function LocalBodyTable() {
               <td>{dataset.level}</td>
               <td>{dataset.geography}</td>
               <td className="numeric">{dataset.count === null ? "—" : dataset.count.toLocaleString()}</td>
-              <td><span className={styles.statusText}>{dataset.status}</span></td>
+              <td><span className={styles.statusText}>{status}</span></td>
             </tr>
           );
         })}
