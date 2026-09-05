@@ -29,9 +29,14 @@ import {
 
 import {
   AlternativeGeographyPage,
+  DatasetStatus,
   DimensionTabs,
   type GeographyDimension
 } from "./GeographyV2Workspace";
+
+import {
+  datasetProfile
+} from "./telangana-geography-data";
 
 
 type Geography = {
@@ -166,7 +171,40 @@ export default function GeographyPage() {
 
   useEffect(
     function () {
-      load();
+      let active = true;
+
+      apiFetch(
+        "/api/geographies"
+      )
+        .then(
+          function (data) {
+            if (active) {
+              setGeographies(data);
+            }
+          }
+        )
+        .catch(
+          function (error) {
+            if (active) {
+              setMessage(
+                error instanceof Error
+                  ? error.message
+                  : "Unable to load geography"
+              );
+            }
+          }
+        )
+        .finally(
+          function () {
+            if (active) {
+              setLoading(false);
+            }
+          }
+        );
+
+      return function () {
+        active = false;
+      };
     },
     []
   );
@@ -350,27 +388,6 @@ export default function GeographyPage() {
   }
 
 
-  const mandalCount =
-    geographies.filter(
-      function (geo) {
-        return geo.geo_type === "MANDAL";
-      }
-    ).length;
-
-  const villageCount =
-    geographies.filter(
-      function (geo) {
-        return geo.geo_type === "VILLAGE";
-      }
-    ).length;
-
-  const districtCount =
-    geographies.filter(
-      function (geo) {
-        return geo.geo_type === "DISTRICT";
-      }
-    ).length;
-
   const registeredVoters =
     geographies
       .filter(
@@ -390,6 +407,15 @@ export default function GeographyPage() {
         },
         0
       );
+
+  const liveAdministrativeCount =
+    geographies.filter(
+      function (geo) {
+        return geoTypes.includes(
+          geo.geo_type
+        );
+      }
+    ).length;
 
 
   if (
@@ -461,6 +487,19 @@ export default function GeographyPage() {
         />
 
 
+        <DatasetStatus
+          masterCount={
+            datasetProfile
+              .administrative
+              .totalUnits
+          }
+          liveCount={
+            liveAdministrativeCount
+          }
+          noun="administrative units"
+        />
+
+
         {message && (
 
           <div className="geography-message">
@@ -477,13 +516,9 @@ export default function GeographyPage() {
             label="Geography Records"
             value={
               String(
-                geographies.filter(
-                  function (geo) {
-                    return geoTypes.includes(
-                      geo.geo_type
-                    );
-                  }
-                ).length
+                datasetProfile
+                  .administrative
+                  .totalUnits
               )
             }
           />
@@ -493,7 +528,9 @@ export default function GeographyPage() {
             label="Districts"
             value={
               String(
-                districtCount
+                datasetProfile
+                  .administrative
+                  .districts
               )
             }
           />
@@ -503,7 +540,9 @@ export default function GeographyPage() {
             label="Mandals"
             value={
               String(
-                mandalCount
+                datasetProfile
+                  .administrative
+                  .mandals
               )
             }
             emphasis
@@ -514,7 +553,9 @@ export default function GeographyPage() {
             label="Villages"
             value={
               String(
-                villageCount
+                datasetProfile
+                  .administrative
+                  .villages
               )
             }
           />

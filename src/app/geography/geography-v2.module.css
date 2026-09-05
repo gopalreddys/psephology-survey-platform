@@ -134,6 +134,95 @@
   color: #243447;
 }
 
+.datasetStatus {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid #f1d8de;
+  border-radius: 13px;
+  background: #fff9fa;
+}
+
+.datasetStatusIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #fce8ed;
+  color: #c9566d;
+}
+
+.datasetStatus div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.datasetStatus strong {
+  color: #3e2930;
+  font-size: 13px;
+}
+
+.datasetStatus div span {
+  color: #7f6970;
+  font-size: 12px;
+}
+
+.datasetStatus em {
+  margin-left: auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.synced {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pending {
+  background: #fff1df;
+  color: #9a5a13;
+}
+
+.statusText {
+  color: #7b5b64;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tableFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-top: 1px solid #f0e1e5;
+  color: #7f6970;
+  font-size: 12px;
+}
+
+.tableFooter button {
+  padding: 8px 13px;
+  border: 1px solid #e8c7cf;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #b8435b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tableFooter button:hover {
+  background: #fff5f7;
+}
+
 @media (max-width: 1000px) {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -149,5 +238,14 @@
   .hierarchyRow {
     display: flex;
     flex-wrap: wrap;
+  }
+
+  .datasetStatus {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .datasetStatus em {
+    margin-left: 48px;
   }
 }
