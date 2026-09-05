@@ -24,6 +24,14 @@ type LocalArea = { id: string; name: string; code: string | null; area_type: str
 type LegislativeMode = "MP" | "MLA" | "MLC";
 type LocalMode = "ZPTC" | "PANCHAYAT" | "CORPORATION" | "MUNICIPALITY";
 
+type AdministrativeGeography = {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  geo_type: string;
+  code: string | null;
+};
+
 function asCount(value: number | string | null | undefined) { const count = Number(value); return Number.isFinite(count) ? count : 0; }
 function itemsOf<T>(response: { items: T[] } | T[] | null): T[] { return !response ? [] : Array.isArray(response) ? response : response.items; }
 
@@ -173,6 +181,89 @@ function LocalBodyExplorer({ bodies, geographies, apiAvailable }: { bodies: Loca
         {!!selected.administrative_units?.length && <ScopeGroup title="Administrative coverage" caption="Verified crosswalk"><ScopeCards records={selected.administrative_units.map(function (g) { return { id: g.id, title: g.name, meta: `${g.geo_type} · ${g.code || "No code"}` }; })} /></ScopeGroup>}<ScopeReady />
       </>}</div></div>
   </section>;
+}
+
+export function AdministrativeHierarchyExplorer({ geographies, loading }: {
+  geographies: AdministrativeGeography[];
+  loading: boolean;
+}) {
+  const [districtId, setDistrictId] = useState("");
+  const [mandalId, setMandalId] = useState("");
+  const [villageSearch, setVillageSearch] = useState("");
+
+  const state = geographies.find(function (geo) { return geo.geo_type === "STATE"; });
+  const districts = geographies.filter(function (geo) { return geo.geo_type === "DISTRICT"; })
+    .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  const allMandals = geographies.filter(function (geo) { return geo.geo_type === "MANDAL"; });
+  const allVillages = geographies.filter(function (geo) { return geo.geo_type === "VILLAGE"; });
+  const mandals = allMandals.filter(function (geo) { return geo.parent_id === districtId; })
+    .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  const query = villageSearch.trim().toLowerCase();
+  const villages = allVillages.filter(function (geo) {
+    return geo.parent_id === mandalId && (!query || `${geo.name} ${geo.code || ""}`.toLowerCase().includes(query));
+  }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+  const selectedDistrict = districts.find(function (geo) { return geo.id === districtId; });
+  const selectedMandal = mandals.find(function (geo) { return geo.id === mandalId; });
+
+  return <section className={styles.adminExplorer}>
+    <div className={styles.explorerHeader}><div><span>ADMINISTRATIVE PYRAMID</span><h2>Telangana at a glance</h2>
+      <p>Select each level to follow the canonical State → District → Mandal → Village branch.</p></div>
+      <div className={styles.scopeLegend}><Database size={16} /><span>Canonical campaign geography</span></div></div>
+
+    <div className={styles.pyramidPath}>
+      <PyramidPathNode label="State" value={state?.name || "Telangana"} active />
+      <PyramidPathNode label="District" value={selectedDistrict?.name || `${districts.length} districts`} active={!!selectedDistrict} />
+      <PyramidPathNode label="Mandal" value={selectedMandal?.name || (selectedDistrict ? `${mandals.length} mandals` : "Select district")} active={!!selectedMandal} />
+      <PyramidPathNode label="Village" value={selectedMandal ? `${allVillages.filter(function (geo) { return geo.parent_id === mandalId; }).length} villages` : "Select mandal"} active={!!selectedMandal} />
+    </div>
+
+    {loading ? <div className={styles.adminLoading}>Loading the Telangana hierarchy…</div> : <div className={styles.pyramidGrid}>
+      <PyramidColumn icon={MapIcon} title="State" count={1}>
+        <div className={styles.stateOverview}><span><MapIcon size={20} /></span><strong>{state?.name || "Telangana"}</strong><small>{state?.code || "TG"}</small>
+          <dl><div><dt>Districts</dt><dd>{districts.length}</dd></div><div><dt>Mandals</dt><dd>{allMandals.length}</dd></div><div><dt>Villages</dt><dd>{allVillages.length.toLocaleString()}</dd></div></dl></div>
+      </PyramidColumn>
+
+      <PyramidColumn icon={Landmark} title="Districts" count={districts.length}>
+        <div className={styles.pyramidList}>{districts.map(function (district) {
+          const childCount = allMandals.filter(function (geo) { return geo.parent_id === district.id; }).length;
+          return <SelectionButton key={district.id} active={district.id === districtId} title={district.name}
+            meta={`${district.code || "No code"} · ${childCount} mandals`} onClick={function () { setDistrictId(district.id); setMandalId(""); setVillageSearch(""); }} />;
+        })}</div>
+      </PyramidColumn>
+
+      <PyramidColumn icon={MapPin} title="Mandals" count={mandals.length}>
+        {!selectedDistrict ? <ColumnPrompt title="Select a district" description="Its mandals will appear here." />
+          : <div className={styles.pyramidList}>{mandals.map(function (mandal) {
+            const childCount = allVillages.filter(function (geo) { return geo.parent_id === mandal.id; }).length;
+            return <SelectionButton key={mandal.id} active={mandal.id === mandalId} title={mandal.name}
+              meta={`${mandal.code || "No code"} · ${childCount} villages`} onClick={function () { setMandalId(mandal.id); setVillageSearch(""); }} />;
+          })}</div>}
+      </PyramidColumn>
+
+      <PyramidColumn icon={Home} title="Villages" count={selectedMandal ? allVillages.filter(function (geo) { return geo.parent_id === mandalId; }).length : 0}>
+        {!selectedMandal ? <ColumnPrompt title="Select a mandal" description="Its villages will appear here." /> : <>
+          <label className={styles.pyramidSearch}><Search size={14} /><input value={villageSearch} onChange={function (event) { setVillageSearch(event.target.value); }} placeholder="Search villages" /></label>
+          <div className={styles.pyramidList}>{villages.map(function (village) {
+            return <div key={village.id} className={styles.readonlyItem}><span><strong>{village.name}</strong><small>{village.code || "Village code unavailable"}</small></span><Home size={15} /></div>;
+          })}{!villages.length && <div className={styles.emptyInline}>No matching villages.</div>}</div>
+        </>}
+      </PyramidColumn>
+    </div>}
+
+    <div className={styles.adminScopeNote}><CheckCircle2 size={17} /><span><strong>One hierarchy, reused everywhere.</strong> Campaign selection, mandal allocation, voter retrieval and outcome analysis resolve through these same IDs and codes.</span></div>
+  </section>;
+}
+
+function PyramidPathNode({ label, value, active }: { label: string; value: string; active: boolean }) {
+  return <div className={active ? styles.pathNodeActive : styles.pathNode}><small>{label}</small><strong>{value}</strong></div>;
+}
+
+function PyramidColumn({ icon: Icon, title, count, children }: { icon: React.ElementType; title: string; count: number; children: React.ReactNode }) {
+  return <section className={styles.pyramidColumn}><div className={styles.pyramidColumnHeader}><span><Icon size={16} /></span><div><strong>{title}</strong><small>{count.toLocaleString()} available</small></div></div>{children}</section>;
+}
+
+function ColumnPrompt({ title, description }: { title: string; description: string }) {
+  return <div className={styles.columnPrompt}><MapPin size={21} /><strong>{title}</strong><span>{description}</span></div>;
 }
 
 function ExplorerHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) { return <div className={styles.explorerHeader}><div><span>{eyebrow}</span><h2>{title}</h2><p>{description}</p></div><div className={styles.scopeLegend}><Database size={16} /><span>Campaign & analysis ready scope</span></div></div>; }

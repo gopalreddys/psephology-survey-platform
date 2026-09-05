@@ -8,7 +8,6 @@ import {
 
 import {
   Building2,
-  ChevronRight,
   Database,
   Home,
   Landmark,
@@ -28,6 +27,7 @@ import {
 } from "@/lib/api";
 
 import {
+  AdministrativeHierarchyExplorer,
   AlternativeGeographyPage,
   DatasetStatus,
   DimensionTabs,
@@ -592,32 +592,10 @@ export default function GeographyPage() {
         </section>
 
 
-        <section className="geography-hierarchy-strip">
-
-          <HierarchyNode
-            label="State"
-          />
-
-          <ChevronRight size={14} />
-
-          <HierarchyNode
-            label="District"
-          />
-
-          <ChevronRight size={14} />
-
-          <HierarchyNode
-            label="Mandal"
-            emphasis
-          />
-
-          <ChevronRight size={14} />
-
-          <HierarchyNode
-            label="Village"
-          />
-
-        </section>
+        <AdministrativeHierarchyExplorer
+          geographies={geographies}
+          loading={loading}
+        />
 
 
         {showForm && (
@@ -1330,29 +1308,6 @@ function SummaryCard({
       </div>
 
     </div>
-  );
-}
-
-
-function HierarchyNode({
-  label,
-  emphasis = false
-}: {
-  label: string;
-  emphasis?: boolean;
-}) {
-
-  return (
-
-    <span
-      className={
-        emphasis
-          ? "geography-hierarchy-node emphasis"
-          : "geography-hierarchy-node"
-      }
-    >
-      {label}
-    </span>
   );
 }
 
