@@ -9,12 +9,13 @@ export const datasetProfile = {
   localBody: {
     zillaParishads: 33,
     mandalPrajaParishads: 621,
-    gramPanchayats: 8409,
+    gramPanchayats: 8366,
+    gramPanchayatSourceRows: 8409,
     municipalCorporations: 11,
     municipalities: 150,
     urbanWards: 3453,
-    totalBodies: 9224,
-    ruralBodies: 9063,
+    totalBodies: 9181,
+    ruralBodies: 9020,
     urbanBodies: 161
   },
   sourceUpdated: "5 September 2026"
@@ -189,7 +190,7 @@ export const localBodyDatasets = [
     level: "Village institution",
     count: datasetProfile.localBody.gramPanchayats,
     geography: "Mandal / Village",
-    status: "Review duplicate GP codes"
+    status: "8,409 source rows consolidated to 8,366 unique GP codes"
   },
   {
     name: "Municipal Corporations",
