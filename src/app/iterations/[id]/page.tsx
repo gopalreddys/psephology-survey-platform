@@ -112,6 +112,15 @@ export default function IterationPage() {
 
 
   const [
+    launchingRunId,
+    setLaunchingRunId
+  ] =
+    useState<string | null>(
+      null
+    );
+
+
+  const [
     message,
     setMessage
   ] =
@@ -313,6 +322,89 @@ export default function IterationPage() {
     } finally {
 
       setSaving(false);
+    }
+  }
+
+
+  async function launchSingleCall(
+    run: Run
+  ) {
+
+    const confirmed =
+      window.confirm(
+        `Launch exactly 1 call from "${run.run_name || `Run ${run.run_number}`}"?`
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    setLaunchingRunId(
+      run.id
+    );
+
+    setMessage(null);
+
+
+    try {
+
+      const result =
+        await apiFetch(
+          `/api/runs/${run.id}/launch`,
+          {
+            method: "POST",
+
+            body:
+              JSON.stringify({
+                limit: 1
+              })
+          }
+        );
+
+
+      if (
+        result.submitted === 1
+      ) {
+
+        setMessage(
+          "1 voter call submitted successfully."
+        );
+
+      } else if (
+        result.selected === 0
+      ) {
+
+        setMessage(
+          "No eligible pending voter was available for this Run."
+        );
+
+      } else {
+
+        setMessage(
+          `Launch completed. Submitted: ${result.submitted || 0}, Failed: ${result.failed || 0}.`
+        );
+      }
+
+
+      await loadRuns();
+
+
+    } catch (error) {
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to launch call"
+      );
+
+
+    } finally {
+
+      setLaunchingRunId(
+        null
+      );
     }
   }
 
@@ -989,6 +1081,36 @@ export default function IterationPage() {
                                 </div>
 
                               </div>
+
+
+                              <button
+                                type="button"
+
+                                onClick={
+                                  function () {
+
+                                    launchSingleCall(
+                                      run
+                                    );
+                                  }
+                                }
+
+                                disabled={
+                                  launchingRunId ===
+                                  run.id
+                                }
+
+                                className="iteration-analysis-button"
+                              >
+                                <PhoneCall size={15} />
+
+                                {
+                                  launchingRunId ===
+                                  run.id
+                                    ? "Launching..."
+                                    : "Launch 1 Call"
+                                }
+                              </button>
 
                             </div>
 
