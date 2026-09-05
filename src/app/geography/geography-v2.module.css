@@ -1,0 +1,153 @@
+.dimensionTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dimensionTab,
+.dimensionTabActive {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 84px;
+  padding: 16px 18px;
+  border: 1px solid #dfe5ec;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #243447;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.dimensionTab:hover {
+  border-color: #aebdca;
+  box-shadow: 0 8px 22px rgba(27, 45, 66, 0.08);
+  transform: translateY(-1px);
+}
+
+.dimensionTabActive {
+  border-color: #0f766e;
+  background: linear-gradient(135deg, #f0fdfa, #ffffff);
+  box-shadow: 0 9px 24px rgba(15, 118, 110, 0.12);
+}
+
+.dimensionIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: #eef3f7;
+  color: #496174;
+}
+
+.dimensionTabActive .dimensionIcon {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.dimensionTab strong,
+.dimensionTabActive strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.dimensionTab small,
+.dimensionTabActive small {
+  display: block;
+  margin-top: 4px;
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric {
+  display: grid;
+  gap: 7px;
+  padding: 17px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.metricIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 3px;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #0f766e;
+}
+
+.metric span {
+  color: #718096;
+  font-size: 12px;
+}
+
+.metric strong {
+  color: #203144;
+  font-size: 24px;
+}
+
+.hierarchyPanel {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.hierarchyRow {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 0.8fr)
+    auto
+    minmax(240px, 1.4fr)
+    auto
+    minmax(150px, 0.8fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: #f7fafc;
+  color: #526273;
+  font-size: 13px;
+}
+
+.hierarchyRow strong {
+  color: #243447;
+}
+
+@media (max-width: 1000px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .dimensionTabs,
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .hierarchyRow {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}

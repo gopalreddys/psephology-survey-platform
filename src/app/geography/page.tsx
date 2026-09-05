@@ -27,6 +27,12 @@ import {
   apiFetch
 } from "@/lib/api";
 
+import {
+  AlternativeGeographyPage,
+  DimensionTabs,
+  type GeographyDimension
+} from "./GeographyV2Workspace";
+
 
 type Geography = {
   id: string;
@@ -44,10 +50,7 @@ const geoTypes = [
   "STATE",
   "DISTRICT",
   "MANDAL",
-  "VILLAGE",
-  "CORPORATION",
-  "DIVISION",
-  "WARD"
+  "VILLAGE"
 ];
 
 
@@ -57,10 +60,7 @@ const parentRules:
   STATE: null,
   DISTRICT: "STATE",
   MANDAL: "DISTRICT",
-  VILLAGE: "MANDAL",
-  CORPORATION: "DISTRICT",
-  DIVISION: "CORPORATION",
-  WARD: "DIVISION"
+  VILLAGE: "MANDAL"
 };
 
 
@@ -71,6 +71,14 @@ export default function GeographyPage() {
     setGeographies
   ] =
     useState<Geography[]>([]);
+
+  const [
+    activeDimension,
+    setActiveDimension
+  ] =
+    useState<GeographyDimension>(
+      "ADMINISTRATIVE"
+    );
 
   const [
     loading,
@@ -207,6 +215,14 @@ export default function GeographyPage() {
 
         return geographies.filter(
           function (geo) {
+
+            if (
+              !geoTypes.includes(
+                geo.geo_type
+              )
+            ) {
+              return false;
+            }
 
             const matchesType =
               typeFilter === "ALL" ||
@@ -376,6 +392,21 @@ export default function GeographyPage() {
       );
 
 
+  if (
+    activeDimension !==
+    "ADMINISTRATIVE"
+  ) {
+    return (
+      <AlternativeGeographyPage
+        dimension={activeDimension}
+        onDimensionChange={
+          setActiveDimension
+        }
+      />
+    );
+  }
+
+
   return (
     <AppShell>
 
@@ -386,17 +417,17 @@ export default function GeographyPage() {
           <div>
 
             <div className="geography-eyebrow">
-              GEOGRAPHIC ADMINISTRATION
+              ADMINISTRATIVE GEOGRAPHY
             </div>
 
             <h1>
-              Geography Management
+              Telangana Geography
             </h1>
 
             <p>
-              Maintain the geographic hierarchy used
-              for voter mapping, survey execution,
-              coverage and research analysis.
+              Maintain the canonical State, District,
+              Mandal and Village hierarchy used by
+              every campaign and crosswalk.
             </p>
 
           </div>
@@ -416,10 +447,18 @@ export default function GeographyPage() {
             className="geography-add-button"
           >
             <Plus size={16} />
-            Add Geography
+            Add Administrative Unit
           </button>
 
         </section>
+
+
+        <DimensionTabs
+          active={activeDimension}
+          onChange={
+            setActiveDimension
+          }
+        />
 
 
         {message && (
@@ -438,7 +477,13 @@ export default function GeographyPage() {
             label="Geography Records"
             value={
               String(
-                geographies.length
+                geographies.filter(
+                  function (geo) {
+                    return geoTypes.includes(
+                      geo.geo_type
+                    );
+                  }
+                ).length
               )
             }
           />
@@ -511,26 +556,6 @@ export default function GeographyPage() {
 
           <HierarchyNode
             label="Village"
-          />
-
-          <span className="geography-hierarchy-divider">
-            or
-          </span>
-
-          <HierarchyNode
-            label="Corporation"
-          />
-
-          <ChevronRight size={14} />
-
-          <HierarchyNode
-            label="Division"
-          />
-
-          <ChevronRight size={14} />
-
-          <HierarchyNode
-            label="Ward"
           />
 
         </section>
