@@ -458,6 +458,54 @@
 .scopeReady strong { font-size: 12px; }
 .scopeReady span { font-size: 10px; line-height: 1.4; }
 
+.ruralRelationship {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #f0d9a9;
+  border-radius: 11px;
+  background: #fffbeb;
+}
+
+.ruralRelationship > strong,
+.ruralRelationship > p {
+  grid-column: 1 / -1;
+}
+
+.ruralRelationship > strong {
+  color: #79521a;
+  font-size: 11px;
+}
+
+.ruralRelationship > span {
+  position: relative;
+  padding: 9px 20px 9px 10px;
+  border: 1px solid #ead8b7;
+  border-radius: 8px;
+  background: #fff;
+  color: #5f5140;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ruralRelationship > span:not(:nth-of-type(3))::after {
+  content: "›";
+  position: absolute;
+  right: 8px;
+  color: #b5822f;
+  font-size: 15px;
+  line-height: 10px;
+}
+
+.ruralRelationship > p {
+  margin: 2px 0 0;
+  color: #8a6a39;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .adminExplorer {
   overflow: hidden;
   border: 1px solid #eadfe2;
@@ -644,6 +692,10 @@
   .explorerSearch { width: 100%; }
   .selectionPane { border-right: 0; border-bottom: 1px solid #edf1f4; }
   .scopeLegend { white-space: normal; }
+  .ruralRelationship { grid-template-columns: 1fr; }
+  .ruralRelationship > strong,
+  .ruralRelationship > p { grid-column: auto; }
+  .ruralRelationship > span::after { display: none; }
   .pyramidPath,
   .pyramidGrid { grid-template-columns: 1fr; }
   .pathNode,

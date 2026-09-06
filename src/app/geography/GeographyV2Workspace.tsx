@@ -154,6 +154,21 @@ function LocalBodyExplorer({ bodies, geographies, apiAvailable }: { bodies: Loca
       return false;
     });
   });
+  const selectedZillaDistrict = useMemo(function () {
+    if (!selected || mode !== "ZPTC") return null;
+    for (const linked of selected.administrative_units || []) {
+      let current = geographyById.get(linked.id);
+      while (current) {
+        if (current.geo_type === "DISTRICT") return current;
+        current = current.parent_id ? geographyById.get(current.parent_id) : undefined;
+      }
+    }
+    return districts.find(function (district) { return district.name.toLowerCase() === selected.name.toLowerCase(); }) || null;
+  }, [selected, mode, geographyById, districts]);
+  const selectedDistrictMandals = selectedZillaDistrict
+    ? geographies.filter(function (geo) { return geo.geo_type === "MANDAL" && geo.parent_id === selectedZillaDistrict.id; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); })
+    : [];
   useEffect(function () { setSelected(null); setAreas([]); setSearch(""); if (mode !== "PANCHAYAT") setMandalId(""); }, [mode]);
   async function choose(body: LocalBody) { setSelected(body); setAreas([]); try { const response = await apiFetch(`/api/local-bodies/${body.id}/electoral-areas?limit=5000`); setAreas(itemsOf(response)); } catch { setAreas([]); } }
 
@@ -166,7 +181,7 @@ function LocalBodyExplorer({ bodies, geographies, apiAvailable }: { bodies: Loca
     <div className={styles.filterBar}><select value={districtId} onChange={function (e) { setDistrictId(e.target.value); setMandalId(""); setSelected(null); }}><option value="">All districts</option>{districts.map(function (g) { return <option key={g.id} value={g.id}>{g.name}</option>; })}</select>
       {mode === "PANCHAYAT" && <select value={mandalId} disabled={!districtId} onChange={function (e) { setMandalId(e.target.value); setSelected(null); }}><option value="">{districtId ? "All mandals" : "Select district first"}</option>{mandals.map(function (g) { return <option key={g.id} value={g.id}>{g.name}</option>; })}</select>}
       <label className={styles.explorerSearch}><Search size={16} /><input value={search} onChange={function (e) { setSearch(e.target.value); }} placeholder="Search local body" /></label></div>
-    {mode === "ZPTC" && <SourceGap title="Official ZPTC and MPTC constituency rows are required" description="Zilla Parishads and Mandal Praja Parishads are synchronized. ZPTC → related MPTC navigation will activate when official contested-area codes and boundaries are loaded." />}
+    {mode === "ZPTC" && <SourceGap title="District coverage is verified; territorial constituencies are pending" description="Select a Zilla Parishad to see every Mandal in its district. Official ZPTC and MPTC boundaries are still required before Mandals or villages can be grouped into electoral constituencies." />}
     <div className={styles.explorerGrid}><div className={styles.selectionPane}><div className={styles.resultCount}>{mode === "PANCHAYAT" && mandalId ? `${villages.length} villages` : `${filtered.length} institutions`}</div>
       <div className={styles.selectionList}>{mode === "PANCHAYAT" && mandalId ? villages.map(function (village) {
         const panchayat = filtered.find(function (body) { return (body.administrative_units || []).some(function (g) { return g.id === village.id; }); });
@@ -177,7 +192,19 @@ function LocalBodyExplorer({ bodies, geographies, apiAvailable }: { bodies: Loca
         {!apiAvailable && <div className={styles.inlineNotice}><AlertCircle size={17} /><span>Install the local-body explorer API to load individual synchronized institutions and wards.</span></div>}</div></div>
       <div className={styles.detailPane}>{!selected ? <EmptySelection icon={Building2} title={mode === "PANCHAYAT" && mandalId ? "Village structure selected" : "Select a local body"} description={mode === "CORPORATION" ? "Its divisions and Administrative coverage will appear here." : mode === "MUNICIPALITY" ? "Its wards and Administrative coverage will appear here." : mode === "PANCHAYAT" ? "Choose a district and mandal, or select a Gram Panchayat." : "ZPTC and related MPTC areas will appear after the official source is loaded."} /> : <>
         <ScopeHeading label={selected.body_type.replaceAll("_", " ")} title={selected.name} meta={selected.code || "No code supplied"} onBack={function () { setSelected(null); }} />
-        <ScopeGroup title={mode === "CORPORATION" ? "Divisions" : mode === "MUNICIPALITY" ? "Wards" : "Contested electoral areas"} caption={`${areas.length} areas`}>{areas.length ? <ScopeCards records={areas.map(function (area) { return { id: area.id, title: localAreaTitle(area, mode), meta: `${area.code || area.area_type} · ${(area.contested_office_type || "").replaceAll("_", " ")}` }; })} /> : <div className={styles.emptyInline}>No synchronized contested-area rows for this institution.</div>}</ScopeGroup>
+        {mode === "ZPTC" ? <>
+          <ScopeGroup title={selectedZillaDistrict ? `Mandals in ${selectedZillaDistrict.name} district` : "Mandals in this district"} caption={`${selectedDistrictMandals.length} mandals`}>
+            {selectedDistrictMandals.length ? <ScopeCards records={selectedDistrictMandals.map(function (mandal) {
+              const villageCount = geographies.filter(function (geo) { return geo.geo_type === "VILLAGE" && geo.parent_id === mandal.id; }).length;
+              return { id: mandal.id, title: mandal.name, meta: `${mandal.code || "No code"} · ${villageCount} villages` };
+            })} /> : <div className={styles.emptyInline}>No verified District crosswalk is available for this Zilla Parishad.</div>}
+          </ScopeGroup>
+          <div className={styles.ruralRelationship}>
+            <strong>Electoral relationship after official boundary import</strong>
+            <span>ZPTC constituency</span><span>Related MPTC constituencies</span><span>Grouped villages in each MPTC</span>
+            <p>An MPTC may contain two or more villages. Villages will be grouped only from official constituency data.</p>
+          </div>
+        </> : <ScopeGroup title={mode === "CORPORATION" ? "Divisions" : mode === "MUNICIPALITY" ? "Wards" : "Contested electoral areas"} caption={`${areas.length} areas`}>{areas.length ? <ScopeCards records={areas.map(function (area) { return { id: area.id, title: localAreaTitle(area, mode), meta: `${area.code || area.area_type} · ${(area.contested_office_type || "").replaceAll("_", " ")}` }; })} /> : <div className={styles.emptyInline}>No synchronized contested-area rows for this institution.</div>}</ScopeGroup>}
         {!!selected.administrative_units?.length && <ScopeGroup title="Administrative coverage" caption="Verified crosswalk"><ScopeCards records={selected.administrative_units.map(function (g) { return { id: g.id, title: g.name, meta: `${g.geo_type} · ${g.code || "No code"}` }; })} /></ScopeGroup>}<ScopeReady />
       </>}</div></div>
   </section>;
