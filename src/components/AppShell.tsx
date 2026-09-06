@@ -123,6 +123,7 @@ const menuItems: MenuItem[] = [
   {
     label: "Campaigns",
     icon: Megaphone,
+    href: "/campaigns",
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
