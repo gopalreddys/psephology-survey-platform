@@ -177,7 +177,7 @@ function LocalBodyExplorer({ bodies, geographies, apiAvailable }: { bodies: Loca
         {!apiAvailable && <div className={styles.inlineNotice}><AlertCircle size={17} /><span>Install the local-body explorer API to load individual synchronized institutions and wards.</span></div>}</div></div>
       <div className={styles.detailPane}>{!selected ? <EmptySelection icon={Building2} title={mode === "PANCHAYAT" && mandalId ? "Village structure selected" : "Select a local body"} description={mode === "CORPORATION" ? "Its divisions and Administrative coverage will appear here." : mode === "MUNICIPALITY" ? "Its wards and Administrative coverage will appear here." : mode === "PANCHAYAT" ? "Choose a district and mandal, or select a Gram Panchayat." : "ZPTC and related MPTC areas will appear after the official source is loaded."} /> : <>
         <ScopeHeading label={selected.body_type.replaceAll("_", " ")} title={selected.name} meta={selected.code || "No code supplied"} onBack={function () { setSelected(null); }} />
-        <ScopeGroup title={mode === "CORPORATION" ? "Divisions" : mode === "MUNICIPALITY" ? "Wards" : "Contested electoral areas"} caption={`${areas.length} areas`}>{areas.length ? <ScopeCards records={areas.map(function (area) { return { id: area.id, title: area.display_label || area.name, meta: `${area.code || area.area_type} · ${(area.contested_office_type || "").replaceAll("_", " ")}` }; })} /> : <div className={styles.emptyInline}>No synchronized contested-area rows for this institution.</div>}</ScopeGroup>
+        <ScopeGroup title={mode === "CORPORATION" ? "Divisions" : mode === "MUNICIPALITY" ? "Wards" : "Contested electoral areas"} caption={`${areas.length} areas`}>{areas.length ? <ScopeCards records={areas.map(function (area) { return { id: area.id, title: localAreaTitle(area, mode), meta: `${area.code || area.area_type} · ${(area.contested_office_type || "").replaceAll("_", " ")}` }; })} /> : <div className={styles.emptyInline}>No synchronized contested-area rows for this institution.</div>}</ScopeGroup>
         {!!selected.administrative_units?.length && <ScopeGroup title="Administrative coverage" caption="Verified crosswalk"><ScopeCards records={selected.administrative_units.map(function (g) { return { id: g.id, title: g.name, meta: `${g.geo_type} · ${g.code || "No code"}` }; })} /></ScopeGroup>}<ScopeReady />
       </>}</div></div>
   </section>;
@@ -267,6 +267,16 @@ function ColumnPrompt({ title, description }: { title: string; description: stri
 }
 
 function ExplorerHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) { return <div className={styles.explorerHeader}><div><span>{eyebrow}</span><h2>{title}</h2><p>{description}</p></div><div className={styles.scopeLegend}><Database size={16} /><span>Campaign & analysis ready scope</span></div></div>; }
+
+function localAreaTitle(area: LocalArea, mode: LocalMode) {
+  const sourceName = area.name?.trim();
+  const fallback = area.display_label || (mode === "CORPORATION" ? "Division" : "Ward");
+
+  if (!sourceName || /^(ward|division)$/i.test(sourceName)) return fallback;
+  if (mode === "CORPORATION") return sourceName.replace(/\bward\b/gi, "Division");
+  return sourceName;
+}
+
 function ModeButton({ active, onClick, title, subtitle }: { active: boolean; onClick: () => void; title: string; subtitle: string }) { return <button type="button" onClick={onClick} className={active ? styles.modeActive : styles.modeButton}><strong>{title}</strong><small>{subtitle}</small></button>; }
 function SelectionButton({ active, title, meta, onClick }: { active: boolean; title: string; meta: string; onClick: () => void }) { return <button type="button" onClick={onClick} className={active ? styles.selectionActive : styles.selectionItem}><span><strong>{title}</strong><small>{meta}</small></span><MapPin size={16} /></button>; }
 function ScopeHeading({ label, title, meta, onBack }: { label: string; title: string; meta: string; onBack: () => void }) { return <div className={styles.scopeHeading}><button type="button" onClick={onBack}><ArrowLeft size={16} /></button><div><span>{label}</span><h3>{title}</h3><p>{meta}</p></div></div>; }
