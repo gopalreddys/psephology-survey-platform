@@ -5,6 +5,7 @@ This package adds the operational campaign tables and the two endpoints required
 ## Files to copy into the API repository
 
 - `008_campaign_operations.sql` → `sql/008_campaign_operations.sql`
+- `migrate-campaign-operations.js` → `src/db/migrate-campaign-operations.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 
@@ -24,7 +25,11 @@ app.use("/api", campaignsRoutes);
 
 ## Apply the migration
 
-Run the SQL file through the API database connection in one transaction. The file is idempotent and can safely be run again.
+Run the included migration after copying the files. It uses the API's existing database connection and the SQL file is idempotent:
+
+```bash
+node src/db/migrate-campaign-operations.js
+```
 
 Then restart `psephology-api.service` and verify:
 
