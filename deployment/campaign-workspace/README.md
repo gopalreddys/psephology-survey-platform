@@ -14,6 +14,8 @@ This package adds the operational campaign tables and secured endpoints required
 - `migrate-campaign-survey-stage.js` → `src/db/migrate-campaign-survey-stage.js`
 - `012_campaign_iteration_ownership.sql` → `sql/012_campaign_iteration_ownership.sql`
 - `migrate-campaign-iteration-ownership.js` → `src/db/migrate-campaign-iteration-ownership.js`
+- `campaign-iterations.repository.js` → `src/repositories/campaign-iterations.repository.js`
+- `campaign-iterations.routes.js` → `src/routes/campaign-iterations.routes.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -26,6 +28,7 @@ Add this import to `src/server.js`:
 ```js
 import campaignsRoutes from "./routes/campaigns.routes.js";
 import campaignProgramsRoutes from "./routes/campaign-programs.routes.js";
+import campaignIterationsRoutes from "./routes/campaign-iterations.routes.js";
 ```
 
 Register it alongside the other `/api` route modules:
@@ -33,6 +36,7 @@ Register it alongside the other `/api` route modules:
 ```js
 app.use("/api", campaignsRoutes);
 app.use("/api", campaignProgramsRoutes);
+app.use("/api", campaignIterationsRoutes);
 ```
 
 ## Apply the migration
@@ -93,3 +97,5 @@ Campaigns are the operational parent of research iterations. The API must enforc
 - Run creation remains protected by the existing iteration/run API and must additionally verify that the caller is a Campaigner with an active allocation inside the linked campaign.
 
 The `campaign_iteration_links` table is deliberately a bridge rather than a second iteration table. This preserves one canonical iteration/run model while making campaign ownership auditable and queryable.
+
+The repository adapter uses the existing `survey_studies` and `program_iterations` tables and creates the iteration plus ownership link in one transaction. Run counts are initially returned as zero by this adapter; connect the existing run repository’s aggregate when the API exposes the run table used by `/api/iterations/:id/runs`.
