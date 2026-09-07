@@ -51,12 +51,15 @@ GET  /api/campaigns
 GET  /api/campaigns/:id
 GET  /api/campaigns/:id/voters
 POST /api/campaigns
+DELETE /api/campaigns/:id
 GET  /api/campaign-programs
 ```
 
 All endpoints require authentication. Creating campaigns is restricted to Super Admin, Admin and Campaign Manager roles. A campaign must reference an Admin-created research program; the API rejects campaigns without `program_id`.
 
 Campaign visibility is enforced from `req.platformUser`: Admin roles see all campaigns, Campaign Managers see only campaigns they created, and Campaigners see only campaigns assigned to them. Campaigner detail and voter endpoints are limited to assigned work geography.
+
+Only the campaign owner or an Admin can delete a campaign, and deletion is allowed only while the campaign is still `DRAFT`. Active, paused and completed campaigns are retained for audit history.
 
 Voter totals are calculated dynamically from each campaign's selected Mandals and all child geography records. No voter row is copied into campaign tables.
 

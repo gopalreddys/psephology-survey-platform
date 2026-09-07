@@ -1,7 +1,7 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
-import { createCampaign, getCampaignById, listCampaigns, listCampaignVoters, updateCampaignStatus } from "../repositories/campaigns.repository.js";
+import { createCampaign, deleteCampaign, getCampaignById, listCampaigns, listCampaignVoters, updateCampaignStatus } from "../repositories/campaigns.repository.js";
 
 const router = express.Router();
 const viewRoles = ["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"];
@@ -34,6 +34,14 @@ router.patch("/campaigns/:id/status", requireAuth, requireRole(reviewRoles), asy
   catch (error) {
     console.error("Update campaign status failed:", error);
     res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : "Unable to update campaign status" });
+  }
+});
+
+router.delete("/campaigns/:id", requireAuth, requireRole(manageRoles), async function (req, res) {
+  try { res.json(await deleteCampaign(req.params.id, req.platformUser)); }
+  catch (error) {
+    console.error("Delete campaign failed:", error);
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : "Unable to delete campaign" });
   }
 });
 

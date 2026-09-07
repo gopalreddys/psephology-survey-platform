@@ -141,6 +141,25 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
   return result.rows[0];
 }
 
+export async function deleteCampaign(id, actor) {
+  const db = await getDb();
+  const result = await db.query("SELECT id, status, created_by_user_id FROM campaigns WHERE id = $1", [id]);
+  if (!result.rowCount) {
+    const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
+  }
+  const campaign = result.rows[0];
+  const canDelete = ["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)
+    || (actor.role_code === "CAMPAIGN_MANAGER" && campaign.created_by_user_id === actor.id);
+  if (!canDelete) {
+    const error = new Error("Only the campaign owner or an Admin can delete this campaign"); error.statusCode = 403; throw error;
+  }
+  if (campaign.status !== "DRAFT") {
+    const error = new Error("Only unstarted Draft campaigns can be deleted"); error.statusCode = 400; throw error;
+  }
+  await db.query("DELETE FROM campaigns WHERE id = $1", [id]);
+  return { id, deleted: true };
+}
+
 export async function listCampaignVoters(id, actor, { limit = 100, offset = 0 } = {}) {
   const campaign = await getCampaignById(id, actor);
   if (!campaign) return null;
