@@ -463,13 +463,14 @@ function LoginExperience() {
             </span>
 
             <h1>
-              Survey intelligence for better
-              electoral research.
+              AI-powered electoral intelligence
+              for a new era of campaigns.
             </h1>
 
             <p>
-              Manage voter research, AI voice surveys,
-              field coverage and analytical insights
+              Design research with geographic precision,
+              conduct multilingual AI interactive conversations,
+              and turn voter evidence into trusted insights
               from one secure platform.
             </p>
           </div>
@@ -484,12 +485,12 @@ function LoginExperience() {
 
               <div>
                 <strong>
-                  AI Voice Surveys
+                  AI Interactive Conversations
                 </strong>
 
                 <span>
-                  Execute structured multilingual
-                  research at scale.
+                  Run structured multilingual conversations
+                  with intelligent AI agents at scale.
                 </span>
               </div>
             </div>
@@ -502,12 +503,12 @@ function LoginExperience() {
 
               <div>
                 <strong>
-                  Geography Intelligence
+                  Geography Coverage
                 </strong>
 
                 <span>
-                  Understand outcomes from constituency
-                  to Mandal and village.
+                  Track research coverage from constituency
+                  to district, Mandal and village.
                 </span>
               </div>
             </div>
@@ -524,8 +525,8 @@ function LoginExperience() {
                 </strong>
 
                 <span>
-                  Convert survey evidence into measurable
-                  trends and research insights.
+                  Turn every conversation into measurable
+                  trends, comparative insight and decisions.
                 </span>
               </div>
             </div>
