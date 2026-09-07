@@ -11,7 +11,12 @@ const sourcePath = path.join(currentDirectory, "telangana-assembly-extents.json"
 
 const specialScopes = {
   "AC-016": [full("Machareddy"), full("Domakonda"), full("Kamareddy"), full("Bhiknoor")],
-  "AC-018": [full("Jakranpalle"), full("Sirkonda"), partial("Nizamabad"), full("Dichpalle"), full("Dharpalle")],
+  "AC-007": [full("Adilabad Rural"), full("Adilabad Urban"), full("Jainath"), full("Bela")],
+  "AC-009": [full("Dilawarpur"), full("Nirmal U"), full("Nirmal Rural"), full("Laxmanchanda"), full("Mamada"), full("Sarangapur")],
+  "AC-018": [full("Jakranpalle"), full("Sirkonda"), partial("Nizamabad Rural"), full("Dichpalle"), full("Dharpalle")],
+  "AC-021": [full("Raikal"), full("Sarangapur"), full("Jagitial"), full("Jagitial Rural")],
+  "AC-033": [full("Siddipet Urban"), full("Siddipet Rural"), full("Chinnakodur"), full("Nangnoor")],
+  "AC-074": [full("Hanwada"), full("Mahabubnagar Urban"), full("Mahabubnagar Rural")],
   "AC-046": [partial("Balanagar")],
   "AC-049": [partial("Saroornagar")],
   "AC-050": [full("Maheswaram"), full("Kandukur"), partial("Saroornagar")],
@@ -20,15 +25,87 @@ const specialScopes = {
   "AC-062": [], "AC-063": [], "AC-064": [], "AC-065": [], "AC-066": [],
   "AC-067": [], "AC-068": [], "AC-069": [], "AC-070": [], "AC-071": [],
   "AC-105": [partial("Warangal")],
-  "AC-106": [partial("Warangal")]
+  "AC-106": [partial("Warangal")],
+  "AC-118": [full("Mulikalapalle"), full("Chandrugonda"), full("Aswaraopeta"), full("Dammapeta")],
+  "AC-119": [full("Wazeed"), full("Venkatapuram"), full("Cherla"), full("Dummugudem"), full("Bhadrachalam")]
+};
+
+const nameAliases = {
+  kouthala: "Koutala", dahegaon: "Dahegoan", kotapalli: "Kotapally",
+  bellampalli: "Bellampally", bhimini: "Bheemini", nennal: "Nennel",
+  vemanpalli: "Vemanpally", dandepalli: "Dandepally", wankdi: "Wankidi",
+  rebbana: "Rebbena", indervelly: "Inderavelly", gudihathnoor: "Gudihatnoor",
+  bazarhathnoor: "Bazarhatnoor", mamda: "Mamada", armur: "Armoor",
+  ranjal: "Renjal", yedpalle: "Yedapally", birkoor: "Birkur",
+  kotgiri: "Kotagiri", nagareddipet: "Nagireddypet", sadasivanagar: "Sadashivanagar",
+  jakranpalle: "Jakranpally", sirkonda: "Sirikonda", dichpalle: "Dichpally",
+  dharpalle: "Dharpally", mortad: "Morthad", kammarpalle: "Kammarpally",
+  velpur: "Vailpoor", koratla: "Korutla", metpalle: "Metpalli",
+  jagtial: "Jagitial", gollapalle: "Gollapalli", velgatoor: "Velgatur",
+  pegadapalle: "Pegadapalli", peddapalle: "Peddapalli", julapalle: "Julapalli",
+  sultanabad: "Sulthanabad", boinpalle: "Boinpalli", konaraopeta: "Konaraopet",
+  medipalle: "Medipalli", ellanthakunta: "Illanthakunta",
+  timmapurlmdcolony: "Thimmapur LMD", saidapur: "V.Saidapur",
+  bheemadevarpalle: "Bheemadevarpalli", elkathurthi: "Elkathurthy",
+  alladurgh: "Alladurg", munpalle: "Munipally", kowdipalle: "Kowdipally",
+  ramachandrapuram: "Ramchandrapuram", toguta: "Thoguta", tupran: "Toopran",
+  quthbullapur: "Qutballapur", maheswaram: "Maheshwaram", kulkacherla: "Kulkacharla",
+  yalal: "Yelal", bomraspet: "Bomaraspeta", damaragidda: "Damargidda",
+  devarkadra: "Devarakadra", narva: "Narwa", ieez: "Ieeja",
+  itikyal: "Itikyala", waddepalle: "Waddepally", bijinapalle: "Bijinapally",
+  telkapalle: "Telkapally", talakondapalle: "Thalakondapally",
+  veepangandla: "Weepangandla", peddakothapalle: "Peddakothapally",
+  chintapalle: "Chinthapally", gundlapalle: "Gundlapally",
+  chandampet: "Chandampeta", peddaadisarlapalle: "Pedda Adesherlapally",
+  nidamanur: "Nidmanoor", thripuraram: "Tripuraram", vemulapalle: "Vemulapally",
+  damercherla: "Dameracherla", neredcherla: "Nereducherla",
+  garidepalle: "Garidepally", mattampalli: "Mattampally", chivvemla: "Chivemla",
+  thipparthi: "Thipparthy", kangal: "Kanagal", narayanapur: "Narayanpur",
+  nampalle: "Nampally", pochampalle: "B Pochampally", ramannapeta: "Ramannapet",
+  chityala: "Chityal", kattangoor: "Kattangur", kethepalle: "Kethepally",
+  narketpalle: "Narketpally", thungathurthi: "Thungaturthy",
+  nuthankal: "Nuthanakal", jajireddigudem: "Jajireddygudem",
+  saligouraram: "Shaligouraram", mturkapalle: "Thurkapally", rajapet: "Rajapeta",
+  jangaon: "Jangoan", raghunathpalle: "Ragunathpally", palakurthi: "Palakurthy",
+  raiparthy: "Rayaparthy",
+  nallabelly: "Nallabelli", sangam: "Sangem", mogullapalle: "Mogullapally",
+  bhupalpalle: "Bhupalpally", eturnagaram: "Eturunagaram", kamepalle: "Kamepalli",
+  tekulapalle: "Tekulapalli", thirumalayapalem: "Tirumalayapalem",
+  nelakondapalle: "Nelakondapalli", enkuru: "Enkoor", sathupalle: "Sathupalli",
+  kallur: "Kalluru", tallada: "Thallada", mulikalapalle: "Mulkalapally",
+  wazeed: "Wajedu"
 };
 
 // Only used when the current Administrative master contains the same Mandal name
 // in more than one District. Unlisted ambiguity is deliberately left unresolved.
 const districtPreferences = {
+  "AC-003:tandur": "mancherial",
+  "AC-006:khanapur": "nirmal",
+  "AC-009:sarangapur": "nirmal",
+  "AC-018:sirkonda": "nizamabad",
+  "AC-020:ibrahimpatnam": "jagitial",
+  "AC-021:sarangapur": "jagitial",
+  "AC-028:medipalle": "jagitial",
   "AC-042:mulug": "siddipet",
+  "AC-046:balanagar": "medchalmalkajgiri",
+  "AC-048:ibrahimpatnam": "rangareddy",
   "AC-052:serilingampally": "rangareddy",
-  "AC-052:balanagar": "medchalmalkajgiri"
+  "AC-052:balanagar": "medchalmalkajgiri",
+  "AC-053:nawabpet": "vikarabad",
+  "AC-056:tandur": "vikarabad",
+  "AC-072:maddur": "narayanpet",
+  "AC-075:nawabpet": "mahabubnagar",
+  "AC-075:balanagar": "mahabubnagar",
+  "AC-093:nampalle": "nalgonda",
+  "AC-093:chandur": "nalgonda",
+  "AC-095:chityala": "nalgonda",
+  "AC-097:gundala": "yadadribhuvanagiri",
+  "AC-098:maddur": "siddipet",
+  "AC-100:palakurthi": "jangoan",
+  "AC-103:khanapur": "warangal",
+  "AC-108:chityal": "jayashankarbhupalapally",
+  "AC-109:mulug": "mulugu",
+  "AC-110:gundala": "bhadradrikothagudem"
 };
 
 function full(name) { return { name, coverageType: "FULL" }; }
@@ -43,13 +120,14 @@ function parseScope(record) {
   if (marker < 0) return [];
   return record.extent.slice(0, marker)
     .split(/\s*,\s*|\s+and\s+/i)
-    .map(function (name) { return name.trim(); })
+    .map(function (name) { return name.replace(/^and\s+/i, "").trim(); })
     .filter(Boolean)
     .map(full);
 }
 
 function resolveMandal(record, scope, mandals) {
-  const wanted = normalize(scope.name);
+  const sourceName = normalize(scope.name);
+  const wanted = normalize(nameAliases[sourceName] || scope.name);
   let candidates = mandals.filter(function (mandal) { return normalize(mandal.name) === wanted; });
   if (!candidates.length) {
     const withoutQualifier = normalize(scope.name.replace(/\([^)]*\)/g, ""));
@@ -58,7 +136,7 @@ function resolveMandal(record, scope, mandals) {
     });
   }
   if (candidates.length > 1) {
-    const preferredDistrict = districtPreferences[`${record.code}:${wanted}`];
+    const preferredDistrict = districtPreferences[`${record.code}:${sourceName}`];
     if (preferredDistrict) candidates = candidates.filter(function (mandal) {
       return normalize(mandal.district_name) === preferredDistrict;
     });

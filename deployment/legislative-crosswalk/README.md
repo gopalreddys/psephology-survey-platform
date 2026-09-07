@@ -31,6 +31,8 @@ The dry run must confirm these two critical controls:
 
 - Gajwel resolves to 6 full Mandals.
 - Serilingampally resolves to 1 full and 1 partial Mandal.
+- The current LGD Administrative master produces 450 mappings: 443 full, 7 partial and 0 unresolved Mandal references.
+- 17 urban constituencies remain explicitly marked as requiring ward-level crosswalks.
 
 After reviewing the unresolved report, apply the crosswalk in one transaction:
 
