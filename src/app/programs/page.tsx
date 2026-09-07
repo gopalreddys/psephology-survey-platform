@@ -27,6 +27,7 @@ import {
 
 import AppShell from "@/components/AppShell";
 import { apiFetch } from "@/lib/api";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 
 type JurisdictionType = {
@@ -81,8 +82,17 @@ type Program = {
   created_at: string;
 };
 
+type CampaignManager = {
+  id: string;
+  full_name: string;
+  role_code: string;
+  status: string;
+};
+
 
 export default function ProgramsPage() {
+
+  const { user, loading: userLoading } = useCurrentUser();
 
   const router =
     useRouter();
@@ -107,6 +117,11 @@ export default function ProgramsPage() {
     setJurisdictions,
   ] =
     useState<Jurisdiction[]>([]);
+
+  const [
+    campaignManagers,
+    setCampaignManagers,
+  ] = useState<CampaignManager[]>([]);
 
 
   const [
@@ -199,6 +214,9 @@ export default function ProgramsPage() {
 
       methodologyNotes:
         "Demo V1 baseline study",
+
+      campaignManagerId:
+        "",
     });
 
 
@@ -253,6 +271,13 @@ export default function ProgramsPage() {
         loadPrograms(),
         loadJurisdictionTypes(),
         loadAssemblyJurisdictions(),
+        apiFetch("/api/users").then(function (data) {
+          setCampaignManagers(
+            data.filter(function (item: CampaignManager) {
+              return item.role_code === "CAMPAIGN_MANAGER" && item.status === "ACTIVE";
+            })
+          );
+        }),
       ]);
 
     } catch (error) {
@@ -381,6 +406,11 @@ export default function ProgramsPage() {
       return;
     }
 
+    if (!form.campaignManagerId) {
+      setMessage("Assign the program to an active Campaign Manager.");
+      return;
+    }
+
 
     setSaving(
       true
@@ -460,7 +490,7 @@ export default function ProgramsPage() {
                 form.methodologyNotes,
 
               ownerUserId:
-                null,
+                form.campaignManagerId,
             }),
         }
       );
@@ -518,6 +548,14 @@ export default function ProgramsPage() {
         jurisdictionTypes,
       ]
     );
+
+  if (userLoading) {
+    return <AppShell><div className="programs-page"><div className="programs-message">Loading program access…</div></div></AppShell>;
+  }
+
+  if (!user || !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) {
+    return <AppShell><div className="programs-page"><div className="programs-message">Programs are managed by Admin and Super Admin users. Your Campaign Manager access is provided through assigned campaigns.</div></div></AppShell>;
+  }
 
 
   return (
@@ -765,6 +803,25 @@ export default function ProgramsPage() {
 
                     className="program-input"
                   />
+                </Field>
+
+
+                <Field
+                  label="Assign Campaign Manager"
+                  hint="Required before campaigns can be created from this program"
+                >
+                  <select
+                    value={form.campaignManagerId}
+                    onChange={function (event) {
+                      updateForm("campaignManagerId", event.target.value);
+                    }}
+                    className="program-input"
+                  >
+                    <option value="">Select Campaign Manager</option>
+                    {campaignManagers.map(function (manager) {
+                      return <option key={manager.id} value={manager.id}>{manager.full_name}</option>;
+                    })}
+                  </select>
                 </Field>
 
 

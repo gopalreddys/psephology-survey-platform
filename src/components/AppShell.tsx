@@ -63,16 +63,14 @@ const menuItems: MenuItem[] = [
   },
 
   {
-  label: "Programs",
-  icon: FileText,
-  href: "/programs",
-  roles: [
-    "SUPER_ADMIN",
-    "ADMIN",
-    "CAMPAIGN_MANAGER",
-    "CAMPAIGNER"
-  ]
-},
+    label: "Programs",
+    icon: FileText,
+    href: "/programs",
+    roles: [
+      "SUPER_ADMIN",
+      "ADMIN"
+    ]
+  },
 
 {
   label: "Questionnaires",

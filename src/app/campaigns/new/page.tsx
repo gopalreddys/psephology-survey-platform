@@ -8,7 +8,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "../campaigns.module.css";
 
-type Program = { id: string; study_name: string };
+type Program = { id: string; study_name: string; study_code?: string; status?: string; owner_user_id?: string | null; owner_name?: string | null };
 type Jurisdiction = { id: string; name: string; code: string | null; type_code: string; metadata?: { crosswalk_status?: string } };
 type Geography = { id: string; parent_id: string | null; name: string; geo_type: string; code: string | null; coverage_type?: "FULL" | "PARTIAL"; verification_status?: string };
 type Campaigner = { id: string; full_name: string; role_code: string; status: string };
@@ -47,13 +47,14 @@ export default function NewCampaignPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(function () {
-    Promise.all([apiFetch("/api/programs"), apiFetch("/api/jurisdictions"), apiFetch("/api/geographies"), apiFetch("/api/users"), apiFetch("/api/local-bodies?limit=10000")])
+    if (!user) return;
+    Promise.all([apiFetch("/api/campaign-programs"), apiFetch("/api/jurisdictions"), apiFetch("/api/geographies"), apiFetch("/api/users"), apiFetch("/api/local-bodies?limit=10000")])
       .then(function ([programData, jurisdictionData, geographyData, userData, bodyData]) {
         setPrograms(programData); setJurisdictions(jurisdictionData); setGeographies(geographyData);
         setCampaigners(userData.filter(function (item: Campaigner) { return item.role_code === "CAMPAIGNER" && item.status === "ACTIVE"; }));
         setLocalBodies(bodyData.items || bodyData);
       }).catch(function (error) { setMessage(error instanceof Error ? error.message : "Unable to load campaign planning data"); });
-  }, []);
+  }, [user]);
 
   const geoById = useMemo(function () { return new globalThis.Map(geographies.map(function (geo) { return [geo.id, geo]; })); }, [geographies]);
   const target = domain === "LEGISLATIVE" ? jurisdictions.find(function (item) { return item.id === targetId; }) : localBodies.find(function (item) { return item.id === targetId; });
@@ -122,7 +123,7 @@ export default function NewCampaignPage() {
   }
 
   async function save() {
-    if (!form.code.trim() || !form.name.trim() || !target || !mandals.length || !allocationCount) { setMessage("Complete the campaign details, choose a target and assign at least one work area."); return; }
+    if (!form.code.trim() || !form.name.trim() || !form.programId || !target || !mandals.length || !allocationCount) { setMessage("Complete the campaign details, select an assigned research program, choose a target and assign at least one work area."); return; }
     const mode = localModes.find(function (item) { return item.type === bodyType; });
     const work = Object.entries(assignments).filter(function ([, campaignerId]) { return Boolean(campaignerId); }).map(function ([key, campaignerUserId]) {
       const [level, id] = key.split(":");
@@ -150,7 +151,8 @@ export default function NewCampaignPage() {
     {message && <div className={styles.message}>{message}</div>}
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 1</span><h2>Campaign details</h2><p>This identifies the campaign independently from its research program.</p></div></div>
-      <div className={styles.formGrid}><Field label="Campaign code"><input value={form.code} onChange={function (e) { setForm({ ...form, code: e.target.value }); }} placeholder="TG-AC-2026-01" /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">No linked program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
+      <div className={styles.formGrid}><Field label="Campaign code"><input value={form.code} onChange={function (e) { setForm({ ...form, code: e.target.value }); }} placeholder="TG-AC-2026-01" /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program *"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">Select an assigned program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}{program.study_code ? ` · ${program.study_code}` : ""}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
+      {!programs.length && <div className={styles.message}>No research program has been assigned to you. Ask an Admin to create and assign a program before creating a campaign.</div>}
     </section>
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 2</span><h2>Election target</h2><p>Legislative and Local Body campaigns use the same canonical Administrative geography.</p></div></div>
@@ -168,8 +170,8 @@ export default function NewCampaignPage() {
     </section>}
     {reviewing && target && <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 4</span><h2>Review campaign</h2><p>Confirm the target and workload before creating this campaign as a Draft.</p></div></div>
-      <div className={styles.reviewGrid}><div><small>Campaign</small><strong>{form.name || "Name required"}</strong><span>{form.code || "Code required"}</span></div><div><small>Election target</small><strong>{target.name}</strong><span>{domain === "LEGISLATIVE" ? office : localModes.find(function (item) { return item.type === bodyType; })?.label}</span></div><div><small>Administrative scope</small><strong>{districts.length} Districts · {mandals.length} Mandals</strong><span>Canonical geography crosswalk</span></div><div className={unassignedCount ? styles.reviewWarning : ""}><small>Work distribution</small><strong>{allocationCount} allocations</strong><span>{unassignedCount ? `${unassignedCount} work areas remain unassigned` : "All work areas assigned"}</span></div></div>
-      <div className={styles.footer}><button type="button" className={styles.secondaryButton} onClick={function () { setReviewing(false); }}>Back to allocation</button><button type="button" disabled={saving || !form.code.trim() || !form.name.trim()} onClick={save}>{saving ? "Creating Draft…" : "Create Draft Campaign"}<ChevronRight size={16} /></button></div>
+      <div className={styles.reviewGrid}><div><small>Campaign</small><strong>{form.name || "Name required"}</strong><span>{form.code || "Code required"}</span></div><div><small>Research program</small><strong>{programs.find(function (program) { return program.id === form.programId; })?.study_name || "Program required"}</strong><span>Admin-assigned program</span></div><div><small>Election target</small><strong>{target.name}</strong><span>{domain === "LEGISLATIVE" ? office : localModes.find(function (item) { return item.type === bodyType; })?.label}</span></div><div><small>Administrative scope</small><strong>{districts.length} Districts · {mandals.length} Mandals</strong><span>Canonical geography crosswalk</span></div><div className={unassignedCount ? styles.reviewWarning : ""}><small>Work distribution</small><strong>{allocationCount} allocations</strong><span>{unassignedCount ? `${unassignedCount} work areas remain unassigned` : "All work areas assigned"}</span></div></div>
+      <div className={styles.footer}><button type="button" className={styles.secondaryButton} onClick={function () { setReviewing(false); }}>Back to allocation</button><button type="button" disabled={saving || !form.code.trim() || !form.name.trim() || !form.programId} onClick={save}>{saving ? "Creating Draft…" : "Create Draft Campaign"}<ChevronRight size={16} /></button></div>
     </section>}
   </div></AppShell>;
 }

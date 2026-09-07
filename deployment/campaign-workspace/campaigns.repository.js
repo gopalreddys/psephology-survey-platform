@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { assertCampaignProgramAccess } from "./campaign-programs.repository.js";
 
 function visibilitySql(actor, parameterNumber) {
   if (["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) return { sql: "TRUE", values: [] };
@@ -163,10 +164,11 @@ export async function createCampaign(input, actor) {
   const campaignCode = String(input.campaignCode || "").trim();
   const campaignName = String(input.campaignName || "").trim();
   const targetName = String(input.targetName || "").trim();
+  const programId = String(input.programId || "").trim();
   const mandalIds = Array.from(new Set(Array.isArray(input.mandalIds) ? input.mandalIds : []));
   const allocations = Array.isArray(input.assignments) ? input.assignments : [];
-  if (!campaignCode || !campaignName || !targetName || !mandalIds.length) {
-    const error = new Error("Campaign code, name, target and Administrative scope are required"); error.statusCode = 400; throw error;
+  if (!campaignCode || !campaignName || !programId || !targetName || !mandalIds.length) {
+    const error = new Error("Campaign code, name, assigned research program, target and Administrative scope are required"); error.statusCode = 400; throw error;
   }
   if (!allocations.length) {
     const error = new Error("Assign at least one District or Mandal"); error.statusCode = 400; throw error;
@@ -175,6 +177,7 @@ export async function createCampaign(input, actor) {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    await assertCampaignProgramAccess(programId, actor, client);
     const validMandals = await client.query(`
       SELECT id, parent_id FROM geo_units
       WHERE id = ANY($1::uuid[]) AND geo_type = 'MANDAL' AND is_active = TRUE
@@ -262,7 +265,7 @@ export async function createCampaign(input, actor) {
         target_type, jurisdiction_id, local_body_id, local_body_area_id, target_name,
         target_code, start_date, end_date, created_by_user_id)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
-    `, [campaignCode, campaignName, input.programId || null, input.targetDomain || "LEGISLATIVE",
+    `, [campaignCode, campaignName, programId, input.targetDomain || "LEGISLATIVE",
       input.targetType, input.jurisdictionId || null, input.localBodyId || null,
       input.localBodyAreaId || null, targetName, input.targetCode || null,
       input.startDate || null, input.endDate || null, actor.id]);
