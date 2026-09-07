@@ -42,7 +42,7 @@ export async function listCampaignPrograms(actor) {
     visibility = `owner_user_id = $${values.length}`;
   }
   const result = await db.query(`
-    SELECT id, study_code, study_name, status, owner_user_id
+    SELECT id, study_code, study_name, study_type, status, owner_user_id
     FROM ${table}
     WHERE ${visibility}
       AND COALESCE(status, 'ACTIVE') NOT IN ('ARCHIVED', 'CANCELLED')

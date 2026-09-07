@@ -10,6 +10,8 @@ This package adds the operational campaign tables and secured endpoints required
 - `migrate-campaign-ownership.js` → `src/db/migrate-campaign-ownership.js`
 - `010_campaign_program_requirement.sql` → `sql/010_campaign_program_requirement.sql`
 - `migrate-campaign-program-requirement.js` → `src/db/migrate-campaign-program-requirement.js`
+- `011_campaign_survey_stage.sql` → `sql/011_campaign_survey_stage.sql`
+- `migrate-campaign-survey-stage.js` → `src/db/migrate-campaign-survey-stage.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -39,6 +41,7 @@ Run the included migration after copying the files. It uses the API's existing d
 node src/db/migrate-campaign-operations.js
 node src/db/migrate-campaign-ownership.js
 node src/db/migrate-campaign-program-requirement.js
+node src/db/migrate-campaign-survey-stage.js
 ```
 
 Then restart `psephology-api.service` and verify:

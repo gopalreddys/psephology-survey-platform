@@ -37,7 +37,7 @@ export async function listCampaigns(actor) {
     )
     SELECT campaign.id, campaign.campaign_code, campaign.campaign_name,
       campaign.target_domain, campaign.target_type, campaign.target_name, campaign.target_code,
-      campaign.status, campaign.start_date, campaign.end_date, owner.full_name AS created_by_name,
+      campaign.status, campaign.survey_stage, campaign.start_date, campaign.end_date, owner.full_name AS created_by_name,
       COALESCE(scope_count.mandal_count, 0) AS mandal_count,
       COALESCE(allocation_count.assignment_count, 0) AS assignment_count,
       COALESCE(voter_count.eligible_voters, 0) AS eligible_voters
@@ -165,10 +165,14 @@ export async function createCampaign(input, actor) {
   const campaignName = String(input.campaignName || "").trim();
   const targetName = String(input.targetName || "").trim();
   const programId = String(input.programId || "").trim();
+  const surveyStage = String(input.surveyStage || "BASE").trim().toUpperCase();
   const mandalIds = Array.from(new Set(Array.isArray(input.mandalIds) ? input.mandalIds : []));
   const allocations = Array.isArray(input.assignments) ? input.assignments : [];
   if (!campaignCode || !campaignName || !programId || !targetName || !mandalIds.length) {
     const error = new Error("Campaign code, name, assigned research program, target and Administrative scope are required"); error.statusCode = 400; throw error;
+  }
+  if (!["BASE", "CAMPAIGN", "TURNOUT"].includes(surveyStage)) {
+    const error = new Error("Survey iteration must be BASE, CAMPAIGN or TURNOUT"); error.statusCode = 400; throw error;
   }
   if (!allocations.length) {
     const error = new Error("Assign at least one District or Mandal"); error.statusCode = 400; throw error;
@@ -261,11 +265,11 @@ export async function createCampaign(input, actor) {
     }
 
     const campaignResult = await client.query(`
-      INSERT INTO campaigns (campaign_code, campaign_name, program_id, target_domain,
+      INSERT INTO campaigns (campaign_code, campaign_name, program_id, survey_stage, target_domain,
         target_type, jurisdiction_id, local_body_id, local_body_area_id, target_name,
         target_code, start_date, end_date, created_by_user_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
-    `, [campaignCode, campaignName, programId, input.targetDomain || "LEGISLATIVE",
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *
+    `, [campaignCode, campaignName, programId, surveyStage, input.targetDomain || "LEGISLATIVE",
       input.targetType, input.jurisdictionId || null, input.localBodyId || null,
       input.localBodyAreaId || null, targetName, input.targetCode || null,
       input.startDate || null, input.endDate || null, actor.id]);

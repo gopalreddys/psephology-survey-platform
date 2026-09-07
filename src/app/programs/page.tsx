@@ -28,6 +28,11 @@ import {
 import AppShell from "@/components/AppShell";
 import { apiFetch } from "@/lib/api";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import {
+  buildProgramCode,
+  electionFamily,
+  nextCodeSequence,
+} from "@/lib/research-codes";
 
 
 type JurisdictionType = {
@@ -176,9 +181,6 @@ export default function ProgramsPage() {
   ] =
     useState({
 
-      studyCode:
-        "SER-2026-BASE",
-
       studyName:
         "Serilingampally Voter Pulse 2026",
 
@@ -246,11 +248,11 @@ export default function ProgramsPage() {
   }
 
 
-  async function loadAssemblyJurisdictions() {
+  async function loadJurisdictions() {
 
     const data =
       await apiFetch(
-        "/api/jurisdictions?type=ASSEMBLY"
+        "/api/jurisdictions"
       );
 
     setJurisdictions(
@@ -270,7 +272,7 @@ export default function ProgramsPage() {
       await Promise.all([
         loadPrograms(),
         loadJurisdictionTypes(),
-        loadAssemblyJurisdictions(),
+        loadJurisdictions(),
         apiFetch("/api/users").then(function (data) {
           setCampaignManagers(
             data.filter(function (item: CampaignManager) {
@@ -381,13 +383,15 @@ export default function ProgramsPage() {
 
   async function createProgram() {
 
+    const generatedCode = programCode;
+
     if (
-      !form.studyCode.trim() ||
+      !generatedCode ||
       !form.studyName.trim()
     ) {
 
       setMessage(
-        "Program code and program name are required."
+        "Select an election constituency so the program code can be generated."
       );
 
       return;
@@ -432,7 +436,7 @@ export default function ProgramsPage() {
             JSON.stringify({
 
               studyCode:
-                form.studyCode,
+                generatedCode,
 
               studyName:
                 form.studyName,
@@ -525,26 +529,66 @@ export default function ProgramsPage() {
   }
 
 
+  const availableJurisdictions =
+    useMemo(
+      function () {
+        const family = electionFamily(form.electionType);
+        return jurisdictions
+          .filter(function (item) {
+            if (family === "MP") return /PARLIAMENTARY|PC/i.test(item.type_code);
+            if (family === "MLC") return /MLC|COUNCIL/i.test(item.type_code);
+            return /ASSEMBLY|AC/i.test(item.type_code);
+          })
+          .sort(function (a, b) { return a.name.localeCompare(b.name); });
+      },
+      [form.electionType, jurisdictions]
+    );
+
+  const programCode =
+    useMemo(
+      function () {
+        const selected = jurisdictions.find(function (item) { return item.id === selectedJurisdictionId; });
+        if (!selected && form.scopeMode === "ELECTORAL") return "";
+        const family = electionFamily(form.electionType);
+        const prefix = buildProgramCode({
+          electionType: form.electionType,
+          constituencyCode: selected?.code || "STATE",
+          studyType: form.studyType,
+          year: new Date().getFullYear(),
+          sequence: 1,
+        }).replace(/-P01$/, "");
+        return buildProgramCode({
+          electionType: family === "MP" ? "PARLIAMENTARY" : family === "MLC" ? "MLC_GRADUATES" : "ASSEMBLY",
+          constituencyCode: selected?.code || "STATE",
+          studyType: form.studyType,
+          year: new Date().getFullYear(),
+          sequence: nextCodeSequence(prefix, programs.map(function (item) { return item.study_code; })),
+        });
+      },
+      [form.electionType, form.scopeMode, form.studyType, jurisdictions, programs, selectedJurisdictionId]
+    );
+
   const assemblyTypeName =
     useMemo(
       function () {
 
+        const family = electionFamily(form.electionType);
         return (
           jurisdictionTypes
             .find(
               function (item) {
                 return (
-                  item.code ===
-                  "ASSEMBLY"
+                  family === "MP" ? /PARLIAMENTARY/i.test(item.code) : family === "MLC" ? /MLC|COUNCIL/i.test(item.code) : /ASSEMBLY/i.test(item.code)
                 );
               }
             )
             ?.name ||
-          "Assembly Constituency"
+          (family === "MP" ? "Parliamentary Constituency" : family === "MLC" ? "Legislative Council Constituency" : "Assembly Constituency")
         );
 
       },
       [
+        form.electionType,
         jurisdictionTypes,
       ]
     );
@@ -759,23 +803,12 @@ export default function ProgramsPage() {
               <div className="program-form-grid">
 
                 <Field
-                  label="Program Code"
-                  hint="Unique research program identifier"
+                  label="Generated Program Code"
+                  hint="Created from state, election family, constituency and survey type"
                 >
                   <input
-                    value={
-                      form.studyCode
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "studyCode",
-                          event.target.value
-                        );
-                      }
-                    }
+                    value={programCode || "Select election type and constituency"}
+                    readOnly
 
                     className="program-input"
                   />
@@ -960,7 +993,8 @@ export default function ProgramsPage() {
 
                     onChange={
                       function (event) {
-
+                        setSelectedJurisdictionId("");
+                        setScope(null);
                         updateForm(
                           "electionType",
                           event.target.value
@@ -1014,7 +1048,7 @@ export default function ProgramsPage() {
                     </option>
 
 
-                    {jurisdictions.map(
+                    {availableJurisdictions.map(
                       function (item) {
 
                         return (
