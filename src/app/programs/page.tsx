@@ -188,7 +188,7 @@ export default function ProgramsPage() {
         "Baseline voter pulse study",
 
       studyType:
-        "OPINION_SURVEY",
+        "BASE",
 
       scopeMode:
         "ELECTORAL",
@@ -412,6 +412,11 @@ export default function ProgramsPage() {
 
     if (!form.campaignManagerId) {
       setMessage("Assign the program to an active Campaign Manager.");
+      return;
+    }
+
+    if (!Number.isFinite(Number(form.targetSampleSize)) || Number(form.targetSampleSize) < 1) {
+      setMessage("Target Sample is required and must be at least 1.");
       return;
     }
 
@@ -859,7 +864,7 @@ export default function ProgramsPage() {
 
 
                 <Field
-                  label="Survey Type"
+                  label="Survey Type / Iteration Model"
                 >
                   <select
                     value={
@@ -878,13 +883,9 @@ export default function ProgramsPage() {
 
                     className="program-input"
                   >
-                    <option value="OPINION_SURVEY">
-                      Opinion Survey
-                    </option>
-
-                    <option value="VOTER_PULSE">
-                      Voter Pulse
-                    </option>
+                    <option value="BASE">Base survey</option>
+                    <option value="CAMPAIGN">Campaign survey</option>
+                    <option value="TURNOUT">Turnout survey</option>
                   </select>
                 </Field>
 
@@ -1171,6 +1172,8 @@ export default function ProgramsPage() {
                 >
                   <input
                     type="number"
+                    min={1}
+                    required
 
                     value={
                       form.targetSampleSize

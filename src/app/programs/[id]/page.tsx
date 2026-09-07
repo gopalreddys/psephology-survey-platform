@@ -8,6 +8,7 @@ import {
 import {
   ArrowLeft,
   CalendarDays,
+  CheckCircle2,
   ChevronRight,
   ClipboardList,
   Flag,
@@ -26,6 +27,7 @@ import {
 
 import AppShell from "@/components/AppShell";
 import { apiFetch } from "@/lib/api";
+import { surveyStageOptions } from "@/lib/research-codes";
 
 
 type Program = {
@@ -59,6 +61,7 @@ type Iteration = {
   questionnaire_name: string | null;
   version_number: number | null;
   status: string;
+  run_count?: number;
 };
 
 
@@ -122,8 +125,8 @@ export default function ProgramDetailPage() {
   ] =
     useState({
       iterationNumber: "1",
-      iterationName: "Baseline / Natural Pulse",
-      researchPhase: "BASELINE",
+      iterationName: "Base survey",
+      researchPhase: "BASE",
       objective:
         "Understand the natural voter pulse before election-period influence intensifies.",
       sampleDesignType: "REPEATED_CROSS_SECTION",
@@ -165,7 +168,15 @@ export default function ProgramDetailPage() {
         `/api/programs/${programId}/iterations`
       );
 
-    setIterations(data);
+    const enriched = await Promise.all(data.map(async function (iteration: Iteration) {
+      try {
+        const runs = await apiFetch(`/api/iterations/${iteration.id}/runs`);
+        return { ...iteration, run_count: Array.isArray(runs) ? runs.length : Number(runs?.total || runs?.count || 0) };
+      } catch (_) {
+        return { ...iteration, run_count: 0 };
+      }
+    }));
+    setIterations(enriched);
   }
 
 
@@ -479,6 +490,18 @@ export default function ProgramDetailPage() {
           />
 
           <ProgramMetric
+            icon={CheckCircle2}
+            label="Iterations completed"
+            value={String(iterations.filter(function (iteration) { return ["COMPLETED", "COMPLETE"].includes(String(iteration.status).toUpperCase()); }).length)}
+          />
+
+          <ProgramMetric
+            icon={Target}
+            label="Total runs"
+            value={String(iterations.reduce(function (total, iteration) { return total + Number(iteration.run_count || 0); }, 0))}
+          />
+
+          <ProgramMetric
             icon={Flag}
             label="Status"
             value={
@@ -654,29 +677,9 @@ export default function ProgramDetailPage() {
 
                     className="iteration-input"
                   >
-                    <option value="BASELINE">
-                      Baseline / Natural Pulse
-                    </option>
-
-                    <option value="TRACKING">
-                      Tracking
-                    </option>
-
-                    <option value="PRE_ELECTION">
-                      Pre-Election
-                    </option>
-
-                    <option value="FINAL_PULSE">
-                      Final Pulse
-                    </option>
-
-                    <option value="POST_ELECTION">
-                      Post-Election
-                    </option>
-
-                    <option value="CUSTOM">
-                      Custom
-                    </option>
+                    {surveyStageOptions.map(function (option) {
+                      return <option key={option.value} value={option.value}>{option.label}</option>;
+                    })}
                   </select>
                 </Field>
 
@@ -1020,9 +1023,7 @@ export default function ProgramDetailPage() {
 
                                   <span>
                                     {
-                                      formatLabel(
-                                        iteration.research_phase
-                                      )
+                                      surveyStageLabel(iteration.research_phase)
                                     }
                                   </span>
 
@@ -1075,6 +1076,12 @@ export default function ProgramDetailPage() {
                                     iteration.planned_start_date
                                   )
                                 }
+                              />
+
+                              <IterationDetail
+                                icon={ClipboardList}
+                                label="Runs"
+                                value={String(iteration.run_count || 0)}
                               />
 
                             </div>
@@ -1242,6 +1249,12 @@ function formatLabel(
         return character.toUpperCase();
       }
     );
+}
+
+function surveyStageLabel(value: string | null) {
+  const normalized = String(value || "").toUpperCase();
+  const option = surveyStageOptions.find(function (item) { return item.value === normalized || `${item.value}_SURVEY` === normalized; });
+  return option?.label || formatLabel(value);
 }
 
 

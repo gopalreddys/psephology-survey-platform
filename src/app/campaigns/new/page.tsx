@@ -72,7 +72,7 @@ export default function NewCampaignPage() {
   const generatedCampaignCode = useMemo(function () {
     if (!target || !form.programId) return "";
     const targetCode = (target as Jurisdiction | LocalBody).code;
-    const studyType = selectedProgram?.study_type || "OPINION_SURVEY";
+    const studyType = selectedProgram?.study_type || "BASE";
     const prefix = buildCampaignCode({ electionType: targetElectionType, constituencyCode: targetCode, studyType, stage: surveyStage, sequence: 1 }).replace(/-C01$/, "");
     return buildCampaignCode({ electionType: targetElectionType, constituencyCode: targetCode, studyType, stage: surveyStage, sequence: nextCodeSequence(prefix, existingCampaignCodes) });
   }, [existingCampaignCodes, form.programId, selectedProgram, surveyStage, target, targetElectionType]);

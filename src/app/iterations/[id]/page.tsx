@@ -27,6 +27,7 @@ import {
 
 import AppShell from "@/components/AppShell";
 import { apiFetch } from "@/lib/api";
+import { surveyStageOptions } from "@/lib/research-codes";
 
 
 type Iteration = {
@@ -538,11 +539,9 @@ export default function IterationPage() {
 
           <IterationMetric
             icon={ClipboardList}
-            label="Research Phase"
+            label="Survey iteration"
             value={
-              formatLabel(
-                iteration.research_phase
-              )
+              surveyStageLabel(iteration.research_phase)
             }
           />
 
@@ -1408,4 +1407,12 @@ function formatLabel(
         return character.toUpperCase();
       }
     );
+}
+
+function surveyStageLabel(value: string | null) {
+  const normalized = String(value || "").toUpperCase();
+  const option = surveyStageOptions.find(function (item) {
+    return item.value === normalized || `${item.value}_SURVEY` === normalized;
+  });
+  return option?.label || formatLabel(value);
 }

@@ -5,6 +5,12 @@ export type ElectionFamily = "MP" | "MLA" | "MLC" | "LOCAL";
 const surveyTypeCodes: Record<string, string> = {
   OPINION_SURVEY: "OPN",
   VOTER_PULSE: "PULSE",
+  BASE: "BASE",
+  BASE_SURVEY: "BASE",
+  CAMPAIGN: "CAMPAIGN",
+  CAMPAIGN_SURVEY: "CAMPAIGN",
+  TURNOUT: "TURNOUT",
+  TURNOUT_SURVEY: "TURNOUT",
 };
 
 export function electionFamily(electionType: string): ElectionFamily {
@@ -64,12 +70,14 @@ export function buildCampaignCode({
   stage: SurveyStage;
   sequence?: number;
 }): string {
+  const typeCode = surveyTypeCode(studyType);
+  const stageCode = stage;
   return [
     compactGeographyCode(stateCode),
     electionFamily(electionType),
     compactGeographyCode(constituencyCode),
-    surveyTypeCode(studyType),
-    stage,
+    ...(typeCode === stageCode ? [] : [typeCode]),
+    stageCode,
     `C${String(sequence).padStart(2, "0")}`,
   ].join("-");
 }
