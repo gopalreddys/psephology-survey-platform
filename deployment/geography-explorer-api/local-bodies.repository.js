@@ -10,7 +10,7 @@ export async function listLocalBodies({ bodyType = null, search = null, limit = 
       COUNT(*) OVER()::int AS total_count,
       COUNT(DISTINCT area.id)::int AS electoral_area_count,
       COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
-        'id', geo.id, 'name', geo.name, 'geo_type', geo.geo_type, 'code', geo.code
+        'id', geo.id, 'parent_id', geo.parent_id, 'name', geo.name, 'geo_type', geo.geo_type, 'code', geo.code
       )) FILTER (WHERE geo.id IS NOT NULL), '[]'::jsonb) AS administrative_units
     FROM local_bodies lb
     LEFT JOIN local_body_geo_mapping mapping
@@ -38,9 +38,17 @@ export async function listLocalBodyElectoralAreas(localBodyId, { limit = 5000, o
   const result = await db.query(`
     SELECT area.id, area.parent_area_id, area.name, area.code, area.area_type,
       area.display_label, area.contested_office_type, area.verification_status,
-      COUNT(*) OVER()::int AS total_count
+      COUNT(*) OVER()::int AS total_count,
+      COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
+        'id', geo.id, 'parent_id', geo.parent_id, 'name', geo.name,
+        'geo_type', geo.geo_type, 'code', geo.code
+      )) FILTER (WHERE geo.id IS NOT NULL), '[]'::jsonb) AS administrative_units
     FROM local_body_electoral_areas area
+    LEFT JOIN local_body_area_geo_mapping mapping
+      ON mapping.electoral_area_id = area.id AND mapping.is_active = TRUE
+    LEFT JOIN geo_units geo ON geo.id = mapping.geo_unit_id AND geo.is_active = TRUE
     WHERE area.local_body_id = $1 AND area.is_active = TRUE
+    GROUP BY area.id
     ORDER BY area.area_type, area.name, area.code
     LIMIT $2 OFFSET $3
   `, [localBodyId, safeLimit, safeOffset]);

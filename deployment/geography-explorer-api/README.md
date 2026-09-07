@@ -26,4 +26,6 @@ Restart `psephology-api.service`. The endpoints require an authenticated geograp
 - `GET /api/local-bodies?limit=10000`
 - `GET /api/local-bodies/:id/electoral-areas?limit=5000`
 
+Electoral-area responses include their verified Administrative mappings. Campaign setup uses those mappings to resolve Corporation divisions and Municipality wards back to canonical Mandals and voters.
+
 ZPTC, MPTC and GP ward results intentionally remain empty until official source rows are imported.
