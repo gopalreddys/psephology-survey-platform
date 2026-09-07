@@ -146,7 +146,7 @@ async function applyPlan(db, records, plan) {
     `);
     for (const item of plan.mappings) {
       const values = [item.jurisdiction.id, item.mandal.id, item.scope.coverageType,
-        SOURCE_NAME, SOURCE_REFERENCE, item.record.extent]);
+        SOURCE_NAME, SOURCE_REFERENCE, item.record.extent];
       const updated = await client.query(`
         UPDATE jurisdiction_geo_mapping SET coverage_type = $3,
           mapping_method = 'OFFICIAL_DELIMITATION', confidence = 1,
