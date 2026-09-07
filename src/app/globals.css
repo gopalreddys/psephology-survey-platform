@@ -8717,3 +8717,18 @@ textarea.question-input {
   outline: 3px solid rgba(22, 140, 127, 0.22);
   outline-offset: 2px;
 }
+
+.program-detail-operations-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 320px;
+  padding: 10px 13px;
+  border: 1px solid #bfe6df;
+  border-radius: 11px;
+  background: #f0fbf8;
+  color: #168c7f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}

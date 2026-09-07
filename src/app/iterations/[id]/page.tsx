@@ -28,6 +28,7 @@ import {
 import AppShell from "@/components/AppShell";
 import { apiFetch } from "@/lib/api";
 import { surveyStageOptions } from "@/lib/research-codes";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 
 type Iteration = {
@@ -71,8 +72,13 @@ export default function IterationPage() {
   const router =
     useRouter();
 
+  const { user } = useCurrentUser();
+
   const iterationId =
     params.id as string;
+
+  const canCreateRuns =
+    user?.role.code === "CAMPAIGNER";
 
 
   const [
@@ -508,18 +514,20 @@ export default function IterationPage() {
             </button>
 
 
-            <button
-              type="button"
+            {canCreateRuns && (
+              <button
+                type="button"
 
-              onClick={
-                openCreateRun
-              }
+                onClick={
+                  openCreateRun
+                }
 
-              className="iteration-create-run-button"
-            >
-              <Plus size={16} />
-              Create Run
-            </button>
+                className="iteration-create-run-button"
+              >
+                <Plus size={16} />
+                Create Run
+              </button>
+            )}
 
           </div>
 
@@ -625,7 +633,7 @@ export default function IterationPage() {
         </section>
 
 
-        {showCreate && (
+        {canCreateRuns && showCreate && (
 
           <section className="run-create-panel">
 
@@ -996,8 +1004,9 @@ export default function IterationPage() {
                   </strong>
 
                   <span>
-                    Create a Run to freeze the voter
-                    cohort for survey execution.
+                    {canCreateRuns
+                      ? "Create a Run to freeze the voter cohort for survey execution."
+                      : "Runs are created by assigned Campaigners. You can review the execution status here."}
                   </span>
 
                 </div>

@@ -408,34 +408,10 @@ export default function ProgramDetailPage() {
           </div>
 
 
-          <button
-            type="button"
-
-            onClick={
-              function () {
-
-                setShowCreate(true);
-
-                setForm(
-                  function (current) {
-
-                    return {
-                      ...current,
-                      iterationNumber:
-                        String(
-                          iterations.length + 1
-                        )
-                    };
-                  }
-                );
-              }
-            }
-
-            className="program-detail-create-button"
-          >
-            <Plus size={16} />
-            Create Iteration
-          </button>
+          <div className="program-detail-operations-note">
+            <ClipboardList size={16} />
+            Iterations are created inside campaigns by Campaign Managers.
+          </div>
 
         </section>
 
@@ -540,7 +516,7 @@ export default function ProgramDetailPage() {
         </section>
 
 
-        {showCreate && (
+        {false && showCreate && (
 
           <section className="iteration-create-panel">
 
@@ -955,8 +931,7 @@ export default function ProgramDetailPage() {
                   </strong>
 
                   <span>
-                    Create an iteration to begin
-                    research execution.
+                    Campaign Managers create iterations from their campaign workspace.
                   </span>
 
                 </div>

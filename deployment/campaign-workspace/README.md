@@ -12,6 +12,8 @@ This package adds the operational campaign tables and secured endpoints required
 - `migrate-campaign-program-requirement.js` → `src/db/migrate-campaign-program-requirement.js`
 - `011_campaign_survey_stage.sql` → `sql/011_campaign_survey_stage.sql`
 - `migrate-campaign-survey-stage.js` → `src/db/migrate-campaign-survey-stage.js`
+- `012_campaign_iteration_ownership.sql` → `sql/012_campaign_iteration_ownership.sql`
+- `migrate-campaign-iteration-ownership.js` → `src/db/migrate-campaign-iteration-ownership.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -42,6 +44,7 @@ node src/db/migrate-campaign-operations.js
 node src/db/migrate-campaign-ownership.js
 node src/db/migrate-campaign-program-requirement.js
 node src/db/migrate-campaign-survey-stage.js
+node src/db/migrate-campaign-iteration-ownership.js
 ```
 
 Then restart `psephology-api.service` and verify:
@@ -53,6 +56,9 @@ GET  /api/campaigns/:id/voters
 POST /api/campaigns
 DELETE /api/campaigns/:id
 GET  /api/campaign-programs
+GET  /api/campaigns/:id/iterations
+POST /api/campaigns/:id/iterations
+PATCH /api/campaigns/:campaignId/iterations/:iterationId/status
 ```
 
 All endpoints require authentication. Creating campaigns is restricted to Super Admin, Admin and Campaign Manager roles. A campaign must reference an Admin-created research program; the API rejects campaigns without `program_id`.
@@ -73,3 +79,17 @@ The existing Programs API must enforce this role model:
 - Program creation must validate `ownerUserId` as an active `CAMPAIGN_MANAGER`.
 
 The campaign form sends the selected program id as `programId`. The Programs list used by Campaign Managers must therefore be filtered server-side by the authenticated manager’s assigned owner id; hiding the navigation item alone is not an access control boundary.
+
+## Campaign iteration governance contract
+
+Campaigns are the operational parent of research iterations. The API must enforce:
+
+- `SUPER_ADMIN` and `ADMIN` can review campaign iterations and program status, but do not create iterations.
+- `CAMPAIGN_MANAGER` can create, update and review iterations only for campaigns they created; the campaign must reference an Admin-assigned program.
+- `CAMPAIGNER` can view iterations and runs only when a current `campaign_work_allocations` row assigns work to them. Campaigners create execution Runs; they do not create iterations.
+- `GET /api/campaigns/:id/iterations` returns the canonical iteration record plus `campaign_id`, stage, status, target sample and run count.
+- `POST /api/campaigns/:id/iterations` creates the canonical iteration through the existing iteration service and inserts a row in `campaign_iteration_links` in the same transaction. The service must derive `study_id` from the campaign’s `program_id` and reject a campaign without a verified program.
+- `PATCH /api/campaigns/:campaignId/iterations/:iterationId/status` is limited to the owning Campaign Manager and Admin/Super Admin review roles, with valid transitions only (`PLANNED → ACTIVE → PAUSED/COMPLETED`, and `PAUSED → ACTIVE/COMPLETED`).
+- Run creation remains protected by the existing iteration/run API and must additionally verify that the caller is a Campaigner with an active allocation inside the linked campaign.
+
+The `campaign_iteration_links` table is deliberately a bridge rather than a second iteration table. This preserves one canonical iteration/run model while making campaign ownership auditable and queryable.
