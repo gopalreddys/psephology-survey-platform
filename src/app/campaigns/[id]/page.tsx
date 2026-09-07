@@ -5,6 +5,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Building2, ClipboardList, MapPin, Megaphone, ShieldCheck, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { apiFetch } from "@/lib/api";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import styles from "../campaigns.module.css";
 
 type ScopeRow = { id: string; name: string; code: string | null; district_id: string; district_name: string; district_code: string | null };
@@ -13,8 +14,10 @@ type Campaign = { id: string; campaign_code: string; campaign_name: string; targ
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { user } = useCurrentUser();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   useEffect(function () { apiFetch(`/api/campaigns/${id}`).then(setCampaign).catch(function (reason) { setError(reason instanceof Error ? reason.message : "Unable to load campaign"); }); }, [id]);
   const districts = useMemo(function () {
     const groups = new globalThis.Map<string, ScopeRow[]>();
@@ -22,10 +25,23 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     return Array.from(groups.entries());
   }, [campaign]);
 
+  async function changeStatus(status: "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED") {
+    if (!campaign || !window.confirm(`Change this campaign to ${status.toLowerCase()}?`)) return;
+    setUpdatingStatus(true); setError(null);
+    try {
+      const updated = await apiFetch(`/api/campaigns/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+      setCampaign(function (current) { return current ? { ...current, status: updated.status } : current; });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to update campaign status"); }
+    finally { setUpdatingStatus(false); }
+  }
+
+  const canReview = Boolean(user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code));
+  const statusAction = campaign?.status === "DRAFT" ? { label: "Review & Activate", status: "ACTIVE" as const } : campaign?.status === "ACTIVE" ? { label: "Pause campaign", status: "PAUSED" as const } : campaign?.status === "PAUSED" ? { label: "Resume campaign", status: "ACTIVE" as const } : null;
+
   return <AppShell><div className={styles.page}>
     <div className={styles.backRow}><Link href="/campaigns"><ArrowLeft size={16} />Campaigns</Link></div>
     {error ? <div className={styles.message}>{error}</div> : !campaign ? <div className={styles.empty}>Loading campaign…</div> : <>
-      <section className={styles.detailHero}><div className={styles.campaignIcon}><Megaphone size={18} /></div><div><span>{campaign.campaign_code} · {campaign.target_domain === "LOCAL_BODY" ? "LOCAL BODY" : "LEGISLATIVE"}</span><h1>{campaign.campaign_name}</h1><p>{campaign.target_type} · {campaign.target_name}{campaign.target_code ? ` · ${campaign.target_code}` : ""} · {campaign.survey_stage || "BASE"} survey</p></div><em>{campaign.status}</em></section>
+      <section className={styles.detailHero}><div className={styles.campaignIcon}><Megaphone size={18} /></div><div><span>{campaign.campaign_code} · {campaign.target_domain === "LOCAL_BODY" ? "LOCAL BODY" : "LEGISLATIVE"}</span><h1>{campaign.campaign_name}</h1><p>{campaign.target_type} · {campaign.target_name}{campaign.target_code ? ` · ${campaign.target_code}` : ""} · {campaign.survey_stage || "BASE"} survey</p></div><div className={styles.detailActions}><em>{campaign.status}</em>{canReview && statusAction && <button type="button" className={styles.primaryAction} disabled={updatingStatus} onClick={function () { changeStatus(statusAction.status); }}>{updatingStatus ? "Updating…" : statusAction.label}</button>}{canReview && campaign.status === "ACTIVE" && <button type="button" className={styles.secondaryButton} disabled={updatingStatus} onClick={function () { changeStatus("COMPLETED"); }}>Mark completed</button>}</div></section>
       <section className={styles.metrics}><DetailMetric icon={MapPin} label="Districts" value={districts.length} /><DetailMetric icon={Building2} label="Mandals" value={campaign.scope.length} /><DetailMetric icon={Users} label="My visible allocations" value={campaign.allocations.length} /><DetailMetric icon={ClipboardList} label="Campaign owner" value={campaign.created_by_name || "—"} /></section>
       <div className={styles.detailGrid}><section className={styles.listPanel}><div className={styles.listHeader}><div><span>ADMINISTRATIVE SCOPE</span><h2>District → Mandal</h2></div></div><div className={styles.scopeTree}>{districts.map(function ([district, rows]) { return <article key={district}><strong>{district}</strong><span>{rows.length} Mandals</span><div>{rows.map(function (row) { return <small key={row.id}>{row.name}</small>; })}</div></article>; })}</div></section>
         <section className={styles.listPanel}><div className={styles.listHeader}><div><span>WORK DISTRIBUTION</span><h2>Campaigner allocations</h2></div></div>{campaign.allocations.length ? <div className={styles.allocationList}>{campaign.allocations.map(function (allocation) { return <article key={allocation.id}><div><strong>{allocation.geography_name}</strong><small>{allocation.allocation_level} · {allocation.geography_code || "No code"}</small></div><span>{allocation.campaigner_name}</span><em>{allocation.status}</em></article>; })}</div> : <div className={styles.empty}>No visible work allocations.</div>}</section></div>

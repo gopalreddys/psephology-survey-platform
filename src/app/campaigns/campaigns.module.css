@@ -92,6 +92,10 @@
 .footer > div > span { display: grid; gap: 2px; }
 .footer small { color: #8a777e; }
 .detailHero { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; padding: 24px 26px; border: 1px solid #eadfe2; border-radius: 18px; background: #fff; }
+.detailActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.detailActions .primaryAction, .detailActions .secondaryButton { min-height: 38px; padding: 9px 13px; font-size: 12px; }
+.detailActions .secondaryButton { border: 1px solid #d9e0e5; border-radius: 12px; background: #fff; color: #607187; box-shadow: none; font-weight: 750; cursor: pointer; }
+.detailActions .primaryAction:disabled, .detailActions .secondaryButton:disabled { cursor: wait; opacity: .55; }
 .detailHero > div:nth-child(2) > span { color: #cf586d; font-size: 12px; font-weight: 800; letter-spacing: .1em; }
 .detailHero h1 { margin: 5px 0; color: #402a31; font-size: 30px; }
 .detailHero p { margin: 0; color: #7f7177; }
@@ -120,4 +124,4 @@
 .reviewWide > div > span { border: 1px solid #dce7ea; border-radius: 999px; background: #fff; padding: 6px 10px; color: #52677b; font-size: 12px; }
 .footer > .secondaryButton { border: 1px solid #d9e0e5; background: #fff; color: #607187; box-shadow: none; }
 @media (max-width: 1050px) { .metrics { grid-template-columns: repeat(2,1fr); } .assignmentGrid, .detailGrid { grid-template-columns: 1fr; } .mandalPane { border-right: 0; border-bottom: 1px solid #f1e7e9; } .campaignRow { grid-template-columns: auto 1fr auto; } .campaignFacts { grid-column: 2 / -1; } .mandalAllocation, .areaAllocation { grid-template-columns: 1fr; } }
-@media (max-width: 720px) { .page { padding: 24px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .formGrid, .scopeSelector, .filters, .domainTabs, .reviewGrid { grid-template-columns: 1fr; } .officeTabs { grid-template-columns: 1fr; } .metrics { grid-template-columns: 1fr 1fr; } .footer { align-items: flex-start; flex-direction: column; } .campaignRow { grid-template-columns: auto 1fr; } .campaignFacts { grid-column: 1 / -1; flex-wrap: wrap; } .campaignRow > em { grid-column: 2; justify-self: start; } .assignList label, .districtHead, .mandalAllocation label, .areaAllocation label { grid-template-columns: 1fr; } .detailHero { grid-template-columns: auto 1fr; } .detailHero > em { grid-column: 2; justify-self: start; } }
+@media (max-width: 720px) { .page { padding: 24px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .formGrid, .scopeSelector, .filters, .domainTabs, .reviewGrid { grid-template-columns: 1fr; } .officeTabs { grid-template-columns: 1fr; } .metrics { grid-template-columns: 1fr 1fr; } .footer { align-items: flex-start; flex-direction: column; } .campaignRow { grid-template-columns: auto 1fr; } .campaignFacts { grid-column: 1 / -1; flex-wrap: wrap; } .campaignRow > em { grid-column: 2; justify-self: start; } .assignList label, .districtHead, .mandalAllocation label, .areaAllocation label { grid-template-columns: 1fr; } .detailHero { grid-template-columns: auto 1fr; } .detailActions { grid-column: 2; justify-content: flex-start; } }

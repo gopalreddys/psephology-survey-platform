@@ -101,6 +101,46 @@ export async function getCampaignById(id, actor) {
   return { ...campaignResult.rows[0], scope: scopeResult.rows, allocations: allocationResult.rows };
 }
 
+export async function updateCampaignStatus(id, nextStatus, actor) {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
+    const error = new Error("Only Admin and Super Admin users can change campaign status"); error.statusCode = 403; throw error;
+  }
+  const status = String(nextStatus || "").trim().toUpperCase();
+  if (!["ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"].includes(status)) {
+    const error = new Error("Unsupported campaign status"); error.statusCode = 400; throw error;
+  }
+  const db = await getDb();
+  const currentResult = await db.query("SELECT id, status FROM campaigns WHERE id = $1", [id]);
+  if (!currentResult.rowCount) {
+    const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
+  }
+  const current = currentResult.rows[0].status;
+  const transitions = {
+    DRAFT: ["ACTIVE", "ARCHIVED"],
+    ACTIVE: ["PAUSED", "COMPLETED", "ARCHIVED"],
+    PAUSED: ["ACTIVE", "COMPLETED", "ARCHIVED"],
+    COMPLETED: ["ARCHIVED"],
+    ARCHIVED: [],
+  };
+  if (current === status) return currentResult.rows[0];
+  if (!transitions[current]?.includes(status)) {
+    const error = new Error(`Campaign cannot move from ${current} to ${status}`); error.statusCode = 400; throw error;
+  }
+  if (status === "ACTIVE") {
+    const readiness = await db.query(`
+      SELECT
+        (SELECT COUNT(*) FROM campaign_geo_scope WHERE campaign_id = $1)::int AS scope_count,
+        (SELECT COUNT(*) FROM campaign_work_allocations WHERE campaign_id = $1 AND status <> 'REASSIGNED')::int AS allocation_count
+    `, [id]);
+    const row = readiness.rows[0];
+    if (!Number(row.scope_count) || !Number(row.allocation_count)) {
+      const error = new Error("A campaign needs verified geography and at least one active allocation before activation"); error.statusCode = 400; throw error;
+    }
+  }
+  const result = await db.query("UPDATE campaigns SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, status, updated_at", [id, status]);
+  return result.rows[0];
+}
+
 export async function listCampaignVoters(id, actor, { limit = 100, offset = 0 } = {}) {
   const campaign = await getCampaignById(id, actor);
   if (!campaign) return null;
