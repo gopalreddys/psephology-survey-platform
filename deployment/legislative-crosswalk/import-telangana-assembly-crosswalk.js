@@ -190,7 +190,6 @@ async function main() {
   const db = await getDb();
   const state = await loadDatabaseState(db);
   const plan = buildPlan(records, state);
-  assertCriticalMappings(plan);
   console.table([
     { metric: "Assembly constituencies", value: records.length },
     { metric: "Resolved Mandal mappings", value: plan.mappings.length },
@@ -201,6 +200,7 @@ async function main() {
   ]);
   if (plan.unresolved.length) { console.log("Unresolved references (not guessed):"); console.table(plan.unresolved); }
   if (plan.boundaryOnly.length) { console.log("Constituencies requiring a ward-level crosswalk:"); console.table(plan.boundaryOnly.map(function (item) { return { code: item.code, name: item.name }; })); }
+  assertCriticalMappings(plan);
   if (!apply) { console.log("Dry run passed. Re-run with --apply to replace Assembly crosswalks in one transaction."); return; }
   const backupSchema = await applyPlan(db, records, plan);
   console.log(`Pre-import backup schema: ${backupSchema}`);
