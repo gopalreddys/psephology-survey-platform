@@ -1,0 +1,597 @@
+[
+  {
+    "code": "AC-001",
+    "name": "Sirpur",
+    "extent": "Kouthala, Bejjur, Kagaznagar, Sirpur (T) and Dahegaon Mandals."
+  },
+  {
+    "code": "AC-002",
+    "name": "Chennur",
+    "extent": "Jaipur, Chennur, Kotapalli and Mandamarri Mandals."
+  },
+  {
+    "code": "AC-003",
+    "name": "Bellampalli",
+    "extent": "Kasipet, Tandur, Bellampalli, Bhimini, Nennal and Vemanpalli Mandals."
+  },
+  {
+    "code": "AC-004",
+    "name": "Mancherial",
+    "extent": "Luxettipet, Mancherial and Dandepalli Mandals."
+  },
+  {
+    "code": "AC-005",
+    "name": "Asifabad",
+    "extent": "Kerameri, Wankdi, Sirpur (U), Asifabad, Jainoor, Narnoor, Tiryani and Rebbana Mandals."
+  },
+  {
+    "code": "AC-006",
+    "name": "Khanapur",
+    "extent": "Jannaram, Utnoor, Kaddam (Peddur), Khanapur and Indervelly Mandals."
+  },
+  {
+    "code": "AC-007",
+    "name": "Adilabad",
+    "extent": "Adilabad, Jainath and Bela Mandals."
+  },
+  {
+    "code": "AC-008",
+    "name": "Boath",
+    "extent": "Tamsi, Talamadugu, Gudihathnoor, Ichoda, Bazarhathnoor, Boath and Neradigonda Mandals."
+  },
+  {
+    "code": "AC-009",
+    "name": "Nirmal",
+    "extent": "Dilawarpur, Nirmal, Laxmanchanda, Mamda and Sarangapur Mandals."
+  },
+  {
+    "code": "AC-010",
+    "name": "Mudhole",
+    "extent": "Kuntala, Kubeer, Bhainsa, Tanoor, Mudhole and Lokeswaram Mandals."
+  },
+  {
+    "code": "AC-011",
+    "name": "Armur",
+    "extent": "Nandipet, Armur and Makloor Mandals."
+  },
+  {
+    "code": "AC-012",
+    "name": "Bodhan",
+    "extent": "Ranjal, Navipet, Yedpalle and Bodhan Mandals."
+  },
+  {
+    "code": "AC-013",
+    "name": "Jukkal",
+    "extent": "Madnoor, Jukkal, Bichkunda, Pitlam and Nizamsagar Mandals."
+  },
+  {
+    "code": "AC-014",
+    "name": "Banswada",
+    "extent": "Birkoor, Varni, Banswada and Kotgiri Mandals."
+  },
+  {
+    "code": "AC-015",
+    "name": "Yellareddy",
+    "extent": "Yellareddy, Nagareddipet, Lingampet, Tadwai, Gandhari and Sadasivanagar Mandals."
+  },
+  {
+    "code": "AC-016",
+    "name": "Kamareddy",
+    "extent": "Machareddy, Domakonda Kamareddy and Bhiknoor Mandals."
+  },
+  {
+    "code": "AC-017",
+    "name": "Nizamabad (Urban)",
+    "extent": "Nizamabad (M)."
+  },
+  {
+    "code": "AC-018",
+    "name": "Nizamabad (Rural)",
+    "extent": "Jakranpalle and Sirkonda Mandals Nizamabad Mandal (Part) Nizamabad [except Nizamabad (M)], Dichpalle and Dharpalle Mandals."
+  },
+  {
+    "code": "AC-019",
+    "name": "Balkonda",
+    "extent": "Balkonda, Mortad, Kammarpalle, Bheemgal and Velpur Mandals."
+  },
+  {
+    "code": "AC-020",
+    "name": "Koratla",
+    "extent": "Ibrahimpatnam, Mallapur, Koratla and Metpalle Mandals"
+  },
+  {
+    "code": "AC-021",
+    "name": "Jagtial",
+    "extent": "Raikal, Sarangapur and Jagtial Mandals."
+  },
+  {
+    "code": "AC-022",
+    "name": "Dharmapuri",
+    "extent": "Dharmapuri, Dharmaram, Gollapalle, Velgatoor and Pegadapalle Mandals."
+  },
+  {
+    "code": "AC-023",
+    "name": "Ramagundam",
+    "extent": "Ramagundam Mandal."
+  },
+  {
+    "code": "AC-024",
+    "name": "Manthani",
+    "extent": "Kamanpur, Manthani, Kataram, Mahadevpur, Mutharam (Mahadevapur), Malharrao and Mutharam (Manthani) Mandals."
+  },
+  {
+    "code": "AC-025",
+    "name": "Peddapalle",
+    "extent": "Peddapalle, Julapalle, Eligaid, Sultanabad, Odela and Srirampur Mandals."
+  },
+  {
+    "code": "AC-026",
+    "name": "Karimnagar",
+    "extent": "Karimnagar Mandal."
+  },
+  {
+    "code": "AC-027",
+    "name": "Choppadandi",
+    "extent": "Gangadhara, Ramadugu, Choppadandi, Mallial, Kodimial and Boinpalle Mandals."
+  },
+  {
+    "code": "AC-028",
+    "name": "Vemulawada",
+    "extent": "Vemulawada, Konaraopeta, Chandurthi, Kathlapur and Medipalle Mandals."
+  },
+  {
+    "code": "AC-029",
+    "name": "Sircilla",
+    "extent": "Yellareddipet, Gambhiraopet, Mustabad and Sircilla Mandals."
+  },
+  {
+    "code": "AC-030",
+    "name": "Manakondur",
+    "extent": "Manakondur, Ellanthakunta, Bejjanki, Timmapur (LMD Colony) and Shankarapatnam Mandals."
+  },
+  {
+    "code": "AC-031",
+    "name": "Huzurabad",
+    "extent": "Veenavanka, Jammikunta, Huzurabad and Kamalapur Mandals."
+  },
+  {
+    "code": "AC-032",
+    "name": "Husnabad",
+    "extent": "Chigurumamidi,Koheda,Husnabad,Saidapur, Bheemadevarpalle and Elkathurthi Mandals."
+  },
+  {
+    "code": "AC-033",
+    "name": "Siddipet",
+    "extent": "Siddipet, Chinnakodur and Nangnoor Mandals."
+  },
+  {
+    "code": "AC-034",
+    "name": "Medak",
+    "extent": "Medak, Papannapet, Ramayampet and Shankarampet -R Mandals."
+  },
+  {
+    "code": "AC-035",
+    "name": "Narayankhed",
+    "extent": "Kangti, Manoor, Narayankhed, Kalher and Shankarampet -A Mandals."
+  },
+  {
+    "code": "AC-036",
+    "name": "Andole",
+    "extent": "Tekmal, Alladurgh, Regode, Raikode, Andole, Pulkal and Munpalle Mandals."
+  },
+  {
+    "code": "AC-037",
+    "name": "Narsapur",
+    "extent": "Kowdipalle, Kulcharam, Narsapur, Hathnoora, Yeldurthy and Shivampet Mandals."
+  },
+  {
+    "code": "AC-038",
+    "name": "Zahirabad",
+    "extent": "Zahirabad, Kohir, Nyalkal and Jharasangam Mandals."
+  },
+  {
+    "code": "AC-039",
+    "name": "Sangareddy",
+    "extent": "Sadasivpet, Kondapur and Sangareddy Mandals."
+  },
+  {
+    "code": "AC-040",
+    "name": "Patancheru",
+    "extent": "Jinnaram, Patancheru and Ramachandrapuram Mandals."
+  },
+  {
+    "code": "AC-041",
+    "name": "Dubbak",
+    "extent": "Mirdoddi, Doultabad, Chegunta, Dubbak and Toguta Mandals."
+  },
+  {
+    "code": "AC-042",
+    "name": "Gajwel",
+    "extent": "Tupran, Kondapak, Gajwel, Jagdevpur, Wargal and Mulug Mandals."
+  },
+  {
+    "code": "AC-043",
+    "name": "Medchal",
+    "extent": "Medchal, Shamirpet, Ghatkesar and Keesara (Rural) Mandals."
+  },
+  {
+    "code": "AC-044",
+    "name": "Malkajgiri",
+    "extent": "Malkajgiri Mandal."
+  },
+  {
+    "code": "AC-045",
+    "name": "Quthbullapur",
+    "extent": "Quthbullapur Mandal."
+  },
+  {
+    "code": "AC-046",
+    "name": "Kukatpally",
+    "extent": "Hyderabad (M Corp.) (Part) Hyderabad (M Corp.) - Ward No.24 (Part) (Area in Balanagar Mandal) Kukatpalle (M) (Part) Kukatpalle (M) - Ward No. 5 to 16."
+  },
+  {
+    "code": "AC-047",
+    "name": "Uppal",
+    "extent": "Uppal Municipality, Kapra Municipality."
+  },
+  {
+    "code": "AC-048",
+    "name": "Ibrahimpatnam",
+    "extent": "Hayathnagar, Ibrahimpatnam, Manchal and Yacharam Mandals."
+  },
+  {
+    "code": "AC-049",
+    "name": "Lal Bahadur Nagar",
+    "extent": "Saroornagar Mandal (Part) Gaddiannaram (CT), Lal Bahadur Nagar (M+OG) (Part) Lal Bahadur Nagar (M) - Ward No. 1 to 10."
+  },
+  {
+    "code": "AC-050",
+    "name": "Maheshwaram",
+    "extent": "Maheswaram and Kandukur Mandals Saroornagar Mandal (Part) Medbowli, Almasguda, Badangpet, Chintalakunta, Jalpalle, Mamidipalle, Kurmalguda and Nadargul (Rural) Mandals. Hyderabad (OG) (Part) Balapur (OG) - Ward No.36 Kothapet (OG) - Ward No.37 Venkatapur (OG) - Ward No.39 Mallapur (OG) - Ward No.40 Lal Bahadur Nagar (M+OG) (Part) Lal Bahadur Nagar (M) - Ward No.11 Nadargul (OG) (Part) - Ward No.12 Jillalguda (OG) - Ward No.15 Meerpet (CT)."
+  },
+  {
+    "code": "AC-051",
+    "name": "Rajendranagar",
+    "extent": "Rajendranagar and Shamshabad Mandals."
+  },
+  {
+    "code": "AC-052",
+    "name": "Serilingampally",
+    "extent": "Serilingampally Mandal Balanagar Mandal (Part) Kukatpally (M) (Part) Kukatpally (M) - Ward No. 1 to 4."
+  },
+  {
+    "code": "AC-053",
+    "name": "Chevella",
+    "extent": "Nawabpet, Shankarpalle, Moinabad, Chevella and Shabad Mandals."
+  },
+  {
+    "code": "AC-054",
+    "name": "Pargi",
+    "extent": "Doma, Gandeed, Kulkacherla, Pargi and Pudur Mandals."
+  },
+  {
+    "code": "AC-055",
+    "name": "Vikarabad",
+    "extent": "Marpalle, Mominpet, Vikarabad, Dharur and Bantwaram Mandals."
+  },
+  {
+    "code": "AC-056",
+    "name": "Tandur",
+    "extent": "Peddemul, Tandur, Basheerabad and Yalal Mandals."
+  },
+  {
+    "code": "AC-057",
+    "name": "Musheerabad",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.1"
+  },
+  {
+    "code": "AC-058",
+    "name": "Malakpet",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.16 Ward No.17 (Part) Block No. 8 and 9"
+  },
+  {
+    "code": "AC-059",
+    "name": "Amberpet",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) - Ward No.2 Ward No.3 (Part) Block No. 1 to 4"
+  },
+  {
+    "code": "AC-060",
+    "name": "Khairatabad",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.6 Ward No. 3 (Part) Block No. 5 and 6 Ward No.8 (Part) Block No. 2. Ward No.5 (Part) Block No. 10"
+  },
+  {
+    "code": "AC-061",
+    "name": "Jubilee Hills",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.8 (Part) Block No. 1, 3 and 4."
+  },
+  {
+    "code": "AC-062",
+    "name": "Sanathnagar",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.7, 24 (excluding the area in AC – 46 Kukatpalle) and 25 to 30."
+  },
+  {
+    "code": "AC-063",
+    "name": "Nampally",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No. 10 to 12."
+  },
+  {
+    "code": "AC-064",
+    "name": "Karwan",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.9 Ward No. 13 (Part) Block No. 3 to 6."
+  },
+  {
+    "code": "AC-065",
+    "name": "Goshamahal",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No. 4, 14 and 15 Ward No. 5 (Part) Block No. 1 to 9 Ward No. 13 (Part) Block No. 1 and 2."
+  },
+  {
+    "code": "AC-066",
+    "name": "Charminar",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No. 20 to 23."
+  },
+  {
+    "code": "AC-067",
+    "name": "Chandrayangutta",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.18 (Part) Block No. 1 to 3 and 8 to 14."
+  },
+  {
+    "code": "AC-068",
+    "name": "Yakutpura",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.17 (Part) Block No. 1 to 7 Ward No.18 (Part) Block No. 6 and 7."
+  },
+  {
+    "code": "AC-069",
+    "name": "Bahadurpura",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.18 (Part) Block No. 4 and 5 Ward No.19."
+  },
+  {
+    "code": "AC-070",
+    "name": "Secunderabad",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No.33 (Part) Block No. 4 to 7 Ward No. 34 and 35 Osmania University Area."
+  },
+  {
+    "code": "AC-071",
+    "name": "Secunderabad Cantt.",
+    "extent": "Hyderabad (M Corp.+OG) (Part) Hyderabad (M Corp.) (Part) Ward No. 31 and 32 Ward No.33 (Part) Block No.1 to 3 Secunderabad Cantonment Board."
+  },
+  {
+    "code": "AC-072",
+    "name": "Kodangal",
+    "extent": "Kodangal, Bomraspet, Kosgi, Doulathabad and Maddur Mandals."
+  },
+  {
+    "code": "AC-073",
+    "name": "Narayanpet",
+    "extent": "Koilkonda, Narayanpet, Damaragidda and Dhanwada Mandals."
+  },
+  {
+    "code": "AC-074",
+    "name": "Mahbubnagar",
+    "extent": "Hanwada and Mahbubnagar Mandals."
+  },
+  {
+    "code": "AC-075",
+    "name": "Jadcherla",
+    "extent": "Jadcherla, Nawabpet, Balanagar and Midjil Mandals."
+  },
+  {
+    "code": "AC-076",
+    "name": "Devarkadra",
+    "extent": "Bhoothpur, Addakal, Devarkadra, Chinna Chinta Kunta and Kothakota Mandals."
+  },
+  {
+    "code": "AC-077",
+    "name": "Makthal",
+    "extent": "Makthal, Maganoor, Atmakur, Narva and Utkoor Mandals."
+  },
+  {
+    "code": "AC-078",
+    "name": "Wanaparthy",
+    "extent": "Wanaparthy, Pebbair, Gopalpeta, Peddamandadi and Ghanpur Mandals."
+  },
+  {
+    "code": "AC-079",
+    "name": "Gadwal",
+    "extent": "Gadwal, Dharur, Maldakal and Ghattu Mandals."
+  },
+  {
+    "code": "AC-080",
+    "name": "Alampur",
+    "extent": "Ieez, Itikyal, Waddepalle, Manopad and Alampur Mandals."
+  },
+  {
+    "code": "AC-081",
+    "name": "Nagarkurnool",
+    "extent": "Nagarkurnool, Bijinapalle, Thimmajipet, Tadoor and Telkapalle Mandals."
+  },
+  {
+    "code": "AC-082",
+    "name": "Achampet",
+    "extent": "Balmoor, Lingal, Amrabad, Achampet, Uppununthala and Vangoor Mandals."
+  },
+  {
+    "code": "AC-083",
+    "name": "Kalwakurthy",
+    "extent": "Veldanda, Kalwakurthy, Talakondapalle, Amangal and Madgul Mandals."
+  },
+  {
+    "code": "AC-084",
+    "name": "Shadnagar",
+    "extent": "Kondurg, Farooqnagar, Kothur and Keshampet Mandals."
+  },
+  {
+    "code": "AC-085",
+    "name": "Kollapur",
+    "extent": "Veepangandla, Kollapur, Peddakothapalle , Kodair and Pangal Mandals."
+  },
+  {
+    "code": "AC-086",
+    "name": "Devarakonda",
+    "extent": "Chintapalle, Gundlapalle, Chandampet, Devarakonda and Pedda Adisarlapalle Mandals."
+  },
+  {
+    "code": "AC-087",
+    "name": "Nagarjuna Sagar",
+    "extent": "Gurrampode, Nidamanur, Peddavoora, Anumula and Thripuraram Mandals."
+  },
+  {
+    "code": "AC-088",
+    "name": "Miryalaguda",
+    "extent": "Vemulapalle, Miryalaguda and Damercherla Mandals."
+  },
+  {
+    "code": "AC-089",
+    "name": "Huzurnagar",
+    "extent": "Neredcherla, Garidepalle, Huzurnagar, Mattampalli and Mellachervu Mandals."
+  },
+  {
+    "code": "AC-090",
+    "name": "Kodad",
+    "extent": "Mothey, Nadigudem, Munagala, Chilkur and Kodad Mandals."
+  },
+  {
+    "code": "AC-091",
+    "name": "Suryapet",
+    "extent": "Atmakur (S), Suryapet, Chivvemla and Penpahad Mandals."
+  },
+  {
+    "code": "AC-092",
+    "name": "Nalgonda",
+    "extent": "Thipparthi, Nalgonda and Kangal Mandals."
+  },
+  {
+    "code": "AC-093",
+    "name": "Munugode",
+    "extent": "Munugode, Narayanapur, Marriguda, Nampalle, Chandur and Choutuppal Mandals."
+  },
+  {
+    "code": "AC-094",
+    "name": "Bhongir",
+    "extent": "Bhongir, Bibinagar, Valigonda and Pochampalle Mandals."
+  },
+  {
+    "code": "AC-095",
+    "name": "Nakrekal",
+    "extent": "Ramannapeta, Chityala, Kattangoor, Nakrekal, Kethepalle and Narketpalle Mandals."
+  },
+  {
+    "code": "AC-096",
+    "name": "Thungathurthi",
+    "extent": "Thirumalagiri, Thungathurthi, Nuthankal, Jajireddigudem, Sali Gouraram and Mothkur Mandals."
+  },
+  {
+    "code": "AC-097",
+    "name": "Alair",
+    "extent": "M.Turkapalle, Rajapet, Yadagirigutta, Alair, Gundala, Atmakur (M) and Bommalaramaram Mandals."
+  },
+  {
+    "code": "AC-098",
+    "name": "Jangaon",
+    "extent": "Cherial, Maddur, Bachannapet, Narmetta and Jangaon Mandals."
+  },
+  {
+    "code": "AC-099",
+    "name": "Ghanpur (Station)",
+    "extent": "Ghanpur (Station), Dharmasagar, Raghunathpalle, Zaffergadh, and Lingalaghanpur Mandals."
+  },
+  {
+    "code": "AC-100",
+    "name": "Palakurthi",
+    "extent": "Palakurthi, Devaruppula, Kodakandla, Raiparthy and Thorrur Mandals."
+  },
+  {
+    "code": "AC-101",
+    "name": "Dornakal",
+    "extent": "Narsimhulapet, Maripeda, Kuravi and Dornakal Mandals."
+  },
+  {
+    "code": "AC-102",
+    "name": "Mahabubabad",
+    "extent": "Gudur, Nellikudur, Kesamudram and Mahabubabad Mandals."
+  },
+  {
+    "code": "AC-103",
+    "name": "Narsampet",
+    "extent": "Narsampet, Khanapur, Chennaraopet, Duggondi, Nekkonda and Nallabelly Mandals."
+  },
+  {
+    "code": "AC-104",
+    "name": "Parkal",
+    "extent": "Parkal, Atmakur, Sangam and Geesugonda Mandals."
+  },
+  {
+    "code": "AC-105",
+    "name": "Warangal West",
+    "extent": "Warangal Mandal (Part) Warangal (M Corp.) (Part) Warangal (M Corp.) - Ward No. 1 to 7, 15, 21 and 23 to 25"
+  },
+  {
+    "code": "AC-106",
+    "name": "Warangal East",
+    "extent": "Warangal Mandal (Part) Warangal (M Corp.) (Part) Warangal (M Corp.) - Ward No. 8 to 14, 16 to 20 and 22."
+  },
+  {
+    "code": "AC-107",
+    "name": "Wardhannapet",
+    "extent": "Hasanparthy, Hanamkonda, Parvathagiri and Wardhanna Pet Mandals."
+  },
+  {
+    "code": "AC-108",
+    "name": "Bhupalpalle",
+    "extent": "Mogullapalle, Chityal, Bhupalpalle, Ghanpur (Mulug), Regonda and Shayampet Mandals."
+  },
+  {
+    "code": "AC-109",
+    "name": "Mulug",
+    "extent": "Venkatapur, Eturnagaram, Mangapet, Tadvai, Kothaguda, Govindaraopet and Mulug Mandals."
+  },
+  {
+    "code": "AC-110",
+    "name": "Pinapaka",
+    "extent": "Pinapaka, Manuguru, Gundala, Burgampahad and Aswapuram Mandals."
+  },
+  {
+    "code": "AC-111",
+    "name": "Yellandu",
+    "extent": "Kamepalle, Yellandu, Bayyaram, Tekulapalle and Garla Mandals."
+  },
+  {
+    "code": "AC-112",
+    "name": "Khammam",
+    "extent": "Khammam Mandal."
+  },
+  {
+    "code": "AC-113",
+    "name": "Palair",
+    "extent": "Thirumalayapalem, Kusumanchi, Khammam Rural and Nelakondapalle Mandals."
+  },
+  {
+    "code": "AC-114",
+    "name": "Madhira",
+    "extent": "Mudigonda, Chinthakani, Bonakal, Madhira and Yerrupalem Mandals."
+  },
+  {
+    "code": "AC-115",
+    "name": "Wyra",
+    "extent": "Enkuru, Konijerla, Singareni, Julurpadu and Wyra Mandals."
+  },
+  {
+    "code": "AC-116",
+    "name": "Sathupalle",
+    "extent": "Sathupalle, Penuballi, Kallur, Tallada and Vemsoor Mandals."
+  },
+  {
+    "code": "AC-117",
+    "name": "Kothagudem",
+    "extent": "Kothagudem and Palwancha Mandals."
+  },
+  {
+    "code": "AC-118",
+    "name": "Aswaraopeta",
+    "extent": "Mulikalapalle, Velairpadu, Kukunoor, Chandrugonda, Aswaraopeta and Dammapeta Mandals."
+  },
+  {
+    "code": "AC-119",
+    "name": "Bhadrachalam",
+    "extent": "Wazeed, Venkatapuram, Cherla, Dummugudem, Bhadrachalam, Kunavaram, Chintur and V.R. Puram Mandals."
+  }
+]

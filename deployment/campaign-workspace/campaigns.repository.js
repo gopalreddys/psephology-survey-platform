@@ -182,6 +182,42 @@ export async function createCampaign(input, actor) {
     if (validMandals.rowCount !== mandalIds.length) {
       const error = new Error("Campaign scope contains an invalid or inactive Mandal"); error.statusCode = 400; throw error;
     }
+    if (input.targetDomain === "LEGISLATIVE" && !input.jurisdictionId) {
+      const error = new Error("Legislative campaigns require a constituency"); error.statusCode = 400; throw error;
+    }
+    if (input.targetDomain === "LEGISLATIVE") {
+      const permitted = await client.query(`
+        WITH RECURSIVE jurisdiction_tree AS (
+          SELECT id FROM jurisdictions WHERE id = $1 AND is_active = TRUE
+          UNION ALL
+          SELECT child.id FROM jurisdictions child
+          JOIN jurisdiction_tree parent ON child.parent_jurisdiction_id = parent.id
+          WHERE child.is_active = TRUE
+        ), permitted_mandals AS (
+          SELECT geography.id
+          FROM jurisdiction_tree selected
+          JOIN jurisdiction_geo_mapping mapping
+            ON mapping.jurisdiction_id = selected.id AND mapping.is_active = TRUE
+            AND mapping.coverage_type = 'FULL'
+          JOIN geo_units geography ON geography.id = mapping.geo_unit_id
+          WHERE geography.geo_type = 'MANDAL' AND geography.is_active = TRUE
+          UNION
+          SELECT mandal.id
+          FROM jurisdiction_tree selected
+          JOIN jurisdiction_geo_mapping mapping
+            ON mapping.jurisdiction_id = selected.id AND mapping.is_active = TRUE
+            AND mapping.coverage_type = 'FULL'
+          JOIN geo_units district ON district.id = mapping.geo_unit_id
+            AND district.geo_type = 'DISTRICT' AND district.is_active = TRUE
+          JOIN geo_units mandal ON mandal.parent_id = district.id
+            AND mandal.geo_type = 'MANDAL' AND mandal.is_active = TRUE
+        )
+        SELECT id FROM permitted_mandals WHERE id = ANY($2::uuid[])
+      `, [input.jurisdictionId, mandalIds]);
+      if (permitted.rowCount !== mandalIds.length) {
+        const error = new Error("Campaign contains a Mandal outside the verified full constituency scope"); error.statusCode = 400; throw error;
+      }
+    }
     const scopeMandalIds = new Set(validMandals.rows.map(function (row) { return row.id; }));
     const scopeDistrictIds = new Set(validMandals.rows.map(function (row) { return row.parent_id; }).filter(Boolean));
     const seenDistricts = new Set();
