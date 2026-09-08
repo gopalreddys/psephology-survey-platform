@@ -26,6 +26,7 @@ import {
 } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { apiFetch } from "@/lib/api";
 import { surveyStageOptions } from "@/lib/research-codes";
 
@@ -418,9 +419,7 @@ export default function ProgramDetailPage() {
 
         {message && (
 
-          <div className="program-detail-message">
-            {message}
-          </div>
+          <FeedbackMessage message={message} className="program-detail-message" />
 
         )}
 

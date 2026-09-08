@@ -20,6 +20,7 @@ import {
 
 import AppShell
   from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 
 import {
   apiFetch
@@ -332,9 +333,7 @@ export default function VotersPage() {
 
         {message && (
 
-          <div className="voter-message">
-            {message}
-          </div>
+          <FeedbackMessage message={message} className="voter-message" />
 
         )}
 

@@ -18,6 +18,7 @@ import {
 
 import AppShell
   from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 
 import {
   apiFetch
@@ -430,9 +431,7 @@ export default function GeographyPage() {
 
         {message && (
 
-          <div className="geography-message">
-            {message}
-          </div>
+          <FeedbackMessage message={message} className="geography-message" />
 
         )}
 

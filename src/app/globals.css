@@ -8790,3 +8790,70 @@ textarea.question-input {
   font-weight: 700;
   line-height: 1.35;
 }
+
+/* Final interaction states: keep shared feedback and sign-in controls consistent
+   after page-specific styles have loaded. */
+.platform-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.platform-feedback > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.platform-feedback-success {
+  border-color: #b9ded7 !important;
+  background: #eafaf6 !important;
+  color: #08786d !important;
+}
+
+.platform-feedback-success > svg { color: #168c7f; }
+
+.platform-feedback-error {
+  border-color: #efc5cd !important;
+  background: #fff1f3 !important;
+  color: #984a5a !important;
+}
+
+.platform-feedback-error > svg { color: #c65367; }
+
+.platform-feedback-info {
+  border-color: #d8e3ea !important;
+  background: #f5f9fb !important;
+  color: #52677b !important;
+}
+
+.login-authenticator .amplify-button--primary,
+.login-authenticator .amplify-button--primary:focus-visible {
+  border: 0 !important;
+  color: #fff !important;
+  background: linear-gradient(135deg, #c65367, #e98591) !important;
+  box-shadow: 0 8px 22px rgba(198, 83, 103, 0.2) !important;
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.login-authenticator .amplify-button--primary:hover:not(:disabled) {
+  color: #fff !important;
+  background: linear-gradient(135deg, #ad4056, #d96d7d) !important;
+  box-shadow: 0 10px 24px rgba(173, 64, 86, 0.24) !important;
+  transform: translateY(-1px);
+}
+
+.login-authenticator .amplify-button--primary:active:not(:disabled) {
+  background: linear-gradient(135deg, #96364b, #c95d6e) !important;
+  box-shadow: 0 4px 12px rgba(150, 54, 75, 0.2) !important;
+  transform: translateY(0);
+}
+
+.login-authenticator .amplify-button--primary:disabled,
+.login-authenticator .amplify-button--primary[aria-disabled="true"],
+.login-authenticator .amplify-button--primary[data-loading="true"] {
+  color: #fff !important;
+  background: linear-gradient(135deg, #dfa0ab, #efb9c1) !important;
+  cursor: wait;
+  opacity: 0.9;
+}

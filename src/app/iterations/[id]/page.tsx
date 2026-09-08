@@ -26,6 +26,7 @@ import {
 } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { apiFetch } from "@/lib/api";
 import { surveyStageOptions } from "@/lib/research-codes";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -559,13 +560,7 @@ export default function IterationPage() {
         </section>
 
 
-        {message && (
-
-          <div className="iteration-detail-message">
-            {message}
-          </div>
-
-        )}
+        {message && <FeedbackMessage message={message} className="iteration-detail-message" />}
 
 
         <section className="iteration-detail-metrics">

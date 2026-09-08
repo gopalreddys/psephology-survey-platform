@@ -24,6 +24,7 @@ import {
 
 import AppShell
   from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 
 import {
   apiFetch
@@ -324,9 +325,7 @@ export default function QuestionnairesPage() {
 
         {message && (
 
-          <div className="questionnaire-message">
-            {message}
-          </div>
+          <FeedbackMessage message={message} className="questionnaire-message" />
 
         )}
 

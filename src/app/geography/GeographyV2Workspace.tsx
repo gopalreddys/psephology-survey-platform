@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowLeft, Building2, CheckCircle2, Database, Home, Landmark, Map as MapIcon, MapPin, Search, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { apiFetch } from "@/lib/api";
 import styles from "./geography-v2.module.css";
 import { assemblyConstituencies, datasetProfile, legislativeProfile, mlcConstituencies, parliamentaryConstituencies, type LegislativeRecord } from "./telangana-geography-data";
@@ -79,7 +80,7 @@ export function AlternativeGeographyPage({ dimension, onDimensionChange }: {
       <p>{electoral ? "Select an MP, MLA or MLC constituency and resolve its Administrative scope for campaigns and analysis." : "Navigate institutions, contested areas and their verified Administrative crosswalks."}</p>
     </div></section>
     <DimensionTabs active={dimension} onChange={onDimensionChange} />
-    {message && <div className="geography-message">{message}</div>}
+    {message && <FeedbackMessage message={message} className="geography-message" />}
     <DatasetStatus masterCount={electoral ? legislativeProfile.totalConstituencies : datasetProfile.localBody.totalBodies} liveCount={liveCount} noun={electoral ? "constituencies" : "local bodies"} />
     <section className={styles.metrics}>{electoral ? <>
       <Metric icon={MapIcon} label="Constituencies" value={legislativeProfile.totalConstituencies} /><Metric icon={Landmark} label="Parliamentary" value={17} />

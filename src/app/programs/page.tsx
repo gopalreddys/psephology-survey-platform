@@ -26,6 +26,7 @@ import {
 } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { apiFetch } from "@/lib/api";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -599,11 +600,11 @@ export default function ProgramsPage() {
     );
 
   if (userLoading) {
-    return <AppShell><div className="programs-page"><div className="programs-message">Loading program access…</div></div></AppShell>;
+    return <AppShell><div className="programs-page"><FeedbackMessage message="Loading program access…" tone="info" className="programs-message" /></div></AppShell>;
   }
 
   if (!user || !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) {
-    return <AppShell><div className="programs-page"><div className="programs-message">Programs are managed by Admin and Super Admin users. Your Campaign Manager access is provided through assigned campaigns.</div></div></AppShell>;
+    return <AppShell><div className="programs-page"><FeedbackMessage message="Programs are managed by Admin and Super Admin users. Your Campaign Manager access is provided through assigned campaigns." tone="error" className="programs-message" /></div></AppShell>;
   }
 
 
@@ -728,10 +729,7 @@ export default function ProgramsPage() {
 
         {message && (
 
-          <div className="programs-message">
-            <CheckCircle2 size={15} />
-            {message}
-          </div>
+          <FeedbackMessage message={message} className="programs-message" />
 
         )}
 

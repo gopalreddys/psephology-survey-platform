@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, MapPin, Megaphone, Plus, Search, Target, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./campaigns.module.css";
@@ -50,7 +51,7 @@ export default function CampaignsPage() {
       <Metric icon={MapPin} label="Mandals in Scope" value={campaigns.reduce(function (sum, item) { return sum + Number(item.mandal_count || 0); }, 0)} />
       <Metric icon={Users} label="Work Allocations" value={campaigns.reduce(function (sum, item) { return sum + Number(item.assignment_count || 0); }, 0)} />
     </section>
-    {error && <div className={styles.message}>{error}</div>}
+    {error && <FeedbackMessage message={error} className={styles.message} />}
     <section className={styles.listPanel}>
       <div className={styles.listHeader}><div><span>MY PORTFOLIO</span><h2>Operational campaigns</h2></div><em>{visible.length} campaigns</em></div>
       <div className={styles.filters}><label className={styles.search}><Search size={15} /><input value={query} onChange={function (event) { setQuery(event.target.value); }} placeholder="Search campaigns or constituency" /></label>

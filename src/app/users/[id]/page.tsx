@@ -11,6 +11,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./user-profile.module.css";
@@ -145,7 +146,7 @@ export default function UserProfilePage() {
     <AppShell>
       <main className={styles.page}>
         <Link href="/users" className={styles.back}><ArrowLeft size={15} /> Users & Roles</Link>
-        {message && <div className={styles.message}>{message}</div>}
+        {message && <FeedbackMessage message={message} className={styles.message} />}
         {loading ? <div className={styles.panel}><p className={styles.muted}>Loading secure profile…</p></div> : profile ? (
           <>
             <section className={styles.hero}>
