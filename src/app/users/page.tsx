@@ -6,6 +6,8 @@ import {
   useState
 } from "react";
 
+import Link from "next/link";
+
 import {
   CheckCircle2,
   Mail,
@@ -877,11 +879,14 @@ export default function UsersPage() {
 
                                       <div>
 
-                                        <strong>
+                                        <Link
+                                          href={`/users/${user.id}`}
+                                          className="users-profile-link"
+                                        >
                                           {
                                             user.full_name
                                           }
-                                        </strong>
+                                        </Link>
 
                                         <span>
                                           {

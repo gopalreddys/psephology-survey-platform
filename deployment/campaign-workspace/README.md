@@ -26,6 +26,11 @@ This package adds the operational campaign tables and secured endpoints required
 - `harden-run-route-access.js` → `src/db/harden-run-route-access.js`
 - `assign-test-campaigners.js` → `src/db/assign-test-campaigners.js`
 - `harden-user-creation-access.js` → `src/db/harden-user-creation-access.js`
+- `014_user_profiles.sql` → `sql/014_user_profiles.sql`
+- `migrate-user-profiles.js` → `src/db/migrate-user-profiles.js`
+- `user-profiles.repository.js` → `src/repositories/user-profiles.repository.js`
+- `user-profiles.routes.js` → `src/routes/user-profiles.routes.js`
+- `register-user-profiles-route.js` → `src/db/register-user-profiles-route.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -184,3 +189,10 @@ node src/db/harden-user-creation-access.js
 ```
 
 This restricts `POST /api/users` to `SUPER_ADMIN` and `ADMIN`, creates a timestamped route backup, and is safe to rerun.
+
+User profile storage keeps only masked government-ID metadata and private object-storage keys; raw government ID numbers must not be stored in PostgreSQL. Copy the profile files, run the migration, then register the route without manually editing `src/server.js`:
+
+```bash
+node src/db/migrate-user-profiles.js
+node src/db/register-user-profiles-route.js
+```
