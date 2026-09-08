@@ -5,6 +5,7 @@
 export async function selectAssignedVoters(db, {
   iterationId,
   campaignerUserId,
+  runNumber = 1,
   targetContacts,
   sourceName = null
 }) {
@@ -40,6 +41,47 @@ export async function selectAssignedVoters(db, {
     const error = new Error("Campaigner has no active allocation for this campaign");
     error.statusCode = 403;
     throw error;
+  }
+
+  if (runNumber > 1) {
+    const previousRunResult = await db.query(`
+      SELECT id, status
+      FROM campaign_runs
+      WHERE iteration_id = $1
+        AND run_number = $2
+      LIMIT 1
+    `, [iterationId, runNumber - 1]);
+
+    if (!previousRunResult.rowCount) {
+      const error = new Error(`Run ${runNumber - 1} must be created before Run ${runNumber}`);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    if (!["COMPLETED", "FAILED"].includes(previousRunResult.rows[0].status)) {
+      const error = new Error(`Run ${runNumber - 1} must be completed before Run ${runNumber}`);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const result = await db.query(`
+      SELECT voter.id
+      FROM campaign_run_contacts previous_contact
+      JOIN voter_master voter
+        ON voter.id = previous_contact.voter_id
+      WHERE previous_contact.run_id = $1
+        AND voter.is_active = TRUE
+        AND voter.contact_status = 'ACTIVE'
+        AND ($2::text IS NULL OR voter.source_name = $2)
+        AND COALESCE(previous_contact.final_status, 'UNRESOLVED') NOT IN (
+          'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL',
+          'REFUSED_TERMINAL', 'DO_NOT_CALL', 'INVALID_NUMBER'
+        )
+      ORDER BY voter.id
+      LIMIT $3
+    `, [previousRunResult.rows[0].id, sourceName, targetContacts]);
+
+    return result.rows;
   }
 
   const result = await db.query(`
@@ -88,7 +130,7 @@ export async function selectAssignedVoters(db, {
         WHERE existing_contact.voter_id = voter.id
           AND existing_run.iteration_id = $4
           AND existing_run.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
-          AND existing_contact.final_status NOT IN (
+          AND COALESCE(existing_contact.final_status, 'UNRESOLVED') NOT IN (
             'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL',
             'REFUSED_TERMINAL', 'DO_NOT_CALL', 'INVALID_NUMBER'
           )

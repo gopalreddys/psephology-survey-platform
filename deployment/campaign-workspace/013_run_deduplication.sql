@@ -55,7 +55,7 @@ BEGIN
       AND existing_run.iteration_id = target_iteration_id
       AND existing_run.id <> NEW.run_id
       AND existing_run.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
-      AND existing_contact.final_status NOT IN (
+      AND COALESCE(existing_contact.final_status, 'UNRESOLVED') NOT IN (
         'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL',
         'REFUSED_TERMINAL', 'DO_NOT_CALL', 'INVALID_NUMBER'
       )

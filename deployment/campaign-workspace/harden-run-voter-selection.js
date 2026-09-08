@@ -20,15 +20,34 @@ if (!source.includes("selectAssignedVoters")) {
 const selectionPattern = /const selected\s*=\s*await db\.query\(\s*`[\s\S]*?`\s*,\s*\[\s*context\.jurisdiction_id\s*,\s*targetContacts\s*,\s*sourceName\s*\]\s*\);/m;
 if (!selectionPattern.test(source)) {
   if (source.includes("selectAssignedVoters(db")) {
-    console.log("Voter selection is already allocation-scoped.");
+    if (source.includes("campaignerUserId: createdBy,\n        runNumber,\n        targetContacts")) {
+      console.log("Voter selection is already allocation- and wave-scoped.");
+      process.exit(0);
+    }
+
+    const updated = source.replace(
+      "campaignerUserId: createdBy,\n        targetContacts",
+      "campaignerUserId: createdBy,\n        runNumber,\n        targetContacts"
+    );
+    if (updated === source) {
+      throw new Error("Could not add runNumber to the existing allocation-scoped voter selection");
+    }
+
+    const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+    const backupPath = `${routePath}.bak-voter-selection-${timestamp}`;
+    fs.copyFileSync(routePath, backupPath);
+    fs.writeFileSync(routePath, updated);
+    console.log(`Added Run wave scoping to ${routePath}`);
+    console.log(`Backup written to ${backupPath}`);
     process.exit(0);
   }
   throw new Error("Could not find the jurisdiction-wide voter selection block");
 }
 
-source = source.replace(selectionPattern, `const selected = await selectAssignedVoters(db, {
+      source = source.replace(selectionPattern, `const selected = await selectAssignedVoters(db, {
         iterationId,
         campaignerUserId: createdBy,
+        runNumber,
         targetContacts,
         sourceName
       });`);

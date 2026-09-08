@@ -130,7 +130,7 @@ The Run routes must use this role contract:
 - `POST /api/runs/:runId/retry-cycle`: assigned `CAMPAIGNER` only.
 - `POST /api/runs/:runId/launch`: assigned `CAMPAIGNER` only.
 
-The existing `createInitialRun` query currently selects voters by the whole program jurisdiction. Replace that selection with the caller’s active `campaign_work_allocations` and a recursive `geo_units` scope, plus `local_body_area_geo_mapping` for local-body allocations. Pass `createdBy` into the repository and call `assertIterationAccess` before opening the transaction.
+The existing `createInitialRun` query currently selects voters by the whole program jurisdiction. Replace that selection with the caller’s active `campaign_work_allocations` and a recursive `geo_units` scope, plus `local_body_area_geo_mapping` for local-body allocations. Run 1 freezes that assigned cohort; later Runs require the immediately preceding Run to be completed and select only its unresolved contacts. Pass `createdBy` into the repository and call `assertIterationAccess` before opening the transaction.
 
 `campaign-voter-selection.repository.js` provides the allocation-scoped query. Import `selectAssignedVoters` into `runs.repository.js` and replace the current `voter_jurisdiction_mapping` selection with:
 
@@ -138,6 +138,7 @@ The existing `createInitialRun` query currently selects voters by the whole prog
 const selected = await selectAssignedVoters(db, {
   iterationId,
   campaignerUserId: createdBy,
+  runNumber,
   targetContacts,
   sourceName
 });
@@ -146,6 +147,8 @@ const selected = await selectAssignedVoters(db, {
 Then iterate over `selected` directly (`for (const voter of selected)`) and use `selected.length` for the Run and first-cycle counts.
 
 Migration 013 adds unique Run and retry-cycle numbers and a transaction-level advisory lock plus trigger that prevents an active voter from being selected into two active Runs within the same Iteration.
+
+Run waves follow the coverage policy: Run 1 freezes the initial voter cohort, Run 2 contains only unresolved contacts from completed Run 1, and Run 3 contains only unresolved contacts from completed Run 2. The API can continue with later waves when unresolved contacts remain, but it never introduces a fresh unattempted voter into a retry wave. A `campaign_run_cycle` remains an attempt within one Run; it is not a replacement for the next Run wave.
 
 To change the three Run mutation routes to Campaigner-only without manually editing the route file, run this after copying the script:
 
