@@ -182,7 +182,11 @@ export default function IterationPage() {
         `/api/iterations/${iterationId}/runs`
       );
 
-    setRuns(data);
+    setRuns(
+      Array.isArray(data)
+        ? data
+        : data.runs || data.items || []
+    );
   }
 
 
@@ -270,6 +274,25 @@ export default function IterationPage() {
 
   async function createRun() {
 
+    const runNumber = Number(form.runNumber);
+    const targetContacts = Number(form.targetContacts);
+    const maxAttemptsPerVoter = Number(form.maxAttemptsPerVoter);
+
+    if (!Number.isInteger(runNumber) || runNumber < 1) {
+      setMessage("Run number must be a whole number greater than zero.");
+      return;
+    }
+
+    if (!Number.isInteger(targetContacts) || targetContacts < 1) {
+      setMessage("Target voters must be a whole number greater than zero.");
+      return;
+    }
+
+    if (!Number.isInteger(maxAttemptsPerVoter) || maxAttemptsPerVoter < 1 || maxAttemptsPerVoter > 10) {
+      setMessage("Maximum attempts per voter must be between 1 and 10.");
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
 
@@ -285,22 +308,16 @@ export default function IterationPage() {
               JSON.stringify({
 
                 runNumber:
-                  Number(
-                    form.runNumber
-                  ),
+                  runNumber,
 
                 runName:
                   form.runName,
 
                 targetContacts:
-                  Number(
-                    form.targetContacts
-                  ),
+                  targetContacts,
 
                 maxAttemptsPerVoter:
-                  Number(
-                    form.maxAttemptsPerVoter
-                  ),
+                  maxAttemptsPerVoter,
 
                 sourceName:
                   form.sourceName ||
@@ -310,8 +327,16 @@ export default function IterationPage() {
         );
 
 
+      const createdRun = result?.run || result?.data?.run || result;
+      const selectedContacts = Number(
+        createdRun?.selected_contacts ??
+        result?.selected_contacts ??
+        createdRun?.total_contacts ??
+        0
+      );
+
       setMessage(
-        `Run created successfully. ${result.run.selected_contacts} voters selected.`
+        `Run created successfully. ${selectedContacts.toLocaleString()} voters selected.`
       );
 
       setShowCreate(false);
