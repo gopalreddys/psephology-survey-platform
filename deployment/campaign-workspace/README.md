@@ -17,6 +17,9 @@ This package adds the operational campaign tables and secured endpoints required
 - `campaign-iterations.repository.js` → `src/repositories/campaign-iterations.repository.js`
 - `campaign-iterations.routes.js` → `src/routes/campaign-iterations.routes.js`
 - `iteration-access.repository.js` → `src/repositories/iteration-access.repository.js`
+- `013_run_deduplication.sql` → `sql/013_run_deduplication.sql`
+- `migrate-run-deduplication.js` → `src/db/migrate-run-deduplication.js`
+- `run-access.repository.js` → `src/repositories/run-access.repository.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -50,6 +53,7 @@ node src/db/migrate-campaign-ownership.js
 node src/db/migrate-campaign-program-requirement.js
 node src/db/migrate-campaign-survey-stage.js
 node src/db/migrate-campaign-iteration-ownership.js
+node src/db/migrate-run-deduplication.js
 ```
 
 Then restart `psephology-api.service` and verify:
@@ -112,3 +116,16 @@ Copy `iteration-access.repository.js` into the API repository and call `assertIt
 - `POST /api/iterations/:id/runs`
 
 The helper preserves Admin/Super Admin read access to legacy iterations, restricts Campaign Managers to their own campaign iterations, and requires Campaigners to have an active campaign allocation. The Run repository must call the same helper before selecting voters or creating a Run; hiding the button in the frontend is not an authorization boundary.
+
+## Run ownership and duplicate-work hardening
+
+The Run routes must use this role contract:
+
+- `GET /api/iterations/:iterationId/runs`: all permitted roles may review status after `assertIterationAccess`.
+- `POST /api/iterations/:iterationId/runs`: `CAMPAIGNER` only, with an active allocation for the linked campaign.
+- `POST /api/runs/:runId/retry-cycle`: assigned `CAMPAIGNER` only.
+- `POST /api/runs/:runId/launch`: assigned `CAMPAIGNER` only.
+
+The existing `createInitialRun` query currently selects voters by the whole program jurisdiction. Replace that selection with the caller’s active `campaign_work_allocations` and a recursive `geo_units` scope, plus `local_body_area_geo_mapping` for local-body allocations. Pass `createdBy` into the repository and call `assertIterationAccess` before opening the transaction.
+
+Migration 013 adds unique Run and retry-cycle numbers and a transaction-level advisory lock plus trigger that prevents an active voter from being selected into two active Runs within the same Iteration.
