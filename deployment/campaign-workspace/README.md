@@ -24,6 +24,7 @@ This package adds the operational campaign tables and secured endpoints required
 - `harden-run-route-permissions.js` → `src/db/harden-run-route-permissions.js`
 - `harden-run-voter-selection.js` → `src/db/harden-run-voter-selection.js`
 - `harden-run-route-access.js` → `src/db/harden-run-route-access.js`
+- `assign-test-campaigners.js` → `src/db/assign-test-campaigners.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -166,3 +167,11 @@ node src/db/harden-run-voter-selection.js
 ```
 
 Both scripts create timestamped backups and fail before writing if the expected existing route or jurisdiction-wide selection block is not found.
+
+To grant the three designated test accounts the Campaigner role, copy and run:
+
+```bash
+node src/db/assign-test-campaigners.js
+```
+
+The script is transactional and idempotent. It verifies that all accounts exist and are active before changing only `users.role_id`; it does not change passwords, user status or geography allocations. Assign each Campaigner to a campaign geography before they create Runs.
