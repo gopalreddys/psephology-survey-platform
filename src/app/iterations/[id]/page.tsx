@@ -152,10 +152,12 @@ export default function IterationPage() {
 
   async function loadIteration() {
 
-    const data =
+    const result =
       await apiFetch(
         `/api/iterations/${iterationId}`
       );
+
+    const data = result?.iteration || result?.data?.iteration || result;
 
     setIteration(data);
 
@@ -186,7 +188,7 @@ export default function IterationPage() {
     setRuns(
       Array.isArray(data)
         ? data
-        : data.runs || data.items || []
+        : data.runs || data.items || data.data?.runs || data.data?.items || []
     );
   }
 
@@ -285,7 +287,7 @@ export default function IterationPage() {
     }
 
     if (!Number.isInteger(targetContacts) || targetContacts < 1) {
-      setMessage("Target voters must be a whole number greater than zero.");
+      setMessage("This iteration has no valid target sample. Ask the Campaign Manager to update the iteration target before creating a Run.");
       return;
     }
 
