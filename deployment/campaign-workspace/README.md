@@ -22,6 +22,8 @@ This package adds the operational campaign tables and secured endpoints required
 - `run-access.repository.js` → `src/repositories/run-access.repository.js`
 - `campaign-voter-selection.repository.js` → `src/repositories/campaign-voter-selection.repository.js`
 - `harden-run-route-permissions.js` → `src/db/harden-run-route-permissions.js`
+- `harden-run-voter-selection.js` → `src/db/harden-run-voter-selection.js`
+- `harden-run-route-access.js` → `src/db/harden-run-route-access.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -152,3 +154,12 @@ node src/db/harden-run-route-permissions.js
 ```
 
 The script creates a timestamped backup and is idempotent. It changes only the `requireRole` blocks for Run creation, retry-cycle creation and Run launch.
+
+The remaining Run hardening can be applied without manually editing the backend files:
+
+```bash
+node src/db/harden-run-route-access.js
+node src/db/harden-run-voter-selection.js
+```
+
+Both scripts create timestamped backups and fail before writing if the expected existing route or jurisdiction-wide selection block is not found.
