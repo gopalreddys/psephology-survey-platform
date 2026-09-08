@@ -13,7 +13,7 @@ type FeedbackMessageProps = {
 
 function inferTone(message: string | ReactNode): Exclude<FeedbackTone, "auto"> {
   if (typeof message !== "string") return "info";
-  return /unable|failed|error|invalid|required|select |must |cannot|not available|not found|no authenticated|only |^no |could not|assign at least|complete .* before|outside|unavailable/i.test(message)
+  return /unable|failed|error|invalid|required|select |must |cannot|not available|not found|no authenticated|^only\b|^no\b|no active allocation|no eligible|has no |could not|assign at least|complete .* before|outside|unavailable/i.test(message)
     ? "error"
     : /success|created|saved|assigned|updated|uploaded|completed|submitted|ready|sent|resolved/i.test(message)
       ? "success"
