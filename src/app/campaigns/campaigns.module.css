@@ -103,6 +103,8 @@
 .managerPanel > div:first-child > span { color: #168c7f; font-size: 12px; font-weight: 800; letter-spacing: .12em; }
 .managerPanel h2 { margin: 0; color: #34445a; font-size: 20px; }
 .managerPanel p { margin: 0; color: #657b79; font-size: 13px; }
+.successMessage { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; border: 1px solid #b9ded7; border-radius: 10px; background: #eafaf6; padding: 9px 11px; color: #08786d; font-size: 12px; font-weight: 650; line-height: 1.4; }
+.successMessage svg { flex: 0 0 auto; margin-top: 1px; }
 .managerControls { display: flex; align-items: center; gap: 10px; min-width: 360px; }
 .managerControls select { flex: 1; min-height: 42px; border: 1px solid #b9ded7; border-radius: 10px; background: #fff; padding: 0 11px; color: #35455a; font: inherit; }
 .managerControls .primaryAction { white-space: nowrap; }
@@ -155,5 +157,21 @@
 .iterationAssignmentPanel { margin: 0 26px 24px; overflow: hidden; border: 1px solid #bfe6df; border-radius: 14px; background: #f7fcfb; }
 .iterationAssignmentPanel .listHeader { padding: 18px 20px; background: #effbf8; }
 .iterationAssignmentPanel .allocationBody { padding: 18px 20px 22px; }
+.allocationSummary { border-top: 1px solid #d9eee9; background: #fff; padding: 18px 20px 20px; }
+.summaryHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.summaryHeader > div { display: grid; gap: 4px; }
+.summaryHeader span { color: #168c7f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.summaryHeader strong { color: #34445a; font-size: 16px; }
+.summaryHeader small { color: #8996a4; }
+.allocationTable { overflow: hidden; border: 1px solid #e2e8eb; border-radius: 11px; }
+.allocationTableHeader, .allocationTableRow { display: grid; grid-template-columns: minmax(180px,1.3fr) minmax(130px,1fr) minmax(160px,1fr) 100px; align-items: center; gap: 12px; padding: 10px 12px; }
+.allocationTableHeader { background: #f5f9fa; color: #6d7e8f; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.allocationTableRow { border-top: 1px solid #edf0f2; color: #52677b; font-size: 12px; }
+.allocationTableRow > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.allocationTableRow strong { overflow: hidden; color: #34445a; text-overflow: ellipsis; white-space: nowrap; }
+.allocationTableRow small { color: #8996a4; }
+.allocationTableRow em { justify-self: start; border-radius: 999px; padding: 5px 8px; font-size: 10px; font-style: normal; font-weight: 800; }
+.assignedStatus { background: #eafaf6; color: #168c7f; }
+.remainingStatus { background: #fff5df; color: #a16b14; }
 @media (max-width: 1050px) { .metrics { grid-template-columns: repeat(2,1fr); } .assignmentGrid, .detailGrid { grid-template-columns: 1fr; } .mandalPane { border-right: 0; border-bottom: 1px solid #f1e7e9; } .campaignRow { grid-template-columns: auto 1fr auto; } .campaignFacts { grid-column: 2 / -1; } .mandalAllocation, .areaAllocation { grid-template-columns: 1fr; } }
-@media (max-width: 720px) { .page { padding: 24px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .formGrid, .scopeSelector, .filters, .domainTabs, .reviewGrid, .iterationForm { grid-template-columns: 1fr; } .officeTabs { grid-template-columns: 1fr; } .metrics { grid-template-columns: 1fr 1fr; } .footer { align-items: flex-start; flex-direction: column; } .campaignRow { grid-template-columns: auto 1fr; } .campaignFacts { grid-column: 1 / -1; flex-wrap: wrap; } .campaignRow > em { grid-column: 2; justify-self: start; } .assignList label, .districtHead, .mandalAllocation label, .areaAllocation label { grid-template-columns: 1fr; } .detailHero { grid-template-columns: auto 1fr; } .detailActions { grid-column: 2; justify-content: flex-start; } .managerPanel { align-items: stretch; flex-direction: column; } .managerControls { min-width: 0; flex-direction: column; align-items: stretch; } .iterationRow { grid-template-columns: 30px minmax(0,1fr) auto; } .iterationRow > div:nth-child(3) { grid-column: 2 / -1; flex-wrap: wrap; } .iterationRow > svg { grid-column: 3; grid-row: 1; } }
+@media (max-width: 720px) { .page { padding: 24px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .formGrid, .scopeSelector, .filters, .domainTabs, .reviewGrid, .iterationForm { grid-template-columns: 1fr; } .officeTabs { grid-template-columns: 1fr; } .metrics { grid-template-columns: 1fr 1fr; } .footer { align-items: flex-start; flex-direction: column; } .campaignRow { grid-template-columns: auto 1fr; } .campaignFacts { grid-column: 1 / -1; flex-wrap: wrap; } .campaignRow > em { grid-column: 2; justify-self: start; } .assignList label, .districtHead, .mandalAllocation label, .areaAllocation label { grid-template-columns: 1fr; } .detailHero { grid-template-columns: auto 1fr; } .detailActions { grid-column: 2; justify-content: flex-start; } .managerPanel { align-items: stretch; flex-direction: column; } .managerControls { min-width: 0; flex-direction: column; align-items: stretch; } .iterationRow { grid-template-columns: 30px minmax(0,1fr) auto; } .iterationRow > div:nth-child(3) { grid-column: 2 / -1; flex-wrap: wrap; } .iterationRow > svg { grid-column: 3; grid-row: 1; } .summaryHeader { align-items: flex-start; flex-direction: column; } .allocationTable { overflow-x: auto; } .allocationTableHeader, .allocationTableRow { min-width: 600px; } }

@@ -16,6 +16,10 @@ type CampaignIteration = { id: string; campaign_id?: string | null; study_id: st
 type Campaign = { id: string; campaign_code: string; campaign_name: string; program_id?: string | null; target_domain: string; target_type: string; target_name: string; target_code: string | null; local_body_id?: string | null; survey_stage?: "BASE" | "CAMPAIGN" | "TURNOUT"; status: string; created_by_user_id?: string | null; created_by_name: string | null; campaign_manager_user_id?: string | null; campaign_manager_name?: string | null; start_date: string | null; end_date: string | null; scope: ScopeRow[]; allocations: Allocation[] };
 type Campaigner = { id: string; full_name: string; email?: string; role_code: string; status?: string };
 
+function normalizedAssignments(value: Record<string, string>) {
+  return JSON.stringify(Object.keys(value).filter(function (key) { return Boolean(value[key]); }).sort().map(function (key) { return [key, value[key]]; }));
+}
+
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user } = useCurrentUser();
@@ -28,9 +32,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [managers, setManagers] = useState<Campaigner[]>([]);
   const [managerId, setManagerId] = useState("");
   const [savingManager, setSavingManager] = useState(false);
+  const [managerNotice, setManagerNotice] = useState<string | null>(null);
   const [selectedIterationId, setSelectedIterationId] = useState<string | null>(null);
   const [iterationAssignments, setIterationAssignments] = useState<Record<string, string>>({});
+  const [savedIterationAssignments, setSavedIterationAssignments] = useState<Record<string, string>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
+  const [allocationNotice, setAllocationNotice] = useState<string | null>(null);
   const [showIterationForm, setShowIterationForm] = useState(false);
   const [savingIteration, setSavingIteration] = useState(false);
   const [iterationForm, setIterationForm] = useState({ name: "", stage: "BASE", targetSample: "", startDate: "", endDate: "" });
@@ -100,6 +107,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   async function assignManager() {
     if (!campaign || !managerId) return;
     setSavingManager(true); setError(null);
+    setManagerNotice(null);
     try {
       const updated = await apiFetch(`/api/campaigns/${id}/manager`, {
         method: "PATCH",
@@ -108,6 +116,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setCampaign(function (current) {
         return current ? { ...current, campaign_manager_user_id: updated.campaign_manager_user_id, campaign_manager_name: updated.campaign_manager_name } : current;
       });
+      setManagerNotice(`${updated.campaign_manager_name} is now the Campaign Manager for this campaign. They can create iterations and manage campaigner allocations.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to assign Campaign Manager"); }
     finally { setSavingManager(false); }
   }
@@ -115,6 +124,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   async function openIterationAllocations(iterationId: string) {
     setSelectedIterationId(iterationId);
     setIterationError(null);
+    setAllocationNotice(null);
     try {
       const result = await apiFetch(`/api/campaigns/${id}/iterations/${iterationId}/allocations`);
       const rows: Allocation[] = Array.isArray(result) ? result : result.items || [];
@@ -124,6 +134,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         next[key] = row.campaigner_user_id || "";
       });
       setIterationAssignments(next);
+      setSavedIterationAssignments(next);
     } catch (reason) { setIterationError(reason instanceof Error ? reason.message : "Unable to load iteration allocations"); }
   }
 
@@ -135,10 +146,19 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     });
     if (!assignments.length) { setIterationError("Assign at least one work area before saving."); return; }
     setSavingAssignments(true); setIterationError(null);
+    setAllocationNotice(null);
     try {
       const result = await apiFetch(`/api/campaigns/${id}/iterations/${selectedIterationId}/allocations`, { method: "PUT", body: JSON.stringify({ assignments }) });
       const saved: Allocation[] = Array.isArray(result) ? result : result.items || [];
       setCampaign(function (current) { return current ? { ...current, allocations: [...current.allocations.filter(function (row) { return row.iteration_id !== selectedIterationId; }), ...saved] } : current; });
+      const persisted: Record<string, string> = {};
+      saved.forEach(function (row) {
+        const key = row.local_body_area_id ? `A:${row.local_body_area_id}` : `${row.allocation_level === "DISTRICT" ? "D" : "M"}:${row.geo_unit_id}`;
+        persisted[key] = row.campaigner_user_id || "";
+      });
+      setIterationAssignments(persisted);
+      setSavedIterationAssignments(persisted);
+      setAllocationNotice(`${saved.length} work area${saved.length === 1 ? "" : "s"} saved. Campaigners can now access only the geography allocated to them.`);
     } catch (reason) { setIterationError(reason instanceof Error ? reason.message : "Unable to save iteration allocations"); }
     finally { setSavingAssignments(false); }
   }
@@ -182,6 +202,29 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const canAssignManager = Boolean(user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code) && campaign?.status === "DRAFT");
   const canManageIterations = Boolean(user?.role.code === "CAMPAIGN_MANAGER" && campaign?.campaign_manager_user_id === user.id && campaign.status !== "COMPLETED" && campaign.status !== "ARCHIVED");
   const canAllocateIteration = canManageIterations && Boolean(selectedIterationId);
+  const managerDirty = Boolean(managerId) && managerId !== (campaign?.campaign_manager_user_id || "");
+  const allocationDirty = normalizedAssignments(iterationAssignments) !== normalizedAssignments(savedIterationAssignments);
+  const campaignerNameById = useMemo(function () {
+    return new globalThis.Map(campaigners.map(function (campaigner) { return [campaigner.id, campaigner.full_name]; }));
+  }, [campaigners]);
+  const allocationSummary = useMemo(function () {
+    if (localAreas.length) {
+      return localAreas.map(function (area) {
+        const campaignerId = iterationAssignments[`A:${area.id}`] || "";
+        return { id: area.id, name: area.display_label || area.name, code: area.code || area.area_type, campaigner: campaignerId ? campaignerNameById.get(campaignerId) || "Assigned campaigner" : null };
+      });
+    }
+    return districts.flatMap(function ([districtName, rows]) {
+      const districtId = rows[0]?.district_id;
+      const districtCampaignerId = districtId ? iterationAssignments[`D:${districtId}`] || "" : "";
+      return rows.map(function (row) {
+        const campaignerId = districtCampaignerId || iterationAssignments[`M:${row.id}`] || "";
+        return { id: row.id, name: row.name, code: row.code || "No code", district: districtName, campaigner: campaignerId ? campaignerNameById.get(campaignerId) || "Assigned campaigner" : null };
+      });
+    });
+  }, [campaignerNameById, districts, iterationAssignments, localAreas]);
+  const assignedWorkCount = allocationSummary.filter(function (row) { return Boolean(row.campaigner); }).length;
+  const remainingWorkCount = allocationSummary.length - assignedWorkCount;
   const canDelete = Boolean(campaign && user && campaign.status === "DRAFT" && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code));
   const statusAction = campaign?.status === "DRAFT" ? { label: "Review & Activate", status: "ACTIVE" as const } : campaign?.status === "ACTIVE" ? { label: "Pause campaign", status: "PAUSED" as const } : campaign?.status === "PAUSED" ? { label: "Resume campaign", status: "ACTIVE" as const } : null;
 
@@ -189,14 +232,14 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     <div className={styles.backRow}><Link href="/campaigns"><ArrowLeft size={16} />Campaigns</Link></div>
     {error ? <div className={styles.message}>{error}</div> : !campaign ? <div className={styles.empty}>Loading campaign…</div> : <>
       <section className={styles.detailHero}><div className={styles.campaignIcon}><Megaphone size={18} /></div><div><span>{campaign.campaign_code} · {campaign.target_domain === "LOCAL_BODY" ? "LOCAL BODY" : "LEGISLATIVE"}</span><h1>{campaign.campaign_name}</h1><p>{campaign.target_type} · {campaign.target_name}{campaign.target_code ? ` · ${campaign.target_code}` : ""} · {campaign.survey_stage || "BASE"} survey</p></div><div className={styles.detailActions}><em>{campaign.status}</em>{canReview && statusAction && <button type="button" className={styles.primaryAction} disabled={updatingStatus || (statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id)} onClick={function () { changeStatus(statusAction.status); }}>{updatingStatus ? "Updating…" : statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id ? "Assign manager first" : statusAction.label}</button>}{canReview && campaign.status === "ACTIVE" && <button type="button" className={styles.secondaryButton} disabled={updatingStatus} onClick={function () { changeStatus("COMPLETED"); }}>Mark completed</button>}{canDelete && <button type="button" className={styles.dangerButton} disabled={updatingStatus} onClick={removeCampaign}><Trash2 size={14} />Delete draft</button>}</div></section>
-      {canAssignManager && <section className={styles.managerPanel}><div><span>CAMPAIGN OWNERSHIP</span><h2>Assign Campaign Manager</h2><p>The manager receives this campaign and owns its iteration planning.</p></div><div className={styles.managerControls}><select value={managerId} onChange={function (event) { setManagerId(event.target.value); }}><option value="">Select Campaign Manager</option>{managers.map(function (manager) { return <option key={manager.id} value={manager.id}>{manager.full_name}</option>; })}</select><button type="button" className={styles.primaryAction} disabled={!managerId || savingManager} onClick={assignManager}>{savingManager ? "Assigning…" : "Assign manager"}</button></div></section>}
+      {canAssignManager && <section className={styles.managerPanel}><div><span>CAMPAIGN OWNERSHIP</span><h2>Assign Campaign Manager</h2><p>The manager receives this campaign and owns its iteration planning.</p>{managerNotice && <div className={styles.successMessage} role="status"><ShieldCheck size={15} />{managerNotice}</div>}</div><div className={styles.managerControls}><select value={managerId} onChange={function (event) { setManagerId(event.target.value); setManagerNotice(null); }}><option value="">Select Campaign Manager</option>{managers.map(function (manager) { return <option key={manager.id} value={manager.id}>{manager.full_name}</option>; })}</select><button type="button" className={styles.primaryAction} disabled={!managerDirty || savingManager} onClick={assignManager}>{savingManager ? "Assigning…" : managerDirty ? "Assign manager" : "Manager assigned"}</button></div></section>}
       <section className={styles.metrics}><DetailMetric icon={MapPin} label="Districts" value={districts.length} /><DetailMetric icon={Building2} label="Mandals" value={campaign.scope.length} /><DetailMetric icon={ClipboardList} label="Iterations" value={iterations.length} /><DetailMetric icon={Users} label="Campaign Manager" value={campaign.campaign_manager_name || "Unassigned"} /></section>
       <section className={styles.iterationPanel}>
         <div className={styles.listHeader}><div><span>CAMPAIGN RESEARCH CYCLES</span><h2>Iterations and execution status</h2><p>Campaign Managers define the survey waves; Campaigners execute their assigned runs.</p></div>{canManageIterations && <button type="button" className={styles.primaryAction} onClick={function () { setShowIterationForm(true); }}><Plus size={15} />Create iteration</button>}</div>
         {iterationError && <div className={styles.message}>{iterationError}</div>}
         {showIterationForm && canManageIterations && <div className={styles.iterationForm}><label>Iteration name<input value={iterationForm.name} onChange={function (event) { setIterationForm({ ...iterationForm, name: event.target.value }); }} placeholder="Base survey — September" /></label><label>Survey stage<select value={iterationForm.stage} onChange={function (event) { setIterationForm({ ...iterationForm, stage: event.target.value }); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></label><label>Target sample<input type="number" min={1} value={iterationForm.targetSample} onChange={function (event) { setIterationForm({ ...iterationForm, targetSample: event.target.value }); }} /></label><label>Planned start<input type="date" value={iterationForm.startDate} onChange={function (event) { setIterationForm({ ...iterationForm, startDate: event.target.value }); }} /></label><label>Planned end<input type="date" value={iterationForm.endDate} onChange={function (event) { setIterationForm({ ...iterationForm, endDate: event.target.value }); }} /></label><div className={styles.iterationFormActions}><button type="button" className={styles.secondaryButton} onClick={function () { setShowIterationForm(false); }}>Cancel</button><button type="button" className={styles.primaryAction} disabled={savingIteration} onClick={createCampaignIteration}>{savingIteration ? "Creating…" : "Create iteration"}</button></div></div>}
         {iterations.length ? <div className={styles.iterationList}>{iterations.map(function (iteration) { const stage = surveyStageOptions.find(function (option) { return option.value === String(iteration.research_phase).toUpperCase(); }); return <Link key={iteration.id} href={`/iterations/${iteration.id}`} className={styles.iterationRow}><div className={styles.iterationNumber}>{iteration.iteration_number}</div><div><strong>{iteration.iteration_name}</strong><span>{stage?.label || iteration.research_phase} · {iteration.status}</span></div><div><small><Target size={13} />{Number(iteration.target_sample_size || 0).toLocaleString()} voters</small><small><PhoneCall size={13} />{Number(iteration.run_count || 0)} runs</small></div>{canManageIterations && <button type="button" className={styles.inlineAction} onClick={function (event) { event.preventDefault(); event.stopPropagation(); openIterationAllocations(iteration.id); }}>{selectedIterationId === iteration.id ? "Editing allocation" : "Allocate work"}</button>}<ChevronRight size={17} /></Link>; })}</div> : <div className={styles.empty}><ClipboardList size={24} /><strong>No campaign iterations yet</strong><span>{canManageIterations ? "Create the first survey wave for this campaign." : "Iterations will appear here once the Campaign Manager creates them."}</span></div>}
-        {canAllocateIteration && <section className={styles.iterationAssignmentPanel}><div className={styles.listHeader}><div><span>ITERATION WORK ALLOCATION</span><h2>Assign Campaigners</h2><p>{localAreas.length ? "Assign each verified division or ward for this iteration." : "Allocate Districts or Mandals for this iteration."} Runs will use only these assigned areas.</p></div><button type="button" className={styles.primaryAction} disabled={savingAssignments} onClick={saveIterationAllocations}>{savingAssignments ? "Saving…" : "Save allocations"}</button></div>{localAreas.length ? <div className={styles.areaAllocation}>{localAreas.map(function (area) { const key = `A:${area.id}`; return <label key={area.id}><span><strong>{area.display_label || area.name}</strong><small>{area.code || area.area_type}</small></span><select value={iterationAssignments[key] || ""} onChange={function (event) { setIterationAssignments({ ...iterationAssignments, [key]: event.target.value }); }}><option value="">Assign Campaigner</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></label>; })}</div> : <div className={styles.allocationBody}><div className={styles.districtGroups}>{districts.map(function ([districtName, rows]) { const districtId = rows[0]?.district_id; const districtKey = `D:${districtId}`; const districtValue = iterationAssignments[districtKey] || ""; return <article key={districtName}><div className={styles.districtHead}><span><strong>{districtName}</strong><small>{rows.length} Mandals in iteration scope</small></span><select value={districtValue} onChange={function (event) { const value = event.target.value; setIterationAssignments(function (current) { const next = { ...current, [districtKey]: value }; rows.forEach(function (row) { delete next[`M:${row.id}`]; }); return next; }); }}><option value="">Assign individual Mandals</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></div><div className={styles.mandalAllocation}>{rows.map(function (row) { return <label key={row.id}><span><strong>{row.name}</strong><small>{row.code || "No code"}</small></span><select disabled={Boolean(districtValue)} value={iterationAssignments[`M:${row.id}`] || ""} onChange={function (event) { setIterationAssignments({ ...iterationAssignments, [`M:${row.id}`]: event.target.value }); }}><option value="">Assign Campaigner</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></label>; })}</div></article>; })}</div></div>}</section>}
+        {canAllocateIteration && <section className={styles.iterationAssignmentPanel}><div className={styles.listHeader}><div><span>ITERATION WORK ALLOCATION</span><h2>Assign Campaigners</h2><p>{localAreas.length ? "Assign each verified division or ward for this iteration." : "Allocate Districts or Mandals for this iteration."} Runs will use only these assigned areas.</p>{allocationNotice && <div className={styles.successMessage} role="status"><ShieldCheck size={15} />{allocationNotice}</div>}</div><button type="button" className={styles.primaryAction} disabled={savingAssignments || !allocationDirty} onClick={saveIterationAllocations}>{savingAssignments ? "Saving…" : allocationDirty ? "Save allocations" : "Allocations saved"}</button></div>{localAreas.length ? <div className={styles.areaAllocation}>{localAreas.map(function (area) { const key = `A:${area.id}`; return <label key={area.id}><span><strong>{area.display_label || area.name}</strong><small>{area.code || area.area_type}</small></span><select value={iterationAssignments[key] || ""} onChange={function (event) { setIterationAssignments({ ...iterationAssignments, [key]: event.target.value }); setAllocationNotice(null); }}><option value="">Assign Campaigner</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></label>; })}</div> : <div className={styles.allocationBody}><div className={styles.districtGroups}>{districts.map(function ([districtName, rows]) { const districtId = rows[0]?.district_id; const districtKey = `D:${districtId}`; const districtValue = iterationAssignments[districtKey] || ""; return <article key={districtName}><div className={styles.districtHead}><span><strong>{districtName}</strong><small>{rows.length} Mandals in iteration scope</small></span><select value={districtValue} onChange={function (event) { const value = event.target.value; setIterationAssignments(function (current) { const next = { ...current, [districtKey]: value }; rows.forEach(function (row) { delete next[`M:${row.id}`]; }); return next; }); setAllocationNotice(null); }}><option value="">Assign individual Mandals</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></div><div className={styles.mandalAllocation}>{rows.map(function (row) { return <label key={row.id}><span><strong>{row.name}</strong><small>{row.code || "No code"}</small></span><select disabled={Boolean(districtValue)} value={iterationAssignments[`M:${row.id}`] || ""} onChange={function (event) { setIterationAssignments({ ...iterationAssignments, [`M:${row.id}`]: event.target.value }); setAllocationNotice(null); }}><option value="">Assign Campaigner</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></label>; })}</div></article>; })}</div></div>}<div className={styles.allocationSummary}><div className={styles.summaryHeader}><div><span>ALLOCATION SUMMARY</span><strong>{assignedWorkCount} assigned · {remainingWorkCount} remaining</strong></div><small>Unassigned geography remains available for allocation.</small></div><div className={styles.allocationTable}><div className={styles.allocationTableHeader}><span>Work area</span><span>District</span><span>Campaigner</span><span>Status</span></div>{allocationSummary.map(function (row) { return <div key={row.id} className={styles.allocationTableRow}><span><strong>{row.name}</strong><small>{row.code}</small></span><span>{("district" in row && row.district) || "—"}</span><span>{row.campaigner || "—"}</span><em className={row.campaigner ? styles.assignedStatus : styles.remainingStatus}>{row.campaigner ? "Assigned" : "Remaining"}</em></div>; })}</div></div></section>}
       </section>
       <div className={styles.detailGrid}><section className={styles.listPanel}><div className={styles.listHeader}><div><span>ADMINISTRATIVE SCOPE</span><h2>District → Mandal</h2></div></div><div className={styles.scopeTree}>{districts.map(function ([district, rows]) { return <article key={district}><strong>{district}</strong><span>{rows.length} Mandals</span><div>{rows.map(function (row) { return <small key={row.id}>{row.name}</small>; })}</div></article>; })}</div></section>
         <section className={styles.listPanel}><div className={styles.listHeader}><div><span>WORK DISTRIBUTION</span><h2>Iteration Campaigner allocations</h2></div></div>{campaign.allocations.length ? <div className={styles.allocationList}>{campaign.allocations.map(function (allocation) { return <article key={allocation.id}><div><strong>{allocation.geography_name}</strong><small>{allocation.allocation_level} · {allocation.geography_code || "No code"}{allocation.iteration_name ? ` · ${allocation.iteration_name}` : ""}</small></div><span>{allocation.campaigner_name}</span><em>{allocation.status}</em></article>; })}</div> : <div className={styles.empty}>No iteration work allocations yet. The assigned Campaign Manager will allocate work after creating an iteration.</div>}</section></div>
