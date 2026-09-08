@@ -20,6 +20,7 @@ This package adds the operational campaign tables and secured endpoints required
 - `013_run_deduplication.sql` → `sql/013_run_deduplication.sql`
 - `migrate-run-deduplication.js` → `src/db/migrate-run-deduplication.js`
 - `run-access.repository.js` → `src/repositories/run-access.repository.js`
+- `harden-run-route-permissions.js` → `src/db/harden-run-route-permissions.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -129,3 +130,11 @@ The Run routes must use this role contract:
 The existing `createInitialRun` query currently selects voters by the whole program jurisdiction. Replace that selection with the caller’s active `campaign_work_allocations` and a recursive `geo_units` scope, plus `local_body_area_geo_mapping` for local-body allocations. Pass `createdBy` into the repository and call `assertIterationAccess` before opening the transaction.
 
 Migration 013 adds unique Run and retry-cycle numbers and a transaction-level advisory lock plus trigger that prevents an active voter from being selected into two active Runs within the same Iteration.
+
+To change the three Run mutation routes to Campaigner-only without manually editing the route file, run this after copying the script:
+
+```bash
+node src/db/harden-run-route-permissions.js
+```
+
+The script creates a timestamped backup and is idempotent. It changes only the `requireRole` blocks for Run creation, retry-cycle creation and Run launch.
