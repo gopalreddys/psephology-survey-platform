@@ -25,6 +25,10 @@ import {
   apiFetch
 } from "@/lib/api";
 
+import {
+  useCurrentUser
+} from "@/hooks/useCurrentUser";
+
 
 type UserRow = {
   id: string;
@@ -55,6 +59,14 @@ const roleOptions = [
 
 
 export default function UsersPage() {
+
+  const {
+    user: currentUser
+  } = useCurrentUser();
+
+  const canManageUsers =
+    currentUser?.role.code === "SUPER_ADMIN" ||
+    currentUser?.role.code === "ADMIN";
 
   const [
     users,
@@ -325,22 +337,24 @@ export default function UsersPage() {
           </div>
 
 
-          <button
-            type="button"
+          {canManageUsers && (
+            <button
+              type="button"
 
-            onClick={
-              function () {
-                setShowForm(
-                  !showForm
-                );
+              onClick={
+                function () {
+                  setShowForm(
+                    !showForm
+                  );
+                }
               }
-            }
 
-            className="users-create-button"
-          >
-            <Plus size={16} />
-            Create User
-          </button>
+              className="users-create-button"
+            >
+              <Plus size={16} />
+              Create User
+            </button>
+          )}
 
         </section>
 
@@ -410,7 +424,7 @@ export default function UsersPage() {
         </section>
 
 
-        {showForm && (
+        {showForm && canManageUsers && (
 
           <form
             onSubmit={

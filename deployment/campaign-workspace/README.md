@@ -25,6 +25,7 @@ This package adds the operational campaign tables and secured endpoints required
 - `harden-run-voter-selection.js` → `src/db/harden-run-voter-selection.js`
 - `harden-run-route-access.js` → `src/db/harden-run-route-access.js`
 - `assign-test-campaigners.js` → `src/db/assign-test-campaigners.js`
+- `harden-user-creation-access.js` → `src/db/harden-user-creation-access.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -175,3 +176,11 @@ node src/db/assign-test-campaigners.js
 ```
 
 The script is transactional and idempotent. It verifies that all accounts exist and are active before changing only `users.role_id`; it does not change passwords, user status or geography allocations. Assign each Campaigner to a campaign geography before they create Runs.
+
+To enforce user-creation permissions at the API boundary, copy and run:
+
+```bash
+node src/db/harden-user-creation-access.js
+```
+
+This restricts `POST /api/users` to `SUPER_ADMIN` and `ADMIN`, creates a timestamped route backup, and is safe to rerun.

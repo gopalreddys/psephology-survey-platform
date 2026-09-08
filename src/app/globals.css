@@ -358,6 +358,26 @@ body {
 }
 
 
+.login-authenticator [data-amplify-sign-up-errors] {
+  display: block;
+  margin-top: 6px;
+}
+
+
+.login-authenticator [data-amplify-sign-up-errors] [role="alert"],
+.login-authenticator [role="alert"] {
+  color: #b42318;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+
+.login-authenticator .amplify-input[aria-invalid="true"] {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.10);
+}
+
+
 .login-security-note {
   display: flex;
   align-items: center;
