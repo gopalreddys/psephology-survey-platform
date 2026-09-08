@@ -20,6 +20,7 @@ This package adds the operational campaign tables and secured endpoints required
 - `013_run_deduplication.sql` → `sql/013_run_deduplication.sql`
 - `migrate-run-deduplication.js` → `src/db/migrate-run-deduplication.js`
 - `run-access.repository.js` → `src/repositories/run-access.repository.js`
+- `campaign-voter-selection.repository.js` → `src/repositories/campaign-voter-selection.repository.js`
 - `harden-run-route-permissions.js` → `src/db/harden-run-route-permissions.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
@@ -128,6 +129,19 @@ The Run routes must use this role contract:
 - `POST /api/runs/:runId/launch`: assigned `CAMPAIGNER` only.
 
 The existing `createInitialRun` query currently selects voters by the whole program jurisdiction. Replace that selection with the caller’s active `campaign_work_allocations` and a recursive `geo_units` scope, plus `local_body_area_geo_mapping` for local-body allocations. Pass `createdBy` into the repository and call `assertIterationAccess` before opening the transaction.
+
+`campaign-voter-selection.repository.js` provides the allocation-scoped query. Import `selectAssignedVoters` into `runs.repository.js` and replace the current `voter_jurisdiction_mapping` selection with:
+
+```js
+const selected = await selectAssignedVoters(db, {
+  iterationId,
+  campaignerUserId: createdBy,
+  targetContacts,
+  sourceName
+});
+```
+
+Then iterate over `selected` directly (`for (const voter of selected)`) and use `selected.length` for the Run and first-cycle counts.
 
 Migration 013 adds unique Run and retry-cycle numbers and a transaction-level advisory lock plus trigger that prevents an active voter from being selected into two active Runs within the same Iteration.
 
