@@ -46,6 +46,10 @@ type UserRow = {
 
 const roleOptions = [
   {
+    code: "SUPER_ADMIN",
+    label: "Super Admin"
+  },
+  {
     code: "ADMIN",
     label: "Admin"
   },
@@ -93,6 +97,12 @@ export default function UsersPage() {
     setSaving
   ] =
     useState(false);
+
+  const [
+    changingRoleUserId,
+    setChangingRoleUserId
+  ] =
+    useState<string | null>(null);
 
   const [
     message,
@@ -224,6 +234,31 @@ export default function UsersPage() {
     } finally {
 
       setSaving(false);
+    }
+  }
+
+  async function changeRole(user: UserRow, roleCode: string) {
+    if (!canManageUsers || currentUser?.id === user.id || roleCode === user.role_code) {
+      return;
+    }
+
+    if (!window.confirm(`Change ${user.full_name}'s role to ${formatLabel(roleCode)}?`)) {
+      return;
+    }
+
+    setChangingRoleUserId(user.id);
+    setMessage(null);
+    try {
+      await apiFetch(`/api/users/${user.id}/role`, {
+        method: "PATCH",
+        body: JSON.stringify({ roleCode })
+      });
+      setMessage(`${user.full_name}'s role was changed to ${formatLabel(roleCode)}.`);
+      await loadUsers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to change user role");
+    } finally {
+      setChangingRoleUserId(null);
     }
   }
 
@@ -598,7 +633,11 @@ export default function UsersPage() {
                   >
 
                     {
-                      roleOptions.map(
+                      roleOptions
+                        .filter(function (role) {
+                          return currentUser?.role.code === "SUPER_ADMIN" || role.code !== "SUPER_ADMIN";
+                        })
+                        .map(
                         function (role) {
 
                           return (
@@ -928,14 +967,40 @@ export default function UsersPage() {
 
                                   <td>
 
-                                    <span className="users-role-badge">
-                                      {
-                                        user.role_name ||
-                                        formatLabel(
-                                          user.role_code
-                                        )
-                                      }
-                                    </span>
+                                    {canManageUsers && !(currentUser?.role.code === "ADMIN" && user.role_code === "SUPER_ADMIN") ? (
+                                      <select
+                                        className="users-role-select"
+                                        value={user.role_code}
+                                        disabled={
+                                          currentUser?.id === user.id ||
+                                          changingRoleUserId === user.id
+                                        }
+                                        onChange={function (event) {
+                                          changeRole(user, event.target.value);
+                                        }}
+                                      >
+                                        {roleOptions
+                                          .filter(function (role) {
+                                            return currentUser?.role.code === "SUPER_ADMIN" || role.code !== "SUPER_ADMIN";
+                                          })
+                                          .map(function (role) {
+                                            return (
+                                              <option key={role.code} value={role.code}>
+                                                {role.label}
+                                              </option>
+                                            );
+                                          })}
+                                      </select>
+                                    ) : (
+                                      <span className="users-role-badge">
+                                        {
+                                          user.role_name ||
+                                          formatLabel(
+                                            user.role_code
+                                          )
+                                        }
+                                      </span>
+                                    )}
 
                                   </td>
 

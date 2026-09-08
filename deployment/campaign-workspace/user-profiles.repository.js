@@ -1,6 +1,7 @@
 import { getDb } from "../db/postgres.js";
 
 const adminRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const supportedRoles = new Set(["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"]);
 
 const profileFields = {
   addressLine1: "address_line_1",
@@ -149,4 +150,80 @@ export async function updateUserProfile(targetUserId, payload, actor) {
 
   await audit(db, actor.id, targetUserId, adminRoles.has(actor.role_code) ? "UPDATE_GOVT_ID" : "UPDATE");
   return getUserProfile(targetUserId, { ...actor, id: actor.id });
+}
+
+export async function changeUserRole(targetUserId, newRoleCode, actor) {
+  if (!adminRoles.has(actor?.role_code)) {
+    throw accessError("Only Admin or Super Admin can change user roles", 403);
+  }
+  if (actor.id === targetUserId) {
+    throw accessError("You cannot change your own role", 409);
+  }
+  const roleCode = String(newRoleCode || "").trim().toUpperCase();
+  if (!supportedRoles.has(roleCode)) {
+    throw accessError("Unsupported platform role", 400);
+  }
+  if (actor.role_code === "ADMIN" && roleCode === "SUPER_ADMIN") {
+    throw accessError("Only Super Admin can assign the Super Admin role", 403);
+  }
+
+  const db = await getDb();
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const targetResult = await client.query(`
+      SELECT u.id, u.email, u.full_name, u.status, r.code AS current_role_code
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.id = $1
+      FOR UPDATE
+    `, [targetUserId]);
+    if (!targetResult.rowCount) throw accessError("User not found", 404);
+
+    const target = targetResult.rows[0];
+    if (actor.role_code === "ADMIN" && target.current_role_code === "SUPER_ADMIN") {
+      throw accessError("Admin cannot change a Super Admin role", 403);
+    }
+    if (target.current_role_code === roleCode) {
+      await client.query("COMMIT");
+      return { ...target, role_code: target.current_role_code };
+    }
+
+    const nextRoleResult = await client.query(`
+      SELECT id, code
+      FROM roles
+      WHERE code = $1 AND is_active = TRUE
+      LIMIT 1
+    `, [roleCode]);
+    if (!nextRoleResult.rowCount) throw accessError("Requested role is not active", 400);
+
+    if (target.current_role_code === "SUPER_ADMIN" && target.status === "ACTIVE") {
+      const countResult = await client.query(`
+        SELECT COUNT(*)::int AS count
+        FROM users u
+        JOIN roles r ON r.id = u.role_id
+        WHERE r.code = 'SUPER_ADMIN' AND u.status = 'ACTIVE'
+      `);
+      if (Number(countResult.rows[0].count) <= 1) {
+        throw accessError("The last active Super Admin cannot be demoted", 409);
+      }
+    }
+
+    await client.query(
+      "UPDATE users SET role_id = $1, updated_at = NOW() WHERE id = $2",
+      [nextRoleResult.rows[0].id, targetUserId]
+    );
+    await client.query(`
+      INSERT INTO user_role_change_audit
+        (actor_user_id, target_user_id, previous_role_code, new_role_code)
+      VALUES ($1, $2, $3, $4)
+    `, [actor.id, targetUserId, target.current_role_code, roleCode]);
+    await client.query("COMMIT");
+    return { ...target, role_code: roleCode };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }

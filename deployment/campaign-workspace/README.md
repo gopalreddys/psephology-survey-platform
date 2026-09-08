@@ -27,7 +27,9 @@ This package adds the operational campaign tables and secured endpoints required
 - `assign-test-campaigners.js` → `src/db/assign-test-campaigners.js`
 - `harden-user-creation-access.js` → `src/db/harden-user-creation-access.js`
 - `014_user_profiles.sql` → `sql/014_user_profiles.sql`
+- `015_user_role_changes.sql` → `sql/015_user_role_changes.sql`
 - `migrate-user-profiles.js` → `src/db/migrate-user-profiles.js`
+- `migrate-user-role-changes.js` → `src/db/migrate-user-role-changes.js`
 - `user-profiles.repository.js` → `src/repositories/user-profiles.repository.js`
 - `user-profiles.routes.js` → `src/routes/user-profiles.routes.js`
 - `register-user-profiles-route.js` → `src/db/register-user-profiles-route.js`
@@ -195,4 +197,18 @@ User profile storage keeps only masked government-ID metadata and private object
 ```bash
 node src/db/migrate-user-profiles.js
 node src/db/register-user-profiles-route.js
+node src/db/migrate-user-role-changes.js
 ```
+
+## Role management
+
+The Users page exposes role changes only to `SUPER_ADMIN` and `ADMIN` users. The API endpoint is:
+
+```text
+PATCH /api/users/:id/role
+Body: { "roleCode": "ADMIN" | "CAMPAIGN_MANAGER" | "CAMPAIGNER" | "SUPER_ADMIN" }
+```
+
+Role changes are recorded in `user_role_change_audit`. The API prevents self-role changes, prevents an Admin from modifying or granting the Super Admin role, and prevents demoting the last active Super Admin. The current user is never shown an enabled role selector. Regular users see the role as a read-only badge.
+
+The create-user form applies the same UI restriction: Admins can create Admin, Campaign Manager and Campaigner accounts, while only Super Admins can create another Super Admin. The POST `/api/users` route must remain protected by `requireRole(["SUPER_ADMIN", "ADMIN"])`; enforce the role-grant policy in that route/repository as well when maintaining the API copy.
