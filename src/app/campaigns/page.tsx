@@ -8,7 +8,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./campaigns.module.css";
 
-type Campaign = { id: string; campaign_code: string; campaign_name: string; target_domain: string; target_name: string; target_type: string; survey_stage?: "BASE" | "CAMPAIGN" | "TURNOUT"; status: string; mandal_count: number; assignment_count: number; eligible_voters: number; created_by_name: string | null; start_date: string | null; end_date: string | null };
+type Campaign = { id: string; campaign_code: string; campaign_name: string; target_domain: string; target_name: string; target_type: string; survey_stage?: "BASE" | "CAMPAIGN" | "TURNOUT"; status: string; mandal_count: number; assignment_count: number; eligible_voters: number; created_by_name: string | null; campaign_manager_name?: string | null; start_date: string | null; end_date: string | null };
 
 export default function CampaignsPage() {
   const { user } = useCurrentUser();
@@ -17,7 +17,7 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [domain, setDomain] = useState("ALL");
-  const canManage = Boolean(user && user.role.code !== "CAMPAIGNER");
+  const canCreate = Boolean(user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code));
 
   useEffect(function () {
     if (!user) return;
@@ -37,13 +37,13 @@ export default function CampaignsPage() {
 
   const roleMessage = user?.role.code === "CAMPAIGNER"
     ? "Campaigns assigned to you and the geography available for your work."
-    : user?.role.code === "CAMPAIGN_MANAGER"
-      ? "Campaigns created by you, their allocations and operational coverage."
+      : user?.role.code === "CAMPAIGN_MANAGER"
+      ? "Campaigns assigned to you. Create iterations and allocate each iteration to Campaigners."
       : "All campaign operations across managers, campaigners and geographies.";
 
   return <AppShell><div className={styles.page}>
     <section className={styles.header}><div><span>CAMPAIGN OPERATIONS</span><h1>Campaigns</h1><p>{roleMessage}</p></div>
-      {canManage && <Link className={styles.primaryAction} href="/campaigns/new"><Plus size={16} />Create Campaign</Link>}</section>
+      {canCreate && <Link className={styles.primaryAction} href="/campaigns/new"><Plus size={16} />Create Campaign</Link>}</section>
     <section className={styles.metrics}>
       <Metric icon={Megaphone} label="Visible Campaigns" value={campaigns.length} />
       <Metric icon={Target} label="Active" value={campaigns.filter(function (item) { return item.status === "ACTIVE"; }).length} />
@@ -55,8 +55,8 @@ export default function CampaignsPage() {
       <div className={styles.listHeader}><div><span>MY PORTFOLIO</span><h2>Operational campaigns</h2></div><em>{visible.length} campaigns</em></div>
       <div className={styles.filters}><label className={styles.search}><Search size={15} /><input value={query} onChange={function (event) { setQuery(event.target.value); }} placeholder="Search campaigns or constituency" /></label>
         <select value={domain} onChange={function (event) { setDomain(event.target.value); }}><option value="ALL">All campaign types</option><option value="LEGISLATIVE">Legislative</option><option value="LOCAL_BODY">Local Body</option></select></div>
-      {loading ? <div className={styles.empty}>Loading campaigns…</div> : !visible.length ? <div className={styles.emptyState}><Megaphone size={25} /><strong>No campaigns available</strong><span>{canManage ? "Create a campaign from a verified election geography." : "Assigned campaigns will appear here."}</span></div> : <div className={styles.campaignList}>{visible.map(function (campaign) {
-        return <Link className={styles.campaignRow} href={`/campaigns/${campaign.id}`} key={campaign.id}><div className={styles.campaignIcon}><Megaphone size={17} /></div><div className={styles.campaignMain}><span>{campaign.campaign_code}</span><h3>{campaign.campaign_name}</h3><p>{campaign.target_type} · {campaign.target_name}{campaign.created_by_name ? ` · ${campaign.created_by_name}` : ""}</p></div><div className={styles.campaignFacts}><span><MapPin size={14} />{campaign.mandal_count} Mandals</span><span><Users size={14} />{campaign.assignment_count} allocations</span><span><ClipboardList size={14} />{Number(campaign.eligible_voters || 0).toLocaleString()} voters</span></div><em>{campaign.survey_stage || "BASE"} · {campaign.status}</em></Link>;
+      {loading ? <div className={styles.empty}>Loading campaigns…</div> : !visible.length ? <div className={styles.emptyState}><Megaphone size={25} /><strong>No campaigns available</strong><span>{canCreate ? "Create a campaign from a verified election geography." : "Assigned campaigns will appear here."}</span></div> : <div className={styles.campaignList}>{visible.map(function (campaign) {
+        return <Link className={styles.campaignRow} href={`/campaigns/${campaign.id}`} key={campaign.id}><div className={styles.campaignIcon}><Megaphone size={17} /></div><div className={styles.campaignMain}><span>{campaign.campaign_code}</span><h3>{campaign.campaign_name}</h3><p>{campaign.target_type} · {campaign.target_name}{campaign.campaign_manager_name ? ` · Manager: ${campaign.campaign_manager_name}` : " · Manager unassigned"}</p></div><div className={styles.campaignFacts}><span><MapPin size={14} />{campaign.mandal_count} Mandals</span><span><Users size={14} />{campaign.assignment_count} allocations</span><span><ClipboardList size={14} />{Number(campaign.eligible_voters || 0).toLocaleString()} voters</span></div><em>{campaign.survey_stage || "BASE"} · {campaign.status}</em></Link>;
       })}</div>}
     </section>
   </div></AppShell>;

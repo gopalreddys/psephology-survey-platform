@@ -20,11 +20,13 @@ export async function getIterationAccessContext(iterationId, actor) {
       iteration.status AS iteration_status,
       link.campaign_id,
       campaign.created_by_user_id AS campaign_owner_user_id,
+      campaign.campaign_manager_user_id,
       campaign.status AS campaign_status,
       EXISTS (
         SELECT 1
         FROM campaign_work_allocations allocation
         WHERE allocation.campaign_id = link.campaign_id
+          AND (allocation.iteration_id = iteration.id OR allocation.iteration_id IS NULL)
           AND allocation.campaigner_user_id = $2
           AND allocation.status <> 'REASSIGNED'
       ) AS has_active_allocation
@@ -60,8 +62,8 @@ export async function assertIterationAccess(iterationId, actor, options = {}) {
   }
 
   if (actor.role_code === "CAMPAIGN_MANAGER") {
-    if (context.campaign_owner_user_id !== actor.id) {
-      throw accessError("Campaign Manager can access only owned campaign iterations", 403);
+    if (context.campaign_manager_user_id !== actor.id) {
+      throw accessError("Campaign Manager can access only assigned campaign iterations", 403);
     }
     return context;
   }

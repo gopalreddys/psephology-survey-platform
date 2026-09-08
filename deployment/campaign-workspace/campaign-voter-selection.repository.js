@@ -32,13 +32,14 @@ export async function selectAssignedVoters(db, {
     SELECT 1
     FROM campaign_work_allocations allocation
     WHERE allocation.campaign_id = $1
+      AND (allocation.iteration_id = $3 OR allocation.iteration_id IS NULL)
       AND allocation.campaigner_user_id = $2
       AND allocation.status <> 'REASSIGNED'
     LIMIT 1
-  `, [campaignId, campaignerUserId]);
+  `, [campaignId, campaignerUserId, iterationId]);
 
   if (!assignmentResult.rowCount) {
-    const error = new Error("Campaigner has no active allocation for this campaign");
+    const error = new Error("Campaigner has no active allocation for this iteration");
     error.statusCode = 403;
     throw error;
   }
@@ -95,6 +96,7 @@ export async function selectAssignedVoters(db, {
       SELECT allocation.geo_unit_id AS geo_unit_id
       FROM campaign_work_allocations allocation
       WHERE allocation.campaign_id = $1
+        AND (allocation.iteration_id = $3 OR allocation.iteration_id IS NULL)
         AND allocation.campaigner_user_id = $2
         AND allocation.status <> 'REASSIGNED'
         AND allocation.geo_unit_id IS NOT NULL
@@ -107,6 +109,7 @@ export async function selectAssignedVoters(db, {
         ON area_mapping.electoral_area_id = allocation.local_body_area_id
        AND area_mapping.is_active = TRUE
       WHERE allocation.campaign_id = $1
+        AND (allocation.iteration_id = $3 OR allocation.iteration_id IS NULL)
         AND allocation.campaigner_user_id = $2
         AND allocation.status <> 'REASSIGNED'
         AND allocation.local_body_area_id IS NOT NULL
@@ -127,14 +130,14 @@ export async function selectAssignedVoters(db, {
       ON geography.geo_unit_id = voter.geo_unit_id
     WHERE voter.is_active = TRUE
       AND voter.contact_status = 'ACTIVE'
-      AND ($3::text IS NULL OR voter.source_name = $3)
+      AND ($4::text IS NULL OR voter.source_name = $4)
       AND NOT EXISTS (
         SELECT 1
         FROM campaign_run_contacts existing_contact
         JOIN campaign_runs existing_run
           ON existing_run.id = existing_contact.run_id
         WHERE existing_contact.voter_id = voter.id
-          AND existing_run.iteration_id = $4
+          AND existing_run.iteration_id = $5
           AND existing_run.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
           AND COALESCE(existing_contact.final_status, 'UNRESOLVED') NOT IN (
             'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL',
@@ -142,8 +145,8 @@ export async function selectAssignedVoters(db, {
           )
       )
     ORDER BY voter.id
-    LIMIT $5
-  `, [campaignId, campaignerUserId, sourceName, iterationId, targetContacts]);
+    LIMIT $6
+    `, [campaignId, campaignerUserId, iterationId, sourceName, iterationId, targetContacts]);
 
   return result.rows;
 }

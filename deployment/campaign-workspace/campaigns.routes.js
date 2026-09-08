@@ -1,11 +1,11 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
-import { createCampaign, deleteCampaign, getCampaignById, listCampaigns, listCampaignVoters, updateCampaignStatus } from "../repositories/campaigns.repository.js";
+import { assignCampaignManager, createCampaign, deleteCampaign, getCampaignById, listCampaignersForCampaign, listCampaigns, listCampaignVoters, updateCampaignStatus } from "../repositories/campaigns.repository.js";
 
 const router = express.Router();
 const viewRoles = ["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"];
-const manageRoles = ["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"];
+const manageRoles = ["SUPER_ADMIN", "ADMIN"];
 const reviewRoles = ["SUPER_ADMIN", "ADMIN"];
 
 router.get("/campaigns", requireAuth, requireRole(viewRoles), async function (req, res) {
@@ -29,11 +29,31 @@ router.get("/campaigns/:id/voters", requireAuth, requireRole(viewRoles), async f
   } catch (error) { console.error("Load campaign voters failed:", error); res.status(500).json({ error: "Unable to load campaign voters" }); }
 });
 
+router.get("/campaigns/:id/campaigners", requireAuth, requireRole(["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"]), async function (req, res) {
+  try {
+    const campaigners = await listCampaignersForCampaign(req.params.id, req.platformUser);
+    if (!campaigners) return res.status(404).json({ error: "Campaign not found" });
+    res.json(campaigners);
+  } catch (error) {
+    console.error("Load campaigners failed:", error);
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : "Unable to load campaigners" });
+  }
+});
+
 router.patch("/campaigns/:id/status", requireAuth, requireRole(reviewRoles), async function (req, res) {
   try { res.json(await updateCampaignStatus(req.params.id, req.body?.status, req.platformUser)); }
   catch (error) {
     console.error("Update campaign status failed:", error);
     res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : "Unable to update campaign status" });
+  }
+});
+
+router.patch("/campaigns/:id/manager", requireAuth, requireRole(reviewRoles), async function (req, res) {
+  try {
+    res.json(await assignCampaignManager(req.params.id, req.body?.campaignManagerUserId, req.platformUser));
+  } catch (error) {
+    console.error("Assign Campaign Manager failed:", error);
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : "Unable to assign Campaign Manager" });
   }
 });
 
@@ -45,11 +65,11 @@ router.delete("/campaigns/:id", requireAuth, requireRole(manageRoles), async fun
   }
 });
 
-router.post("/campaigns", requireAuth, requireRole(manageRoles), async function (req, res) {
+router.post("/campaigns", requireAuth, requireRole(reviewRoles), async function (req, res) {
   try { res.status(201).json(await createCampaign(req.body || {}, req.platformUser)); }
   catch (error) {
     console.error("Create campaign failed:", error);
-    if (error.code === "23505") return res.status(409).json({ error: "Campaign code or allocation already exists" });
+    if (error.code === "23505") return res.status(409).json({ error: "Campaign code already exists" });
     res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : "Unable to create campaign" });
   }
 });

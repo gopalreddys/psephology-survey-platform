@@ -17,7 +17,6 @@ import {
 type Program = { id: string; study_name: string; study_code?: string; study_type?: string; status?: string; owner_user_id?: string | null; owner_name?: string | null };
 type Jurisdiction = { id: string; name: string; code: string | null; type_code: string; metadata?: { crosswalk_status?: string } };
 type Geography = { id: string; parent_id: string | null; name: string; geo_type: string; code: string | null; coverage_type?: "FULL" | "PARTIAL"; verification_status?: string };
-type Campaigner = { id: string; full_name: string; role_code: string; status: string };
 type LocalBody = { id: string; name: string; code: string | null; body_type: string; administrative_units: Geography[] };
 type LocalArea = { id: string; name: string; display_label: string | null; code: string | null; area_type: string; administrative_units?: Geography[] };
 type Domain = "LEGISLATIVE" | "LOCAL_BODY";
@@ -37,7 +36,6 @@ export default function NewCampaignPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [jurisdictions, setJurisdictions] = useState<Jurisdiction[]>([]);
   const [geographies, setGeographies] = useState<Geography[]>([]);
-  const [campaigners, setCampaigners] = useState<Campaigner[]>([]);
   const [existingCampaignCodes, setExistingCampaignCodes] = useState<string[]>([]);
   const [localBodies, setLocalBodies] = useState<LocalBody[]>([]);
   const [localAreas, setLocalAreas] = useState<LocalArea[]>([]);
@@ -47,7 +45,6 @@ export default function NewCampaignPage() {
   const [surveyStage, setSurveyStage] = useState<SurveyStage>("BASE");
   const [targetId, setTargetId] = useState("");
   const [scopeLinks, setScopeLinks] = useState<Geography[]>([]);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ code: "", name: "", programId: "", startDate: "", endDate: "" });
   const [saving, setSaving] = useState(false);
@@ -56,10 +53,9 @@ export default function NewCampaignPage() {
 
   useEffect(function () {
     if (!user) return;
-    Promise.all([apiFetch("/api/campaign-programs"), apiFetch("/api/jurisdictions"), apiFetch("/api/geographies"), apiFetch("/api/users"), apiFetch("/api/local-bodies?limit=10000"), apiFetch("/api/campaigns").catch(function () { return []; })])
-      .then(function ([programData, jurisdictionData, geographyData, userData, bodyData, campaignData]) {
+    Promise.all([apiFetch("/api/campaign-programs"), apiFetch("/api/jurisdictions"), apiFetch("/api/geographies"), apiFetch("/api/local-bodies?limit=10000"), apiFetch("/api/campaigns").catch(function () { return []; })])
+      .then(function ([programData, jurisdictionData, geographyData, bodyData, campaignData]) {
         setPrograms(programData); setJurisdictions(jurisdictionData); setGeographies(geographyData);
-        setCampaigners(userData.filter(function (item: Campaigner) { return item.role_code === "CAMPAIGNER" && item.status === "ACTIVE"; }));
         setLocalBodies(bodyData.items || bodyData);
         setExistingCampaignCodes((campaignData || []).map(function (item: { campaign_code?: string }) { return item.campaign_code || ""; }));
       }).catch(function (error) { setMessage(error instanceof Error ? error.message : "Unable to load campaign planning data"); });
@@ -108,27 +104,13 @@ export default function NewCampaignPage() {
   }, [mandals, geoById]);
 
   const urbanAreaMode = domain === "LOCAL_BODY" && ["MUNICIPAL_CORPORATION", "MUNICIPALITY"].includes(bodyType) && localAreas.length > 0;
-  const allocationCount = Object.values(assignments).filter(Boolean).length;
-  const allocatedMandalCount = districts.reduce(function (total, group) {
-    if (assignments[`D:${group.district.id}`]) return total + group.mandals.length;
-    return total + group.mandals.filter(function (mandal) { return Boolean(assignments[`M:${mandal.id}`]); }).length;
-  }, 0);
-  const unassignedCount = urbanAreaMode
-    ? localAreas.filter(function (area) { return !assignments[`A:${area.id}`]; }).length
-    : Math.max(mandals.length - allocatedMandalCount, 0);
   const visibleDistricts = districts.filter(function (group) { const query = search.trim().toLowerCase(); return !query || group.district.name.toLowerCase().includes(query) || group.mandals.some(function (m) { return m.name.toLowerCase().includes(query); }); });
   const scopeNames = districts.map(function (group) { return `${group.district.name} (${group.mandals.map(function (mandal) { return mandal.name; }).join(", ")})`; }).join(" · ");
-  const allocationSummaries = Object.entries(assignments).filter(function ([, campaignerId]) { return Boolean(campaignerId); }).map(function ([key, campaignerId]) {
-    const [, id] = key.split(":");
-    const geography = geographies.find(function (item) { return item.id === id; });
-    const campaigner = campaigners.find(function (item) { return item.id === campaignerId; });
-    return `${geography?.name || "Selected work area"} → ${campaigner?.full_name || "Campaigner"}`;
-  });
 
-  function resetTarget() { setTargetId(""); setScopeLinks([]); setLocalAreas([]); setAssignments({}); setReviewing(false); setMessage(null); }
+  function resetTarget() { setTargetId(""); setScopeLinks([]); setLocalAreas([]); setReviewing(false); setMessage(null); }
 
   async function chooseTarget(id: string) {
-    setTargetId(id); setScopeLinks([]); setLocalAreas([]); setAssignments({}); setReviewing(false); setMessage(null);
+    setTargetId(id); setScopeLinks([]); setLocalAreas([]); setReviewing(false); setMessage(null);
     if (!id) return;
     try {
       if (domain === "LEGISLATIVE") {
@@ -143,17 +125,9 @@ export default function NewCampaignPage() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to resolve target geography"); }
   }
 
-  function assignDistrict(districtId: string, campaignerId: string, childMandals: Geography[]) {
-    setAssignments(function (current) { const next = { ...current, [`D:${districtId}`]: campaignerId }; childMandals.forEach(function (mandal) { delete next[`M:${mandal.id}`]; }); return next; });
-  }
-
   async function save() {
-    if (!generatedCampaignCode || !form.name.trim() || !form.programId || !target || !mandals.length || !allocationCount) { setMessage("Complete the campaign details, select an assigned research program, choose a target and assign at least one work area."); return; }
+    if (!generatedCampaignCode || !form.name.trim() || !form.programId || !target || !mandals.length) { setMessage("Complete the campaign details, select an assigned research program and choose a verified target geography."); return; }
     const mode = localModes.find(function (item) { return item.type === bodyType; });
-    const work = Object.entries(assignments).filter(function ([, campaignerId]) { return Boolean(campaignerId); }).map(function ([key, campaignerUserId]) {
-      const [level, id] = key.split(":");
-      return level === "A" ? { allocationLevel: "LOCAL_BODY_AREA", localBodyAreaId: id, campaignerUserId } : { allocationLevel: level === "D" ? "DISTRICT" : "MANDAL", geoUnitId: id, campaignerUserId };
-    });
     setSaving(true); setMessage(null);
     try {
       const created = await apiFetch("/api/campaigns", { method: "POST", body: JSON.stringify({
@@ -161,22 +135,22 @@ export default function NewCampaignPage() {
         targetDomain: domain, targetType: domain === "LEGISLATIVE" ? office : mode?.target,
         jurisdictionId: domain === "LEGISLATIVE" ? target.id : null, localBodyId: domain === "LOCAL_BODY" ? target.id : null,
         targetName: target.name, targetCode: target.code, startDate: form.startDate || null, endDate: form.endDate || null,
-        mandalIds: mandals.map(function (mandal) { return mandal.id; }), assignments: work
+        mandalIds: mandals.map(function (mandal) { return mandal.id; })
       }) });
       window.location.href = `/campaigns/${created.id}`;
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to create campaign"); setSaving(false); }
   }
 
-  if (user?.role.code === "CAMPAIGNER") return <AppShell><div className={styles.page}><div className={styles.message}>Campaigners cannot create campaigns.</div></div></AppShell>;
+  if (user && !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) return <AppShell><div className={styles.page}><div className={styles.message}>Only Admins and Super Admins create campaigns. A Campaign Manager receives an assigned campaign and creates its iterations.</div></div></AppShell>;
 
   return <AppShell><div className={styles.page}>
     <div className={styles.backRow}><Link href="/campaigns"><ArrowLeft size={16} />Campaigns</Link><span>Draft remains private until it is ready for operations.</span></div>
-    <section className={styles.header}><div><span>GUIDED CAMPAIGN SETUP</span><h1>Create Campaign</h1><p>Select the election target, review its Administrative footprint and allocate non-overlapping work areas.</p></div></section>
-    <div className={styles.steps}><span className={styles.stepDone}><Check size={14} />Details</span><span className={targetId ? styles.stepDone : styles.stepActive}>2 · Election target</span><span className={allocationCount ? styles.stepDone : styles.stepActive}>3 · Work allocation</span><span className={reviewing ? styles.stepActive : ""}>4 · Review</span></div>
+    <section className={styles.header}><div><span>ADMIN CAMPAIGN SETUP</span><h1>Create Campaign</h1><p>Define the campaign scope. After creation, assign it to a Campaign Manager who will create iterations and distribute work to Campaigners.</p></div></section>
+    <div className={styles.steps}><span className={styles.stepDone}><Check size={14} />Details</span><span className={targetId ? styles.stepDone : styles.stepActive}>2 · Election target</span><span className={mandals.length ? styles.stepDone : styles.stepActive}>3 · Geography scope</span><span className={reviewing ? styles.stepActive : ""}>4 · Review</span></div>
     {message && <div className={styles.message}>{message}</div>}
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 1</span><h2>Campaign details</h2><p>This identifies the campaign independently from its research program.</p></div></div>
-      <div className={styles.formGrid}><Field label="Generated campaign code"><input value={generatedCampaignCode || "Select a program and target"} readOnly /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program *"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">Select an assigned program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}{program.study_code ? ` · ${program.study_code}` : ""}</option>; })}</select></Field><Field label="Survey iteration — Campaign Manager *"><select value={surveyStage} onChange={function (e) { setSurveyStage(e.target.value as SurveyStage); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
+      <div className={styles.formGrid}><Field label="Generated campaign code"><input value={generatedCampaignCode || "Select a program and target"} readOnly /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program *"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">Select an assigned program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}{program.study_code ? ` · ${program.study_code}` : ""}</option>; })}</select></Field><Field label="Survey stage *"><select value={surveyStage} onChange={function (e) { setSurveyStage(e.target.value as SurveyStage); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
       {!programs.length && <div className={styles.message}>No research program has been assigned to you. Ask an Admin to create and assign a program before creating a campaign.</div>}
     </section>
     <section className={styles.createPanel}>
@@ -188,18 +162,17 @@ export default function NewCampaignPage() {
       {domain === "LEGISLATIVE" && target && (target as Jurisdiction).metadata?.crosswalk_status === "WARD_CROSSWALK_REQUIRED" && <div className={styles.message}>This urban constituency is defined by municipal wards. Complete its ward-level crosswalk before allocating campaign work.</div>}
     </section>
     {target && <section className={styles.createPanel}>
-      <div className={styles.panelHeader}><div><span>STEP 3</span><h2>Allocate campaign work</h2><p>{urbanAreaMode ? "Assign divisions or wards directly." : "Assign all scoped Mandals in a District, or assign individual Mandals. The two choices cannot overlap."}</p></div><strong>{allocationCount} allocations</strong></div>
-      {urbanAreaMode ? <div className={styles.areaAllocation}>{localAreas.map(function (area) { return <label key={area.id}><span><strong>{area.display_label || area.name}</strong><small>{area.code || area.area_type}</small></span><CampaignerSelect value={assignments[`A:${area.id}`] || ""} campaigners={campaigners} onChange={function (value) { setAssignments({ ...assignments, [`A:${area.id}`]: value }); }} /></label>; })}</div> : <div className={styles.allocationBody}><label className={styles.search}><Search size={15} /><input value={search} onChange={function (event) { setSearch(event.target.value); }} placeholder="Search District or Mandal" /></label><div className={styles.districtGroups}>{visibleDistricts.map(function (group) { const districtValue = assignments[`D:${group.district.id}`] || ""; return <article key={group.district.id}><div className={styles.districtHead}><span><strong>{group.district.name}</strong><small>{group.mandals.length} Mandals in campaign scope</small></span><CampaignerSelect value={districtValue} campaigners={campaigners} onChange={function (value) { assignDistrict(group.district.id, value, group.mandals); }} prefix="Assign all scoped Mandals" /></div><div className={styles.mandalAllocation}>{group.mandals.map(function (mandal) { return <label key={mandal.id}><span><strong>{mandal.name}</strong><small>{mandal.code}</small></span><CampaignerSelect disabled={Boolean(districtValue)} value={assignments[`M:${mandal.id}`] || ""} campaigners={campaigners} onChange={function (value) { setAssignments({ ...assignments, [`M:${mandal.id}`]: value }); }} /></label>; })}</div></article>; })}</div></div>}
-      {!mandals.length && <div className={styles.empty}>No safe, assignable Mandals could be resolved. Complete this target’s verified Administrative or ward crosswalk before creating a campaign.</div>}
-      <div className={styles.footer}><div><ShieldCheck size={18} /><span><strong>Protected scope</strong><small>Campaigners receive voters only from their assigned geography inside this campaign.</small></span></div><button type="button" disabled={!allocationCount || !mandals.length} onClick={function () { setReviewing(true); }}>Review Campaign<ChevronRight size={16} /></button></div>
+      <div className={styles.panelHeader}><div><span>STEP 3</span><h2>Confirm geography scope</h2><p>{urbanAreaMode ? "The campaign includes the verified urban body areas linked to this target." : "The campaign includes the verified District and Mandal footprint. Work allocation happens after the Campaign Manager creates an iteration."}</p></div><strong>{mandals.length} Mandals</strong></div>
+      <div className={styles.allocationBody}><label className={styles.search}><Search size={15} /><input value={search} onChange={function (event) { setSearch(event.target.value); }} placeholder="Search District or Mandal" /></label><div className={styles.districtGroups}>{visibleDistricts.map(function (group) { return <article key={group.district.id}><div className={styles.districtHead}><span><strong>{group.district.name}</strong><small>{group.mandals.length} Mandals in campaign scope</small></span><span className={styles.scopeSummary}>Verified scope</span></div><div className={styles.mandalAllocation}>{group.mandals.map(function (mandal) { return <div key={mandal.id} className={styles.mandalItem}><MapPin size={15} /><span><strong>{mandal.name}</strong><small>{mandal.code || "No code"}</small></span></div>; })}</div></article>; })}</div></div>
+      {!mandals.length && <div className={styles.empty}>No safe Mandals could be resolved. Complete this target’s verified Administrative or ward crosswalk before creating a campaign.</div>}
+      <div className={styles.footer}><div><ShieldCheck size={18} /><span><strong>Two-stage ownership</strong><small>Admin assigns this campaign to a Campaign Manager; that manager allocates each iteration to Campaigners.</small></span></div><button type="button" disabled={!mandals.length} onClick={function () { setReviewing(true); }}>Review Campaign<ChevronRight size={16} /></button></div>
     </section>}
     {reviewing && target && <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 4</span><h2>Review campaign</h2><p>Confirm the constituency, voter geography and campaigner workload before creating the draft.</p></div></div>
-      <div className={styles.reviewGrid}><div><small>Campaign identity</small><strong>{form.name || "Campaign name required"}</strong><span>{generatedCampaignCode || "Code generated after target selection"}</span></div><div><small>Research program</small><strong>{programs.find(function (program) { return program.id === form.programId; })?.study_name || "Program required"}</strong><span>Admin-assigned program</span></div><div><small>Survey iteration</small><strong>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.label}</strong><span>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.detail}</span></div><div><small>Election constituency</small><strong>{target.name}</strong><span>{domain === "LEGISLATIVE" ? `${office} constituency` : localModes.find(function (item) { return item.type === bodyType; })?.label}</span></div><div><small>Voter geography</small><strong>{districts.length} District · {mandals.length} Mandal</strong><span>{scopeNames || "No administrative geography resolved"}</span></div><div className={unassignedCount ? styles.reviewWarning : ""}><small>Campaigner workload</small><strong>{allocationCount} assignment{allocationCount === 1 ? "" : "s"} covering {allocatedMandalCount} Mandal{allocatedMandalCount === 1 ? "" : "s"}</strong><span>{unassignedCount ? `${unassignedCount} work areas remain unassigned` : "Every scoped work area is assigned"}</span></div><div className={styles.reviewWide}><small>Assignments</small><strong>Who will work each area</strong><div>{allocationSummaries.length ? allocationSummaries.map(function (summary) { return <span key={summary}>{summary}</span>; }) : <span>No campaigner assignments yet</span>}</div></div></div>
+      <div className={styles.reviewGrid}><div><small>Campaign identity</small><strong>{form.name || "Campaign name required"}</strong><span>{generatedCampaignCode || "Code generated after target selection"}</span></div><div><small>Research program</small><strong>{programs.find(function (program) { return program.id === form.programId; })?.study_name || "Program required"}</strong><span>Admin-assigned program</span></div><div><small>Survey stage</small><strong>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.label}</strong><span>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.detail}</span></div><div><small>Election constituency</small><strong>{target.name}</strong><span>{domain === "LEGISLATIVE" ? `${office} constituency` : localModes.find(function (item) { return item.type === bodyType; })?.label}</span></div><div><small>Geography scope</small><strong>{districts.length} District · {mandals.length} Mandal</strong><span>{scopeNames || "No administrative geography resolved"}</span></div><div className={styles.reviewWarning}><small>Next owner</small><strong>Campaign Manager</strong><span>Assign the draft after creation, then the manager creates iterations and Campaigner allocations.</span></div></div>
       <div className={styles.footer}><button type="button" className={styles.secondaryButton} onClick={function () { setReviewing(false); }}>Back to allocation</button><button type="button" disabled={saving || !generatedCampaignCode || !form.name.trim() || !form.programId} onClick={save}>{saving ? "Creating Draft…" : "Create Draft Campaign"}<ChevronRight size={16} /></button></div>
     </section>}
   </div></AppShell>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className={styles.field}><span>{label}</span>{children}</label>; }
-function CampaignerSelect({ value, campaigners, onChange, disabled, prefix = "Assign campaigner" }: { value: string; campaigners: Campaigner[]; onChange: (value: string) => void; disabled?: boolean; prefix?: string }) { return <select disabled={disabled} value={value} onChange={function (event) { onChange(event.target.value); }}><option value="">{disabled ? "Covered by District" : prefix}</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select>; }

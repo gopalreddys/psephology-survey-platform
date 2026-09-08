@@ -4,7 +4,11 @@ import { assertCampaignProgramAccess } from "./campaign-programs.repository.js";
 function visibilitySql(actor, parameterNumber) {
   if (["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) return { sql: "TRUE", values: [] };
   if (actor.role_code === "CAMPAIGN_MANAGER") {
-    return { sql: `campaign.created_by_user_id = $${parameterNumber}`, values: [actor.id] };
+    return {
+      sql: `(campaign.campaign_manager_user_id = $${parameterNumber}
+        OR (campaign.campaign_manager_user_id IS NULL AND campaign.created_by_user_id = $${parameterNumber}))`,
+      values: [actor.id]
+    };
   }
   return { sql: `EXISTS (
     SELECT 1 FROM campaign_work_allocations visible
@@ -37,12 +41,15 @@ export async function listCampaigns(actor) {
     )
     SELECT campaign.id, campaign.campaign_code, campaign.campaign_name,
       campaign.target_domain, campaign.target_type, campaign.target_name, campaign.target_code,
-      campaign.status, campaign.survey_stage, campaign.start_date, campaign.end_date, owner.full_name AS created_by_name,
+      campaign.status, campaign.survey_stage, campaign.start_date, campaign.end_date,
+      owner.full_name AS created_by_name, manager.full_name AS campaign_manager_name,
+      campaign.campaign_manager_user_id,
       COALESCE(scope_count.mandal_count, 0) AS mandal_count,
       COALESCE(allocation_count.assignment_count, 0) AS assignment_count,
       COALESCE(voter_count.eligible_voters, 0) AS eligible_voters
     FROM campaigns campaign
     LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
+    LEFT JOIN users manager ON manager.id = campaign.campaign_manager_user_id
     LEFT JOIN scope_counts scope_count ON scope_count.campaign_id = campaign.id
     LEFT JOIN allocation_counts allocation_count ON allocation_count.campaign_id = campaign.id
     LEFT JOIN voter_counts voter_count ON voter_count.campaign_id = campaign.id
@@ -56,8 +63,11 @@ export async function getCampaignById(id, actor) {
   const db = await getDb();
   const visibility = visibilitySql(actor, 2);
   const campaignResult = await db.query(`
-    SELECT campaign.*, owner.full_name AS created_by_name
-    FROM campaigns campaign LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
+    SELECT campaign.*, owner.full_name AS created_by_name,
+      manager.full_name AS campaign_manager_name
+    FROM campaigns campaign
+    LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
+    LEFT JOIN users manager ON manager.id = campaign.campaign_manager_user_id
     WHERE campaign.id = $1 AND ${visibility.sql}
   `, [id, ...visibility.values]);
   if (!campaignResult.rowCount) return null;
@@ -85,13 +95,15 @@ export async function getCampaignById(id, actor) {
       WHERE scope.campaign_id = $1 ${scopeFilter} ORDER BY district.name, mandal.name
     `, allocationValues),
     db.query(`
-      SELECT allocation.id, allocation.allocation_level, allocation.geo_unit_id,
+      SELECT allocation.id, allocation.iteration_id, allocation.allocation_level, allocation.geo_unit_id,
         allocation.local_body_area_id, allocation.status,
         COALESCE(geo.name, area.name) AS geography_name,
         COALESCE(geo.code, area.code) AS geography_code,
-        account.id AS campaigner_user_id, account.full_name AS campaigner_name
+        account.id AS campaigner_user_id, account.full_name AS campaigner_name,
+        iteration.iteration_number, iteration.iteration_name
       FROM campaign_work_allocations allocation
       JOIN users account ON account.id = allocation.campaigner_user_id
+      LEFT JOIN program_iterations iteration ON iteration.id = allocation.iteration_id
       LEFT JOIN geo_units geo ON geo.id = allocation.geo_unit_id
       LEFT JOIN local_body_electoral_areas area ON area.id = allocation.local_body_area_id
       WHERE allocation.campaign_id = $1 AND allocation.status <> 'REASSIGNED' ${campaignerFilter}
@@ -130,11 +142,11 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
     const readiness = await db.query(`
       SELECT
         (SELECT COUNT(*) FROM campaign_geo_scope WHERE campaign_id = $1)::int AS scope_count,
-        (SELECT COUNT(*) FROM campaign_work_allocations WHERE campaign_id = $1 AND status <> 'REASSIGNED')::int AS allocation_count
+        (SELECT campaign_manager_user_id FROM campaigns WHERE id = $1) AS campaign_manager_user_id
     `, [id]);
     const row = readiness.rows[0];
-    if (!Number(row.scope_count) || !Number(row.allocation_count)) {
-      const error = new Error("A campaign needs verified geography and at least one active allocation before activation"); error.statusCode = 400; throw error;
+    if (!Number(row.scope_count) || !row.campaign_manager_user_id) {
+      const error = new Error("A campaign needs verified geography and an assigned Campaign Manager before activation"); error.statusCode = 400; throw error;
     }
   }
   const result = await db.query("UPDATE campaigns SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, status, updated_at", [id, status]);
@@ -148,10 +160,9 @@ export async function deleteCampaign(id, actor) {
     const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
   }
   const campaign = result.rows[0];
-  const canDelete = ["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)
-    || (actor.role_code === "CAMPAIGN_MANAGER" && campaign.created_by_user_id === actor.id);
+  const canDelete = ["SUPER_ADMIN", "ADMIN"].includes(actor.role_code);
   if (!canDelete) {
-    const error = new Error("Only the campaign owner or an Admin can delete this campaign"); error.statusCode = 403; throw error;
+    const error = new Error("Only Admin or Super Admin users can delete campaigns"); error.statusCode = 403; throw error;
   }
   if (campaign.status !== "DRAFT") {
     const error = new Error("Only unstarted Draft campaigns can be deleted"); error.statusCode = 400; throw error;
@@ -219,6 +230,9 @@ export async function listCampaignVoters(id, actor, { limit = 100, offset = 0 } 
 }
 
 export async function createCampaign(input, actor) {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
+    const error = new Error("Only Admin or Super Admin users can create campaigns"); error.statusCode = 403; throw error;
+  }
   const db = await getDb();
   const campaignCode = String(input.campaignCode || "").trim();
   const campaignName = String(input.campaignName || "").trim();
@@ -226,17 +240,12 @@ export async function createCampaign(input, actor) {
   const programId = String(input.programId || "").trim();
   const surveyStage = String(input.surveyStage || "BASE").trim().toUpperCase();
   const mandalIds = Array.from(new Set(Array.isArray(input.mandalIds) ? input.mandalIds : []));
-  const allocations = Array.isArray(input.assignments) ? input.assignments : [];
   if (!campaignCode || !campaignName || !programId || !targetName || !mandalIds.length) {
     const error = new Error("Campaign code, name, assigned research program, target and Administrative scope are required"); error.statusCode = 400; throw error;
   }
   if (!["BASE", "CAMPAIGN", "TURNOUT"].includes(surveyStage)) {
     const error = new Error("Survey iteration must be BASE, CAMPAIGN or TURNOUT"); error.statusCode = 400; throw error;
   }
-  if (!allocations.length) {
-    const error = new Error("Assign at least one District or Mandal"); error.statusCode = 400; throw error;
-  }
-
   const client = await db.connect();
   try {
     await client.query("BEGIN");
@@ -284,45 +293,6 @@ export async function createCampaign(input, actor) {
         const error = new Error("Campaign contains a Mandal outside the verified full constituency scope"); error.statusCode = 400; throw error;
       }
     }
-    const scopeMandalIds = new Set(validMandals.rows.map(function (row) { return row.id; }));
-    const scopeDistrictIds = new Set(validMandals.rows.map(function (row) { return row.parent_id; }).filter(Boolean));
-    const seenDistricts = new Set();
-    const seenMandals = new Set();
-    const seenLocalAreas = new Set();
-    for (const allocation of allocations) {
-      const geographyValid = ["DISTRICT", "MANDAL"].includes(allocation.allocationLevel) && allocation.geoUnitId;
-      const localAreaValid = allocation.allocationLevel === "LOCAL_BODY_AREA" && allocation.localBodyAreaId;
-      if ((!geographyValid && !localAreaValid) || !allocation.campaignerUserId) {
-        const error = new Error("Every allocation requires a valid level, geography and campaigner"); error.statusCode = 400; throw error;
-      }
-      if (allocation.allocationLevel === "DISTRICT") seenDistricts.add(allocation.geoUnitId);
-      else if (allocation.allocationLevel === "MANDAL") seenMandals.add(allocation.geoUnitId);
-      else seenLocalAreas.add(allocation.localBodyAreaId);
-    }
-    for (const districtId of seenDistricts) {
-      if (!scopeDistrictIds.has(districtId)) { const error = new Error("District allocation is outside the campaign scope"); error.statusCode = 400; throw error; }
-      if (validMandals.rows.some(function (row) { return row.parent_id === districtId && seenMandals.has(row.id); })) {
-        const error = new Error("A District and one of its Mandals cannot both be assigned"); error.statusCode = 400; throw error;
-      }
-    }
-    for (const mandalId of seenMandals) {
-      if (!scopeMandalIds.has(mandalId)) { const error = new Error("Mandal allocation is outside the campaign scope"); error.statusCode = 400; throw error; }
-    }
-    const campaignerIds = Array.from(new Set(allocations.map(function (allocation) { return allocation.campaignerUserId; })));
-    const validCampaigners = await client.query(`
-      SELECT account.id FROM users account JOIN roles role ON role.id = account.role_id
-      WHERE account.id = ANY($1::uuid[]) AND account.status = 'ACTIVE' AND role.code = 'CAMPAIGNER'
-    `, [campaignerIds]);
-    if (validCampaigners.rowCount !== campaignerIds.length) { const error = new Error("An allocation contains an inactive or invalid Campaigner"); error.statusCode = 400; throw error; }
-    if (seenLocalAreas.size) {
-      if (!input.localBodyId) { const error = new Error("Local electoral-area allocation requires a Local Body target"); error.statusCode = 400; throw error; }
-      const validAreas = await client.query(`
-        SELECT id FROM local_body_electoral_areas
-        WHERE id = ANY($1::uuid[]) AND local_body_id = $2 AND is_active = TRUE
-      `, [Array.from(seenLocalAreas), input.localBodyId]);
-      if (validAreas.rowCount !== seenLocalAreas.size) { const error = new Error("Local electoral-area allocation is outside the campaign target"); error.statusCode = 400; throw error; }
-    }
-
     const campaignResult = await client.query(`
       INSERT INTO campaigns (campaign_code, campaign_name, program_id, survey_stage, target_domain,
         target_type, jurisdiction_id, local_body_id, local_body_area_id, target_name,
@@ -334,15 +304,68 @@ export async function createCampaign(input, actor) {
       input.startDate || null, input.endDate || null, actor.id]);
     const campaign = campaignResult.rows[0];
     await client.query(`INSERT INTO campaign_geo_scope (campaign_id, geo_unit_id) SELECT $1, unnest($2::uuid[])`, [campaign.id, mandalIds]);
-    for (const allocation of allocations) {
-      await client.query(`
-        INSERT INTO campaign_work_allocations (campaign_id, allocation_level, geo_unit_id,
-          local_body_area_id, campaigner_user_id, assigned_by_user_id) VALUES ($1,$2,$3,$4,$5,$6)
-      `, [campaign.id, allocation.allocationLevel, allocation.geoUnitId || null,
-        allocation.localBodyAreaId || null, allocation.campaignerUserId, actor.id]);
-    }
     await client.query("COMMIT");
     return campaign;
   } catch (error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
+}
+
+export async function assignCampaignManager(campaignId, managerUserId, actor) {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
+    const error = new Error("Only Admin or Super Admin users can assign Campaign Managers"); error.statusCode = 403; throw error;
+  }
+  const managerId = String(managerUserId || "").trim();
+  if (!managerId) {
+    const error = new Error("A Campaign Manager is required"); error.statusCode = 400; throw error;
+  }
+  const db = await getDb();
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const managerResult = await client.query(`
+      SELECT account.id, account.full_name
+      FROM users account
+      JOIN roles role ON role.id = account.role_id
+      WHERE account.id = $1 AND account.status = 'ACTIVE' AND role.code = 'CAMPAIGN_MANAGER'
+      LIMIT 1
+    `, [managerId]);
+    if (!managerResult.rowCount) {
+      const error = new Error("Selected user is not an active Campaign Manager"); error.statusCode = 400; throw error;
+    }
+    const campaignResult = await client.query(`
+      UPDATE campaigns
+      SET campaign_manager_user_id = $2,
+          campaign_manager_assigned_by_user_id = $3,
+          campaign_manager_assigned_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $1 AND status = 'DRAFT'
+        AND NOT EXISTS (
+          SELECT 1 FROM campaign_iteration_links link WHERE link.campaign_id = campaigns.id
+        )
+      RETURNING id, campaign_manager_user_id, campaign_manager_assigned_at
+    `, [campaignId, managerId, actor.id]);
+    if (!campaignResult.rowCount) {
+      const error = new Error("Only a Draft campaign without iterations can be assigned to a Campaign Manager"); error.statusCode = 409; throw error;
+    }
+    await client.query("COMMIT");
+    return { ...campaignResult.rows[0], campaign_manager_name: managerResult.rows[0].full_name };
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
+}
+
+export async function listCampaignersForCampaign(campaignId, actor) {
+  if (!["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"].includes(actor.role_code)) {
+    const error = new Error("Campaigners are not available to this role"); error.statusCode = 403; throw error;
+  }
+  const campaign = await getCampaignById(campaignId, actor);
+  if (!campaign) return null;
+  const db = await getDb();
+  const result = await db.query(`
+    SELECT account.id, account.full_name, account.email, role.code AS role_code
+    FROM users account
+    JOIN roles role ON role.id = account.role_id
+    WHERE account.status = 'ACTIVE' AND role.code = 'CAMPAIGNER'
+    ORDER BY account.full_name
+  `);
+  return result.rows;
 }

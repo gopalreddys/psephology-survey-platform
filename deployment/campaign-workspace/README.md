@@ -28,8 +28,10 @@ This package adds the operational campaign tables and secured endpoints required
 - `harden-user-creation-access.js` → `src/db/harden-user-creation-access.js`
 - `014_user_profiles.sql` → `sql/014_user_profiles.sql`
 - `015_user_role_changes.sql` → `sql/015_user_role_changes.sql`
+- `016_campaign_manager_workflow.sql` → `sql/016_campaign_manager_workflow.sql`
 - `migrate-user-profiles.js` → `src/db/migrate-user-profiles.js`
 - `migrate-user-role-changes.js` → `src/db/migrate-user-role-changes.js`
+- `migrate-campaign-manager-workflow.js` → `src/db/migrate-campaign-manager-workflow.js`
 - `user-profiles.repository.js` → `src/repositories/user-profiles.repository.js`
 - `user-profiles.routes.js` → `src/routes/user-profiles.routes.js`
 - `register-user-profiles-route.js` → `src/db/register-user-profiles-route.js`
@@ -81,13 +83,16 @@ GET  /api/campaign-programs
 GET  /api/campaigns/:id/iterations
 POST /api/campaigns/:id/iterations
 PATCH /api/campaigns/:campaignId/iterations/:iterationId/status
+GET  /api/campaigns/:campaignId/iterations/:iterationId/allocations
+PUT  /api/campaigns/:campaignId/iterations/:iterationId/allocations
+PATCH /api/campaigns/:id/manager
 ```
 
-All endpoints require authentication. Creating campaigns is restricted to Super Admin, Admin and Campaign Manager roles. A campaign must reference an Admin-created research program; the API rejects campaigns without `program_id`.
+All endpoints require authentication. Creating campaigns is restricted to Super Admin and Admin roles. A campaign must reference an Admin-created research program; the API rejects campaigns without `program_id`. Admins assign Draft campaigns to Campaign Managers after creation.
 
-Campaign visibility is enforced from `req.platformUser`: Admin roles see all campaigns, Campaign Managers see only campaigns they created, and Campaigners see only campaigns assigned to them. Campaigner detail and voter endpoints are limited to assigned work geography.
+Campaign visibility is enforced from `req.platformUser`: Admin roles see all campaigns, Campaign Managers see only campaigns assigned to them, and Campaigners see only campaigns with an active iteration allocation for them. Campaigner detail and voter endpoints are limited to assigned work geography.
 
-Only the campaign owner or an Admin can delete a campaign, and deletion is allowed only while the campaign is still `DRAFT`. Active, paused and completed campaigns are retained for audit history.
+Only Admin or Super Admin users can delete a campaign, and deletion is allowed only while the campaign is still `DRAFT`. Active, paused and completed campaigns are retained for audit history.
 
 Voter totals are calculated dynamically from each campaign's selected Mandals and all child geography records. No voter row is copied into campaign tables.
 
@@ -107,12 +112,12 @@ The campaign form sends the selected program id as `programId`. The Programs lis
 Campaigns are the operational parent of research iterations. The API must enforce:
 
 - `SUPER_ADMIN` and `ADMIN` can review campaign iterations and program status, but do not create iterations.
-- `CAMPAIGN_MANAGER` can create, update and review iterations only for campaigns they created; the campaign must reference an Admin-assigned program.
-- `CAMPAIGNER` can view iterations and runs only when a current `campaign_work_allocations` row assigns work to them. Campaigners create execution Runs; they do not create iterations.
+- `CAMPAIGN_MANAGER` can create, update and review iterations only for campaigns assigned to them by an Admin; the campaign must reference an Admin-assigned program.
+- `CAMPAIGNER` can view iterations and runs only when a current iteration-scoped `campaign_work_allocations` row assigns work to them. Campaigners create execution Runs; they do not create iterations.
 - `GET /api/campaigns/:id/iterations` returns the canonical iteration record plus `campaign_id`, stage, status, target sample and run count.
 - `POST /api/campaigns/:id/iterations` creates the canonical iteration through the existing iteration service and inserts a row in `campaign_iteration_links` in the same transaction. The service must derive `study_id` from the campaign’s `program_id` and reject a campaign without a verified program.
 - `PATCH /api/campaigns/:campaignId/iterations/:iterationId/status` is limited to the owning Campaign Manager and Admin/Super Admin review roles, with valid transitions only (`PLANNED → ACTIVE → PAUSED/COMPLETED`, and `PAUSED → ACTIVE/COMPLETED`).
-- Run creation remains protected by the existing iteration/run API and must additionally verify that the caller is a Campaigner with an active allocation inside the linked campaign.
+- Run creation remains protected by the existing iteration/run API and must additionally verify that the caller is a Campaigner with an active allocation inside the exact linked iteration.
 
 The `campaign_iteration_links` table is deliberately a bridge rather than a second iteration table. This preserves one canonical iteration/run model while making campaign ownership auditable and queryable.
 
@@ -128,7 +133,7 @@ Copy `iteration-access.repository.js` into the API repository and call `assertIt
 - `GET /api/iterations/:id/runs`
 - `POST /api/iterations/:id/runs`
 
-The helper preserves Admin/Super Admin read access to legacy iterations, restricts Campaign Managers to their own campaign iterations, and requires Campaigners to have an active campaign allocation. The Run repository must call the same helper before selecting voters or creating a Run; hiding the button in the frontend is not an authorization boundary.
+The helper preserves Admin/Super Admin read access to legacy iterations, restricts Campaign Managers to iterations in campaigns assigned to them, and requires Campaigners to have an active allocation for that exact iteration. The Run repository must call the same helper before selecting voters or creating a Run; hiding the button in the frontend is not an authorization boundary.
 
 ## Run ownership and duplicate-work hardening
 
@@ -198,6 +203,7 @@ User profile storage keeps only masked government-ID metadata and private object
 node src/db/migrate-user-profiles.js
 node src/db/register-user-profiles-route.js
 node src/db/migrate-user-role-changes.js
+node src/db/migrate-campaign-manager-workflow.js
 ```
 
 ## Role management
@@ -212,3 +218,15 @@ Body: { "roleCode": "ADMIN" | "CAMPAIGN_MANAGER" | "CAMPAIGNER" | "SUPER_ADMIN" 
 Role changes are recorded in `user_role_change_audit`. The API prevents self-role changes, prevents an Admin from modifying or granting the Super Admin role, and prevents demoting the last active Super Admin. The current user is never shown an enabled role selector. Regular users see the role as a read-only badge.
 
 The create-user form applies the same UI restriction: Admins can create Admin, Campaign Manager and Campaigner accounts, while only Super Admins can create another Super Admin. The POST `/api/users` route must remain protected by `requireRole(["SUPER_ADMIN", "ADMIN"])`; enforce the role-grant policy in that route/repository as well when maintaining the API copy.
+
+## Campaign ownership workflow
+
+Campaign ownership is deliberately staged:
+
+1. `SUPER_ADMIN` or `ADMIN` creates the research program and campaign geography.
+2. `SUPER_ADMIN` or `ADMIN` assigns the Draft campaign to one active `CAMPAIGN_MANAGER` with `PATCH /api/campaigns/:id/manager`.
+3. The assigned Campaign Manager creates the campaign iterations.
+4. The assigned Campaign Manager allocates Districts/Mandals or local electoral areas for each iteration with `PUT /api/campaigns/:campaignId/iterations/:iterationId/allocations`.
+5. Campaigners see only iterations where they have an active iteration allocation and create the Runs for those areas.
+
+Campaign creation no longer accepts Campaigner allocations. Migration 016 adds campaign-manager ownership and iteration-scoped allocation records while preserving legacy campaign data. Run voter selection and iteration access must use the allocation’s `iteration_id`, so work assigned to one iteration cannot leak into another iteration.

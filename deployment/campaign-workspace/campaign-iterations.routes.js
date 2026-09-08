@@ -3,7 +3,9 @@ import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
 import {
   createCampaignIteration,
+  listCampaignIterationAllocations,
   listCampaignIterations,
+  saveCampaignIterationAllocations,
   updateCampaignIterationStatus
 } from "../repositories/campaign-iterations.repository.js";
 
@@ -43,6 +45,31 @@ router.post("/campaigns/:id/iterations", requireAuth, requireRole(["CAMPAIGN_MAN
     return res.status(201).json(result);
   } catch (error) {
     return sendError(res, error, "Unable to create campaign iteration");
+  }
+});
+
+router.get("/campaigns/:campaignId/iterations/:iterationId/allocations", requireAuth, requireRole(viewRoles), async function (req, res) {
+  try {
+    return res.json(await listCampaignIterationAllocations(
+      req.params.campaignId,
+      req.params.iterationId,
+      req.platformUser
+    ));
+  } catch (error) {
+    return sendError(res, error, "Unable to load iteration allocations");
+  }
+});
+
+router.put("/campaigns/:campaignId/iterations/:iterationId/allocations", requireAuth, requireRole(["CAMPAIGN_MANAGER"]), async function (req, res) {
+  try {
+    return res.json(await saveCampaignIterationAllocations(
+      req.params.campaignId,
+      req.params.iterationId,
+      req.body?.assignments,
+      req.platformUser
+    ));
+  } catch (error) {
+    return sendError(res, error, "Unable to save iteration allocations");
   }
 });
 
