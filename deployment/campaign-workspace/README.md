@@ -16,6 +16,7 @@ This package adds the operational campaign tables and secured endpoints required
 - `migrate-campaign-iteration-ownership.js` → `src/db/migrate-campaign-iteration-ownership.js`
 - `campaign-iterations.repository.js` → `src/repositories/campaign-iterations.repository.js`
 - `campaign-iterations.routes.js` → `src/routes/campaign-iterations.routes.js`
+- `iteration-access.repository.js` → `src/repositories/iteration-access.repository.js`
 - `campaigns.repository.js` → `src/repositories/campaigns.repository.js`
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
@@ -99,3 +100,15 @@ Campaigns are the operational parent of research iterations. The API must enforc
 The `campaign_iteration_links` table is deliberately a bridge rather than a second iteration table. This preserves one canonical iteration/run model while making campaign ownership auditable and queryable.
 
 The repository adapter uses the existing `survey_studies` and `program_iterations` tables and creates the iteration plus ownership link in one transaction. Run counts are initially returned as zero by this adapter; connect the existing run repository’s aggregate when the API exposes the run table used by `/api/iterations/:id/runs`.
+
+## Direct iteration access hardening
+
+Copy `iteration-access.repository.js` into the API repository and call `assertIterationAccess(req.params.id, req.platformUser)` at the start of every protected handler for:
+
+- `GET /api/iterations/:id`
+- `GET /api/iterations/:id/coverage`
+- `GET /api/iterations/:id/questionnaire-analysis`
+- `GET /api/iterations/:id/runs`
+- `POST /api/iterations/:id/runs`
+
+The helper preserves Admin/Super Admin read access to legacy iterations, restricts Campaign Managers to their own campaign iterations, and requires Campaigners to have an active campaign allocation. The Run repository must call the same helper before selecting voters or creating a Run; hiding the button in the frontend is not an authorization boundary.
