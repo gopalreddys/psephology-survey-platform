@@ -148,7 +148,7 @@ Then iterate over `selected` directly (`for (const voter of selected)`) and use 
 
 Migration 013 adds unique Run and retry-cycle numbers and a transaction-level advisory lock plus trigger that prevents an active voter from being selected into two active Runs within the same Iteration.
 
-Run waves follow the coverage policy: Run 1 freezes the initial voter cohort, Run 2 contains only unresolved contacts from completed Run 1, and Run 3 contains only unresolved contacts from completed Run 2. The API can continue with later waves when unresolved contacts remain, but it never introduces a fresh unattempted voter into a retry wave. A `campaign_run_cycle` remains an attempt within one Run; it is not a replacement for the next Run wave.
+Run waves follow the coverage policy: Run 1 freezes the initial voter cohort, Run 2 contains only unresolved contacts from completed Run 1, and Run 3 contains only unresolved contacts from completed Run 2. The API can continue with later waves when unresolved contacts remain, but it never introduces a fresh unattempted voter into a retry wave or creates an empty retry Run. A `campaign_run_cycle` remains an attempt within one Run; it is not a replacement for the next Run wave.
 
 To change the three Run mutation routes to Campaigner-only without manually editing the route file, run this after copying the script:
 

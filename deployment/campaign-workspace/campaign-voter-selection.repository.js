@@ -81,6 +81,12 @@ export async function selectAssignedVoters(db, {
       LIMIT $3
     `, [previousRunResult.rows[0].id, sourceName, targetContacts]);
 
+    if (!result.rowCount) {
+      const error = new Error(`Run ${runNumber - 1} has no unresolved contacts; no new Run is required`);
+      error.statusCode = 409;
+      throw error;
+    }
+
     return result.rows;
   }
 
