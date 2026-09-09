@@ -8,6 +8,8 @@ analytics.
 ## Safety contract
 
 - Only `SUPER_ADMIN` and `ADMIN` can access the endpoints.
+- Only voters explicitly classified with `is_demo_contact = true` can receive a
+  demo call; the database default is `false`.
 - The voter must be active and have an active phone contact.
 - The caller must explicitly confirm that the number is a consented test number.
 - A client-generated idempotency key prevents request replay.
@@ -24,7 +26,16 @@ cd /opt/psephology-survey-ui/psephology
 cp deployment/voter-demo-call/017_voter_demo_calls.sql \
   /opt/sarvam-voice-analytics/sql/
 
+cp deployment/voter-demo-call/018_voter_demo_contact_flag.sql \
+  /opt/sarvam-voice-analytics/sql/
+
 cp deployment/voter-demo-call/migrate-voter-demo-calls.js \
+  /opt/sarvam-voice-analytics/src/db/
+
+cp deployment/voter-demo-call/migrate-voter-demo-contact-flag.js \
+  /opt/sarvam-voice-analytics/src/db/
+
+cp deployment/voter-demo-call/mark-demo-voters.js \
   /opt/sarvam-voice-analytics/src/db/
 
 cp deployment/voter-demo-call/voter-demo-calls.repository.js \
@@ -71,6 +82,7 @@ neutral questions and immediate termination when the participant asks to stop.
 cd /opt/sarvam-voice-analytics
 
 node src/db/migrate-voter-demo-calls.js
+node src/db/migrate-voter-demo-contact-flag.js
 node src/db/register-voter-demo-call-route.js
 
 node --check src/repositories/voter-demo-calls.repository.js
@@ -88,7 +100,24 @@ The protected routes are:
 ```text
 POST /api/voters/:voterId/demo-calls
 GET  /api/voters/:voterId/demo-calls?limit=10
+GET  /api/voter-demo-contacts
 ```
 
 A request without an authenticated token should return `401`; a signed-in
 Campaign Manager or Campaigner should receive `403`.
+
+## Approve demo voters
+
+Approval uses exact EPIC IDs and never prints phone numbers. Run the utility
+without `--apply` first to validate the records, then repeat it with `--apply`:
+
+```bash
+cd /opt/sarvam-voice-analytics
+
+node src/db/mark-demo-voters.js DEMO_EPIC_1 DEMO_EPIC_2
+node src/db/mark-demo-voters.js --apply DEMO_EPIC_1 DEMO_EPIC_2
+```
+
+Only active voters with active phone contacts can be approved. Each change is
+recorded in `voter_demo_contact_audit`. Ordinary voters remain ineligible even
+if an administrator crafts the API request manually.

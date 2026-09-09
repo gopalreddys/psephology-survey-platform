@@ -2,6 +2,7 @@ import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
 import {
+  listVoterDemoContactIds,
   listVoterDemoCalls,
   reserveVoterDemoCall,
   updateVoterDemoCall
@@ -11,6 +12,23 @@ import { dispatchVoterDemoCall } from "../services/voter-demo-call.service.js";
 const router = express.Router();
 const demoCallRoles = ["SUPER_ADMIN", "ADMIN"];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+router.get(
+  "/voter-demo-contacts",
+  requireAuth,
+  requireRole(demoCallRoles),
+  async function (_req, res) {
+    try {
+      const voterIds = await listVoterDemoContactIds();
+      return res.json({ voterIds });
+    } catch (error) {
+      console.error("Load approved demo voters failed:", error);
+      return res.status(500).json({
+        error: "Unable to load approved demo voters"
+      });
+    }
+  }
+);
 
 router.get(
   "/voters/:voterId/demo-calls",

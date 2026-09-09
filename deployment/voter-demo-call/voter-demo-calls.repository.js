@@ -58,7 +58,8 @@ export async function reserveVoterDemoCall({
           occupation,
           qualification,
           contact_status,
-          is_active
+          is_active,
+          is_demo_contact
         FROM voter_master
         WHERE id = $1
         FOR UPDATE
@@ -77,6 +78,14 @@ export async function reserveVoterDemoCall({
         "Only an active voter contact can receive a demo call",
         409,
         "VOTER_NOT_ACTIVE"
+      );
+    }
+
+    if (!voter.is_demo_contact) {
+      throw repositoryError(
+        "Demo calls are restricted to explicitly approved demo voters",
+        403,
+        "VOTER_NOT_APPROVED_FOR_DEMO"
       );
     }
 
@@ -143,6 +152,25 @@ export async function reserveVoterDemoCall({
   } finally {
     db.release();
   }
+}
+
+export async function listVoterDemoContactIds() {
+  const db = await getDb();
+
+  const result = await db.query(
+    `
+      SELECT id
+      FROM voter_master
+      WHERE is_demo_contact = TRUE
+        AND is_active = TRUE
+        AND contact_status = 'ACTIVE'
+        AND phone_number IS NOT NULL
+        AND length(trim(phone_number)) > 0
+      ORDER BY id
+    `
+  );
+
+  return result.rows.map((row) => row.id);
 }
 
 export async function updateVoterDemoCall(demoCallId, {

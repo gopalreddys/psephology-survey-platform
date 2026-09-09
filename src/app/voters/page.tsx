@@ -205,6 +205,15 @@ export default function VotersPage() {
     );
 
 
+  const [
+    demoContactIds,
+    setDemoContactIds
+  ] =
+    useState<Set<string>>(
+      new Set()
+    );
+
+
   async function loadData() {
     try {
 
@@ -251,6 +260,37 @@ export default function VotersPage() {
   }
 
 
+  async function loadDemoContacts() {
+    try {
+
+      const result =
+        await apiFetch(
+          "/api/voter-demo-contacts"
+        );
+
+      setDemoContactIds(
+        new Set(
+          Array.isArray(result.voterIds)
+            ? result.voterIds
+            : []
+        )
+      );
+
+    } catch (error) {
+
+      setDemoContactIds(
+        new Set()
+      );
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load approved demo voters"
+      );
+    }
+  }
+
+
   useEffect(
     function () {
 
@@ -270,6 +310,32 @@ export default function VotersPage() {
 
     },
     []
+  );
+
+
+  useEffect(
+    function () {
+
+      if (!canLaunchDemoCall) {
+        return;
+      }
+
+      const loadTimer =
+        window.setTimeout(
+          function () {
+            loadDemoContacts();
+          },
+          0
+        );
+
+      return function () {
+        window.clearTimeout(
+          loadTimer
+        );
+      };
+
+    },
+    [canLaunchDemoCall]
   );
 
 
@@ -361,6 +427,13 @@ export default function VotersPage() {
   function openDemoCall(
     voter: Voter
   ) {
+
+    if (!demoContactIds.has(voter.id)) {
+      setMessage(
+        "This voter is not approved as a demo contact."
+      );
+      return;
+    }
 
     setMessage(
       null
@@ -521,6 +594,10 @@ export default function VotersPage() {
                 );
 
                 loadData();
+
+                if (canLaunchDemoCall) {
+                  loadDemoContacts();
+                }
               }
             }
 
@@ -1074,48 +1151,56 @@ export default function VotersPage() {
 
                                     <td>
 
-                                      <button
-                                        type="button"
+                                      {
+                                        demoContactIds.has(voter.id)
+                                          ? (
 
-                                        className="voter-demo-call-button"
+                                            <button
+                                              type="button"
 
-                                        disabled={
-                                          !voter.phone_number ||
-                                          voter.contact_status !== "ACTIVE" ||
-                                          submittedDemoVoters.has(
-                                            voter.id
-                                          ) ||
-                                          launchingDemoVoterId === voter.id
-                                        }
+                                              className="voter-demo-call-button"
 
-                                        title={
-                                          !voter.phone_number
-                                            ? "A phone number is required"
-                                            : voter.contact_status !== "ACTIVE"
-                                              ? "Only active voter contacts can receive a demo call"
-                                              : submittedDemoVoters.has(voter.id)
-                                                ? "A demo call was already submitted in this session"
-                                                : "Launch one controlled demo call"
-                                        }
+                                              disabled={
+                                                submittedDemoVoters.has(
+                                                  voter.id
+                                                ) ||
+                                                launchingDemoVoterId === voter.id
+                                              }
 
-                                        onClick={
-                                          function () {
-                                            openDemoCall(
-                                              voter
-                                            );
-                                          }
-                                        }
-                                      >
+                                              title={
+                                                submittedDemoVoters.has(voter.id)
+                                                  ? "A demo call was already submitted in this session"
+                                                  : "Launch one controlled demo call"
+                                              }
 
-                                        <PhoneCall size={14} />
+                                              onClick={
+                                                function () {
+                                                  openDemoCall(
+                                                    voter
+                                                  );
+                                                }
+                                              }
+                                            >
 
-                                        {
-                                          submittedDemoVoters.has(voter.id)
-                                            ? "Submitted"
-                                            : "Demo Call"
-                                        }
+                                              <PhoneCall size={14} />
 
-                                      </button>
+                                              {
+                                                submittedDemoVoters.has(voter.id)
+                                                  ? "Submitted"
+                                                  : "Demo Call"
+                                              }
+
+                                            </button>
+
+                                          )
+                                          : (
+
+                                            <span className="voter-demo-restricted">
+                                              Not a demo contact
+                                            </span>
+
+                                          )
+                                      }
 
                                     </td>
 
