@@ -6,21 +6,28 @@ import {
 } from "react";
 
 import {
+  AlertTriangle,
   CheckCircle2,
   Database,
   FileSpreadsheet,
+  LoaderCircle,
   MapPinned,
   Phone,
+  PhoneCall,
   RefreshCw,
   ShieldCheck,
   Upload,
   UserCheck,
-  Users
+  Users,
+  X
 } from "lucide-react";
 
 import AppShell
   from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import {
+  useCurrentUser
+} from "@/hooks/useCurrentUser";
 
 import {
   apiFetch
@@ -33,6 +40,18 @@ type Summary = {
   voters_with_phone: number;
   geography_mapped: number;
   jurisdiction_mapped: number;
+};
+
+
+type UploadResult = {
+  received: number;
+  valid: number;
+  inserted: number;
+  updated: number;
+  duplicates: number;
+  rejected: number;
+  unmappedGeography: number;
+  unmappedJurisdiction: number;
 };
 
 
@@ -84,6 +103,16 @@ type Voter = {
 
 
 export default function VotersPage() {
+
+  const {
+    user
+  } =
+    useCurrentUser();
+
+
+  const canLaunchDemoCall =
+    user?.role.code === "SUPER_ADMIN" ||
+    user?.role.code === "ADMIN";
 
   const [
     summary,
@@ -137,18 +166,46 @@ export default function VotersPage() {
     uploadResult,
     setUploadResult
   ] =
-    useState<any>(
+    useState<UploadResult | null>(
       null
     );
 
 
-  async function loadData() {
-
-    setLoading(
-      true
+  const [
+    selectedDemoVoter,
+    setSelectedDemoVoter
+  ] =
+    useState<Voter | null>(
+      null
     );
 
 
+  const [
+    demoConsentConfirmed,
+    setDemoConsentConfirmed
+  ] =
+    useState(false);
+
+
+  const [
+    launchingDemoVoterId,
+    setLaunchingDemoVoterId
+  ] =
+    useState<string | null>(
+      null
+    );
+
+
+  const [
+    submittedDemoVoters,
+    setSubmittedDemoVoters
+  ] =
+    useState<Set<string>>(
+      new Set()
+    );
+
+
+  async function loadData() {
     try {
 
       const [
@@ -197,7 +254,19 @@ export default function VotersPage() {
   useEffect(
     function () {
 
-      loadData();
+      const loadTimer =
+        window.setTimeout(
+          function () {
+            loadData();
+          },
+          0
+        );
+
+      return function () {
+        window.clearTimeout(
+          loadTimer
+        );
+      };
 
     },
     []
@@ -289,6 +358,133 @@ export default function VotersPage() {
   }
 
 
+  function openDemoCall(
+    voter: Voter
+  ) {
+
+    setMessage(
+      null
+    );
+
+    setDemoConsentConfirmed(
+      false
+    );
+
+    setSelectedDemoVoter(
+      voter
+    );
+  }
+
+
+  function closeDemoCall() {
+
+    if (launchingDemoVoterId) {
+      return;
+    }
+
+    setSelectedDemoVoter(
+      null
+    );
+
+    setDemoConsentConfirmed(
+      false
+    );
+  }
+
+
+  async function launchDemoCall() {
+
+    if (
+      !selectedDemoVoter ||
+      !demoConsentConfirmed
+    ) {
+
+      setMessage(
+        "Confirm that this is a consented test number before launching the demo call."
+      );
+
+      return;
+    }
+
+
+    setLaunchingDemoVoterId(
+      selectedDemoVoter.id
+    );
+
+    setMessage(
+      null
+    );
+
+
+    try {
+
+      const result =
+        await apiFetch(
+          `/api/voters/${selectedDemoVoter.id}/demo-calls`,
+          {
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                consentConfirmed:
+                  true,
+
+                idempotencyKey:
+                  crypto.randomUUID()
+              })
+          }
+        );
+
+
+      setSubmittedDemoVoters(
+        function (current) {
+
+          const next =
+            new Set(
+              current
+            );
+
+          next.add(
+            selectedDemoVoter.id
+          );
+
+          return next;
+        }
+      );
+
+
+      setMessage(
+        `Demo call submitted for ${selectedDemoVoter.full_name}. Tracking ID: ${result.demoCallId || result.id || "available in the audit log"}.`
+      );
+
+      setSelectedDemoVoter(
+        null
+      );
+
+      setDemoConsentConfirmed(
+        false
+      );
+
+
+    } catch (error) {
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to submit the demo call"
+      );
+
+
+    } finally {
+
+      setLaunchingDemoVoterId(
+        null
+      );
+    }
+  }
+
+
   return (
     <AppShell>
 
@@ -319,7 +515,13 @@ export default function VotersPage() {
             type="button"
 
             onClick={
-              loadData
+              function () {
+                setLoading(
+                  true
+                );
+
+                loadData();
+              }
             }
 
             className="voter-refresh-button"
@@ -704,6 +906,14 @@ export default function VotersPage() {
                             Phone
                           </th>
 
+                          {canLaunchDemoCall && (
+
+                            <th>
+                              Demo Call
+                            </th>
+
+                          )}
+
                         </tr>
 
                       </thead>
@@ -859,6 +1069,58 @@ export default function VotersPage() {
 
                                   </td>
 
+
+                                  {canLaunchDemoCall && (
+
+                                    <td>
+
+                                      <button
+                                        type="button"
+
+                                        className="voter-demo-call-button"
+
+                                        disabled={
+                                          !voter.phone_number ||
+                                          voter.contact_status !== "ACTIVE" ||
+                                          submittedDemoVoters.has(
+                                            voter.id
+                                          ) ||
+                                          launchingDemoVoterId === voter.id
+                                        }
+
+                                        title={
+                                          !voter.phone_number
+                                            ? "A phone number is required"
+                                            : voter.contact_status !== "ACTIVE"
+                                              ? "Only active voter contacts can receive a demo call"
+                                              : submittedDemoVoters.has(voter.id)
+                                                ? "A demo call was already submitted in this session"
+                                                : "Launch one controlled demo call"
+                                        }
+
+                                        onClick={
+                                          function () {
+                                            openDemoCall(
+                                              voter
+                                            );
+                                          }
+                                        }
+                                      >
+
+                                        <PhoneCall size={14} />
+
+                                        {
+                                          submittedDemoVoters.has(voter.id)
+                                            ? "Submitted"
+                                            : "Demo Call"
+                                        }
+
+                                      </button>
+
+                                    </td>
+
+                                  )}
+
                                 </tr>
                               );
                             }
@@ -876,10 +1138,210 @@ export default function VotersPage() {
 
         </section>
 
+
+        {selectedDemoVoter && (
+
+          <div
+            className="voter-demo-modal-backdrop"
+            role="presentation"
+            onMouseDown={
+              function (event) {
+
+                if (
+                  event.target ===
+                  event.currentTarget
+                ) {
+                  closeDemoCall();
+                }
+              }
+            }
+          >
+
+            <section
+              className="voter-demo-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="voter-demo-title"
+            >
+
+              <div className="voter-demo-modal-header">
+
+                <div className="voter-demo-modal-icon">
+                  <PhoneCall size={21} />
+                </div>
+
+                <div>
+
+                  <div className="voter-master-eyebrow">
+                    CONTROLLED DEMONSTRATION
+                  </div>
+
+                  <h2 id="voter-demo-title">
+                    Confirm one AI demo call
+                  </h2>
+
+                  <p>
+                    This call is isolated from Program, Campaign,
+                    Iteration, Run and research analytics.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="voter-demo-close"
+                  onClick={closeDemoCall}
+                  disabled={Boolean(launchingDemoVoterId)}
+                  aria-label="Close demo call confirmation"
+                >
+                  <X size={18} />
+                </button>
+
+              </div>
+
+
+              <div className="voter-demo-recipient">
+
+                <div>
+
+                  <span>
+                    Test recipient
+                  </span>
+
+                  <strong>
+                    {selectedDemoVoter.full_name}
+                  </strong>
+
+                </div>
+
+                <div>
+
+                  <span>
+                    Phone
+                  </span>
+
+                  <strong>
+                    {
+                      maskPhoneNumber(
+                        selectedDemoVoter.phone_number
+                      )
+                    }
+                  </strong>
+
+                </div>
+
+                <div>
+
+                  <span>
+                    Language
+                  </span>
+
+                  <strong>
+                    {
+                      selectedDemoVoter.preferred_language ||
+                      "Default agent language"
+                    }
+                  </strong>
+
+                </div>
+
+              </div>
+
+
+              <label className="voter-demo-consent">
+
+                <input
+                  type="checkbox"
+                  checked={demoConsentConfirmed}
+                  disabled={Boolean(launchingDemoVoterId)}
+                  onChange={
+                    function (event) {
+                      setDemoConsentConfirmed(
+                        event.target.checked
+                      );
+                    }
+                  }
+                />
+
+                <span>
+                  <AlertTriangle size={17} />
+
+                  I confirm this is a consented test number and
+                  authorize exactly one AI demonstration call.
+                </span>
+
+              </label>
+
+
+              <div className="voter-demo-modal-actions">
+
+                <button
+                  type="button"
+                  className="voter-demo-cancel"
+                  onClick={closeDemoCall}
+                  disabled={Boolean(launchingDemoVoterId)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="voter-demo-submit"
+                  onClick={launchDemoCall}
+                  disabled={
+                    !demoConsentConfirmed ||
+                    Boolean(launchingDemoVoterId)
+                  }
+                >
+
+                  {
+                    launchingDemoVoterId
+                      ? (
+                        <>
+                          <LoaderCircle
+                            size={16}
+                            className="voter-spin"
+                          />
+                          Submitting call...
+                        </>
+                      )
+                      : (
+                        <>
+                          <PhoneCall size={16} />
+                          Launch 1 Demo Call
+                        </>
+                      )
+                  }
+
+                </button>
+
+              </div>
+
+            </section>
+
+          </div>
+
+        )}
+
       </div>
 
     </AppShell>
   );
+}
+
+
+function maskPhoneNumber(
+  phoneNumber: string | null
+) {
+
+  if (!phoneNumber) {
+    return "Not available";
+  }
+
+  const visibleDigits =
+    phoneNumber.slice(-4);
+
+  return `••••••${visibleDigits}`;
 }
 
 
