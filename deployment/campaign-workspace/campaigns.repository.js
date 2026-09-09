@@ -40,6 +40,8 @@ export async function listCampaigns(actor) {
       FROM campaign_work_allocations WHERE status <> 'REASSIGNED' GROUP BY campaign_id
     )
     SELECT campaign.id, campaign.campaign_code, campaign.campaign_name,
+      campaign.program_id, program.study_code AS program_code,
+      program.study_name AS program_name,
       campaign.target_domain, campaign.target_type, campaign.target_name, campaign.target_code,
       campaign.status, campaign.survey_stage, campaign.start_date, campaign.end_date,
       owner.full_name AS created_by_name, manager.full_name AS campaign_manager_name,
@@ -48,6 +50,7 @@ export async function listCampaigns(actor) {
       COALESCE(allocation_count.assignment_count, 0) AS assignment_count,
       COALESCE(voter_count.eligible_voters, 0) AS eligible_voters
     FROM campaigns campaign
+    LEFT JOIN survey_studies program ON program.id = campaign.program_id
     LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
     LEFT JOIN users manager ON manager.id = campaign.campaign_manager_user_id
     LEFT JOIN scope_counts scope_count ON scope_count.campaign_id = campaign.id

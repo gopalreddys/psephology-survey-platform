@@ -13,8 +13,8 @@ import {
   ChevronRight,
   ClipboardList,
   Globe2,
-  Languages,
   MapPinned,
+  Megaphone,
   Plus,
   Target,
   Users,
@@ -95,6 +95,12 @@ type CampaignManager = {
   status: string;
 };
 
+type ProgramCampaign = {
+  id: string;
+  program_id?: string | null;
+  status: string;
+};
+
 
 export default function ProgramsPage() {
 
@@ -109,6 +115,11 @@ export default function ProgramsPage() {
     setPrograms,
   ] =
     useState<Program[]>([]);
+
+  const [
+    campaigns,
+    setCampaigns,
+  ] = useState<ProgramCampaign[]>([]);
 
 
   const [
@@ -272,6 +283,9 @@ export default function ProgramsPage() {
 
       await Promise.all([
         loadPrograms(),
+        apiFetch("/api/campaigns").then(function (data) {
+          setCampaigns(Array.isArray(data) ? data : data.items || []);
+        }),
         loadJurisdictionTypes(),
         loadJurisdictions(),
         apiFetch("/api/users").then(function (data) {
@@ -1317,7 +1331,7 @@ export default function ProgramsPage() {
 
               <p>
                 Select a program to manage its
-                research iterations and execution.
+                campaigns, ownership and execution status.
               </p>
 
             </div>
@@ -1365,6 +1379,10 @@ export default function ProgramsPage() {
 
               {programs.map(
                 function (program) {
+
+                  const programCampaigns = campaigns.filter(function (campaign) {
+                    return campaign.program_id === program.id;
+                  });
 
                   return (
                     <button
@@ -1451,12 +1469,9 @@ export default function ProgramsPage() {
                         />
 
                         <ProgramMetric
-                          icon={Languages}
-                          label="Language"
-                          value={
-                            program.primary_language ||
-                            "-"
-                          }
+                          icon={Megaphone}
+                          label="Campaigns"
+                          value={String(programCampaigns.length)}
                         />
 
                       </div>
@@ -1490,6 +1505,12 @@ export default function ProgramsPage() {
 
           <strong>
             Program
+          </strong>
+
+          <ArrowRight size={12} />
+
+          <strong>
+            Campaign
           </strong>
 
           <ArrowRight size={12} />

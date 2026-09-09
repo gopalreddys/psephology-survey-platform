@@ -59,6 +59,10 @@ export default function NewCampaignPage() {
         setPrograms(programData); setJurisdictions(jurisdictionData); setGeographies(geographyData);
         setLocalBodies(bodyData.items || bodyData);
         setExistingCampaignCodes((campaignData || []).map(function (item: { campaign_code?: string }) { return item.campaign_code || ""; }));
+        const requestedProgramId = new URLSearchParams(window.location.search).get("programId");
+        if (requestedProgramId && programData.some(function (program: Program) { return program.id === requestedProgramId; })) {
+          setForm(function (current) { return { ...current, programId: requestedProgramId }; });
+        }
       }).catch(function (error) { setMessage(error instanceof Error ? error.message : "Unable to load campaign planning data"); });
   }, [user]);
 
@@ -145,14 +149,14 @@ export default function NewCampaignPage() {
   if (user && !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) return <AppShell><div className={styles.page}><FeedbackMessage message="Only Admins and Super Admins create campaigns. A Campaign Manager receives an assigned campaign and creates its iterations." className={styles.message} /></div></AppShell>;
 
   return <AppShell><div className={styles.page}>
-    <div className={styles.backRow}><Link href="/campaigns"><ArrowLeft size={16} />Campaigns</Link><span>Draft remains private until it is ready for operations.</span></div>
+    <div className={styles.backRow}><Link href={form.programId ? `/programs/${form.programId}` : "/campaigns"}><ArrowLeft size={16} />{form.programId ? "Program" : "Campaigns"}</Link><span>Draft remains private until it is ready for operations.</span></div>
     <section className={styles.header}><div><span>ADMIN CAMPAIGN SETUP</span><h1>Create Campaign</h1><p>Define the campaign scope. After creation, assign it to a Campaign Manager who will create iterations and distribute work to Campaigners.</p></div></section>
     <div className={styles.steps}><span className={styles.stepDone}><Check size={14} />Details</span><span className={targetId ? styles.stepDone : styles.stepActive}>2 · Election target</span><span className={mandals.length ? styles.stepDone : styles.stepActive}>3 · Geography scope</span><span className={reviewing ? styles.stepActive : ""}>4 · Review</span></div>
     {message && <FeedbackMessage message={message} className={styles.message} />}
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 1</span><h2>Campaign details</h2><p>This identifies the campaign independently from its research program.</p></div></div>
       <div className={styles.formGrid}><Field label="Generated campaign code"><input value={generatedCampaignCode || "Select a program and target"} readOnly /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program *"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">Select an assigned program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}{program.study_code ? ` · ${program.study_code}` : ""}</option>; })}</select></Field><Field label="Survey stage *"><select value={surveyStage} onChange={function (e) { setSurveyStage(e.target.value as SurveyStage); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
-      {!programs.length && <FeedbackMessage message="No research program has been assigned to you. Ask an Admin to create and assign a program before creating a campaign." className={styles.message} />}
+      {!programs.length && <FeedbackMessage message="No active research program is available. Create a Program before creating its Campaign." className={styles.message} />}
     </section>
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 2</span><h2>Election target</h2><p>Legislative and Local Body campaigns use the same canonical Administrative geography.</p></div></div>

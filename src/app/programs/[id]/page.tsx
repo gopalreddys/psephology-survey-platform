@@ -1,35 +1,28 @@
 "use client";
 
-import {
-  useEffect,
-  useState
-} from "react";
-
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
-  ChevronRight,
   ClipboardList,
   Flag,
   Languages,
   MapPinned,
+  Megaphone,
+  PauseCircle,
+  PlayCircle,
   Plus,
   Target,
-  Users,
-  X
+  UserRound,
 } from "lucide-react";
-
-import {
-  useParams,
-  useRouter
-} from "next/navigation";
+import { useParams } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
-import { surveyStageOptions } from "@/lib/research-codes";
-
 
 type Program = {
   id: string;
@@ -39,7 +32,6 @@ type Program = {
   study_type: string;
   scope_mode: string | null;
   election_type: string | null;
-  jurisdiction_id: string | null;
   jurisdiction_name: string | null;
   jurisdiction_code: string | null;
   target_sample_size: number | null;
@@ -47,1209 +39,247 @@ type Program = {
   status: string;
 };
 
-
-type Iteration = {
+type Campaign = {
   id: string;
-  study_id: string;
-  iteration_number: number;
-  iteration_name: string;
-  research_phase: string;
-  objective: string | null;
-  sample_design_type: string | null;
-  target_sample_size: number | null;
-  planned_start_date: string | null;
-  planned_end_date: string | null;
-  questionnaire_name: string | null;
-  version_number: number | null;
+  program_id?: string | null;
+  campaign_code: string;
+  campaign_name: string;
+  target_type: string;
+  target_name: string;
+  survey_stage?: string | null;
   status: string;
-  run_count?: number;
+  campaign_manager_name?: string | null;
+  start_date: string | null;
+  end_date: string | null;
 };
 
+const RUNNING_STATUSES = new Set(["ACTIVE"]);
+const COMPLETED_STATUSES = new Set(["COMPLETED", "COMPLETE"]);
 
 export default function ProgramDetailPage() {
+  const params = useParams();
+  const programId = params.id as string;
+  const { user, loading: userLoading } = useCurrentUser();
+  const [program, setProgram] = useState<Program | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const params =
-    useParams();
-
-  const router =
-    useRouter();
-
-  const programId =
-    params.id as string;
-
-
-  const [
-    program,
-    setProgram
-  ] =
-    useState<Program | null>(null);
-
-
-  const [
-    iterations,
-    setIterations
-  ] =
-    useState<Iteration[]>([]);
-
-
-  const [
-    loading,
-    setLoading
-  ] =
-    useState(true);
-
-
-  const [
-    showCreate,
-    setShowCreate
-  ] =
-    useState(false);
-
-
-  const [
-    saving,
-    setSaving
-  ] =
-    useState(false);
-
-
-  const [
-    message,
-    setMessage
-  ] =
-    useState<string | null>(null);
-
-
-  const [
-    form,
-    setForm
-  ] =
-    useState({
-      iterationNumber: "1",
-      iterationName: "Base survey",
-      researchPhase: "BASE",
-      objective:
-        "Understand the natural voter pulse before election-period influence intensifies.",
-      sampleDesignType: "REPEATED_CROSS_SECTION",
-      targetSampleSize: "30",
-      plannedStartDate: "",
-      plannedEndDate: ""
-    });
-
-
-  async function loadProgram() {
-
-    const data =
-      await apiFetch(
-        `/api/programs/${programId}`
-      );
-
-    setProgram(data);
-
-    setForm(
-      function (current) {
-
-        return {
-          ...current,
-          targetSampleSize:
-            String(
-              data.target_sample_size ||
-              0
-            )
-        };
-      }
-    );
-  }
-
-
-  async function loadIterations() {
-
-    const data =
-      await apiFetch(
-        `/api/programs/${programId}/iterations`
-      );
-
-    const enriched = await Promise.all(data.map(async function (iteration: Iteration) {
-      try {
-        const runs = await apiFetch(`/api/iterations/${iteration.id}/runs`);
-        return { ...iteration, run_count: Array.isArray(runs) ? runs.length : Number(runs?.total || runs?.count || 0) };
-      } catch (_) {
-        return { ...iteration, run_count: 0 };
-      }
-    }));
-    setIterations(enriched);
-  }
-
-
-  async function loadData() {
-
-    setLoading(true);
-
-    try {
-
-      await Promise.all([
-        loadProgram(),
-        loadIterations()
-      ]);
-
-    } catch (error) {
-
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to load program"
-      );
-
-    } finally {
-
-      setLoading(false);
-    }
-  }
-
-
-  useEffect(
-    function () {
-
-      if (programId) {
-        loadData();
-      }
-
-    },
-    [
-      programId
-    ]
+  const canManagePrograms = Boolean(
+    user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code)
   );
 
+  useEffect(function () {
+    if (!canManagePrograms || !programId) return;
+    let cancelled = false;
 
-  function updateForm(
-    key: keyof typeof form,
-    value: string
-  ) {
-
-    setForm(
-      function (current) {
-
-        return {
-          ...current,
-          [key]: value
-        };
-      }
-    );
-  }
-
-
-  async function createIteration() {
-
-    if (
-      !form.iterationNumber ||
-      !form.iterationName ||
-      !form.researchPhase
-    ) {
-
-      setMessage(
-        "Iteration number, name and research phase are required."
-      );
-
-      return;
-    }
-
-
-    setSaving(true);
-    setMessage(null);
-
-
-    try {
-
-      await apiFetch(
-        `/api/programs/${programId}/iterations`,
-        {
-          method: "POST",
-
-          body:
-            JSON.stringify({
-
-              iterationNumber:
-                Number(
-                  form.iterationNumber
-                ),
-
-              iterationName:
-                form.iterationName,
-
-              researchPhase:
-                form.researchPhase,
-
-              objective:
-                form.objective,
-
-              sampleDesignType:
-                form.sampleDesignType,
-
-              targetSampleSize:
-                Number(
-                  form.targetSampleSize ||
-                  0
-                ),
-
-              plannedStartDate:
-                form.plannedStartDate ||
-                null,
-
-              plannedEndDate:
-                form.plannedEndDate ||
-                null,
-
-              questionnaireId:
-                null,
-
-              agentConfig:
-                {},
-
-              callingProfile:
-                {}
-            })
+    Promise.all([
+      apiFetch(`/api/programs/${programId}`),
+      apiFetch("/api/campaigns"),
+    ])
+      .then(function ([programData, campaignData]) {
+        if (cancelled) return;
+        const allCampaigns = Array.isArray(campaignData)
+          ? campaignData
+          : campaignData.items || [];
+        setProgram(programData);
+        setCampaigns(
+          allCampaigns.filter(function (campaign: Campaign) {
+            return campaign.program_id === programId;
+          })
+        );
+      })
+      .catch(function (error) {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error ? error.message : "Unable to load Program campaigns"
+          );
         }
-      );
+      })
+      .finally(function () {
+        if (!cancelled) setLoading(false);
+      });
 
+    return function () {
+      cancelled = true;
+    };
+  }, [canManagePrograms, programId]);
 
-      setMessage(
-        "Iteration created successfully."
-      );
+  const summary = useMemo(function () {
+    return {
+      running: campaigns.filter(function (campaign) {
+        return RUNNING_STATUSES.has(String(campaign.status).toUpperCase());
+      }).length,
+      completed: campaigns.filter(function (campaign) {
+        return COMPLETED_STATUSES.has(String(campaign.status).toUpperCase());
+      }).length,
+      paused: campaigns.filter(function (campaign) {
+        return String(campaign.status).toUpperCase() === "PAUSED";
+      }).length,
+      draft: campaigns.filter(function (campaign) {
+        return String(campaign.status).toUpperCase() === "DRAFT";
+      }).length,
+    };
+  }, [campaigns]);
 
-      setShowCreate(false);
-
-      await loadIterations();
-
-    } catch (error) {
-
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to create iteration"
-      );
-
-    } finally {
-
-      setSaving(false);
-    }
+  if (userLoading || (canManagePrograms && loading)) {
+    return <AppShell><div className="program-detail-loading">Loading Program portfolio…</div></AppShell>;
   }
 
-
-  if (loading) {
-
+  if (user && !canManagePrograms) {
     return (
       <AppShell>
-
-        <div className="program-detail-loading">
-          Loading program...
+        <div className="program-detail-page">
+          <FeedbackMessage
+            message="Programs are governed by Admin and Super Admin users. Campaign Managers work from their assigned Campaigns."
+            className="program-detail-message"
+          />
         </div>
-
       </AppShell>
     );
   }
-
 
   if (!program) {
-
     return (
       <AppShell>
-
         <div className="program-detail-page">
-
-          <div className="program-detail-error">
-            Program not found.
-          </div>
-
+          <Link href="/programs" className="program-detail-back"><ArrowLeft size={15} /> Back to Programs</Link>
+          <div className="program-detail-error">{message || "Program not found."}</div>
         </div>
-
       </AppShell>
     );
   }
-
 
   return (
     <AppShell>
-
       <div className="program-detail-page">
-
-        <button
-          type="button"
-
-          onClick={
-            function () {
-              router.push(
-                "/programs"
-              );
-            }
-          }
-
-          className="program-detail-back"
-        >
-          <ArrowLeft size={15} />
-          Back to Programs
-        </button>
-
+        <Link href="/programs" className="program-detail-back"><ArrowLeft size={15} /> Back to Programs</Link>
 
         <section className="program-detail-header">
-
           <div>
-
-            <div className="program-detail-eyebrow">
-              RESEARCH PROGRAM
-            </div>
-
-            <h1>
-              {program.study_name}
-            </h1>
-
-            <div className="program-detail-code">
-              {program.study_code}
-            </div>
-
+            <div className="program-detail-eyebrow">RESEARCH PROGRAM</div>
+            <h1>{program.study_name}</h1>
+            <div className="program-detail-code">{program.study_code}</div>
           </div>
-
-
-          <div className="program-detail-operations-note">
-            <ClipboardList size={16} />
-            Iterations are created inside campaigns by Campaign Managers.
+          <div className="program-detail-actions">
+            <div className="program-detail-operations-note">
+              <ClipboardList size={16} />
+              Admins define Campaigns; Campaign Managers create their Iterations.
+            </div>
+            <Link href={`/campaigns/new?programId=${program.id}`} className="program-detail-create-button">
+              <Plus size={15} /> Create Campaign
+            </Link>
           </div>
-
         </section>
 
-
-        {message && (
-
-          <FeedbackMessage message={message} className="program-detail-message" />
-
-        )}
-
+        {message && <FeedbackMessage message={message} className="program-detail-message" />}
 
         <section className="program-detail-metrics">
-
-          <ProgramMetric
-            icon={MapPinned}
-            label="Constituency"
-            value={
-              program.jurisdiction_name ||
-              "-"
-            }
-          />
-
-          <ProgramMetric
-            icon={Target}
-            label="Target Sample"
-            value={
-              program.target_sample_size
-                ?.toLocaleString() ||
-              "-"
-            }
-          />
-
-          <ProgramMetric
-            icon={Languages}
-            label="Language"
-            value={
-              program.primary_language ||
-              "-"
-            }
-          />
-
-          <ProgramMetric
-            icon={ClipboardList}
-            label="Iterations"
-            value={
-              String(
-                iterations.length
-              )
-            }
-          />
-
-          <ProgramMetric
-            icon={CheckCircle2}
-            label="Iterations completed"
-            value={String(iterations.filter(function (iteration) { return ["COMPLETED", "COMPLETE"].includes(String(iteration.status).toUpperCase()); }).length)}
-          />
-
-          <ProgramMetric
-            icon={Target}
-            label="Total runs"
-            value={String(iterations.reduce(function (total, iteration) { return total + Number(iteration.run_count || 0); }, 0))}
-          />
-
-          <ProgramMetric
-            icon={Flag}
-            label="Status"
-            value={
-              program.status
-            }
-          />
-
+          <ProgramMetric icon={MapPinned} label="Constituency" value={program.jurisdiction_name || "-"} />
+          <ProgramMetric icon={Target} label="Target Sample" value={program.target_sample_size?.toLocaleString() || "-"} />
+          <ProgramMetric icon={Languages} label="Language" value={program.primary_language || "-"} />
+          <ProgramMetric icon={Megaphone} label="Campaigns" value={String(campaigns.length)} />
+          <ProgramMetric icon={PlayCircle} label="Running" value={String(summary.running)} />
+          <ProgramMetric icon={PauseCircle} label="Paused" value={String(summary.paused)} />
+          <ProgramMetric icon={CheckCircle2} label="Completed" value={String(summary.completed)} />
+          <ProgramMetric icon={Flag} label="Program Status" value={program.status} />
         </section>
-
 
         <section className="program-purpose-card">
-
-          <div className="program-purpose-icon">
-            <ClipboardList size={19} />
-          </div>
-
+          <div className="program-purpose-icon"><ClipboardList size={19} /></div>
           <div>
-
-            <div className="program-detail-eyebrow">
-              RESEARCH PURPOSE
-            </div>
-
-            <h2>
-              Program Objective
-            </h2>
-
-            <p>
-              {
-                program.purpose ||
-                "No purpose defined."
-              }
-            </p>
-
+            <div className="program-detail-eyebrow">RESEARCH PURPOSE</div>
+            <h2>Program Objective</h2>
+            <p>{program.purpose || "No purpose defined."}</p>
           </div>
-
         </section>
 
-
-        {false && showCreate && (
-
-          <section className="iteration-create-panel">
-
-            <div className="iteration-create-header">
-
-              <div>
-
-                <div className="program-detail-eyebrow">
-                  NEW RESEARCH ITERATION
-                </div>
-
-                <h2>
-                  Create Iteration
-                </h2>
-
-                <p>
-                  Define the research objective,
-                  phase, sample and planned timing
-                  for this iteration.
-                </p>
-
-              </div>
-
-
-              <button
-                type="button"
-
-                onClick={
-                  function () {
-                    setShowCreate(false);
-                  }
-                }
-
-                className="iteration-close-button"
-              >
-                <X size={18} />
-              </button>
-
-            </div>
-
-
-            <div className="iteration-form-section">
-
-              <div className="iteration-form-heading">
-
-                <div className="iteration-form-icon">
-                  <ClipboardList size={17} />
-                </div>
-
-                <div>
-
-                  <h3>
-                    Research Definition
-                  </h3>
-
-                  <p>
-                    Identify this research cycle
-                    and the phase it represents.
-                  </p>
-
-                </div>
-
-              </div>
-
-
-              <div className="iteration-form-grid">
-
-                <Field
-                  label="Iteration Number"
-                >
-                  <input
-                    type="number"
-                    min={1}
-
-                    value={
-                      form.iterationNumber
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "iterationNumber",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  />
-                </Field>
-
-
-                <Field
-                  label="Iteration Name"
-                >
-                  <input
-                    value={
-                      form.iterationName
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "iterationName",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  />
-                </Field>
-
-
-                <Field
-                  label="Research Phase"
-                >
-                  <select
-                    value={
-                      form.researchPhase
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "researchPhase",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  >
-                    {surveyStageOptions.map(function (option) {
-                      return <option key={option.value} value={option.value}>{option.label}</option>;
-                    })}
-                  </select>
-                </Field>
-
-
-                <Field
-                  label="Sample Design"
-                >
-                  <select
-                    value={
-                      form.sampleDesignType
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "sampleDesignType",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  >
-                    <option value="REPEATED_CROSS_SECTION">
-                      Repeated Cross Section
-                    </option>
-
-                    <option value="PANEL">
-                      Panel
-                    </option>
-
-                    <option value="HYBRID">
-                      Hybrid
-                    </option>
-                  </select>
-                </Field>
-
-              </div>
-
-            </div>
-
-
-            <div className="iteration-form-section">
-
-              <div className="iteration-form-heading">
-
-                <div className="iteration-form-icon">
-                  <Target size={17} />
-                </div>
-
-                <div>
-
-                  <h3>
-                    Sampling & Schedule
-                  </h3>
-
-                  <p>
-                    Set target size and planned
-                    research period.
-                  </p>
-
-                </div>
-
-              </div>
-
-
-              <div className="iteration-form-grid">
-
-                <Field
-                  label="Target Sample"
-                >
-                  <input
-                    type="number"
-                    min={1}
-
-                    value={
-                      form.targetSampleSize
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "targetSampleSize",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  />
-                </Field>
-
-
-                <div />
-
-
-                <Field
-                  label="Planned Start Date"
-                >
-                  <input
-                    type="date"
-
-                    value={
-                      form.plannedStartDate
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "plannedStartDate",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  />
-                </Field>
-
-
-                <Field
-                  label="Planned End Date"
-                >
-                  <input
-                    type="date"
-
-                    value={
-                      form.plannedEndDate
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "plannedEndDate",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  />
-                </Field>
-
-
-                <Field
-                  label="Research Objective"
-                  span
-                >
-                  <textarea
-                    rows={4}
-
-                    value={
-                      form.objective
-                    }
-
-                    onChange={
-                      function (event) {
-
-                        updateForm(
-                          "objective",
-                          event.target.value
-                        );
-                      }
-                    }
-
-                    className="iteration-input"
-                  />
-                </Field>
-
-              </div>
-
-            </div>
-
-
-            <div className="iteration-create-footer">
-
-              <button
-                type="button"
-
-                onClick={
-                  function () {
-                    setShowCreate(false);
-                  }
-                }
-
-                className="iteration-cancel-button"
-              >
-                Cancel
-              </button>
-
-
-              <button
-                type="button"
-
-                disabled={
-                  saving
-                }
-
-                onClick={
-                  createIteration
-                }
-
-                className="iteration-submit-button"
-              >
-                {
-                  saving
-                    ? "Creating..."
-                    : (
-                      <>
-                        <Plus size={15} />
-                        Create Iteration
-                      </>
-                    )
-                }
-              </button>
-
-            </div>
-
-          </section>
-
-        )}
-
-
-        <section className="iterations-panel">
-
-          <div className="iterations-header">
-
+        <section className="program-campaign-panel">
+          <div className="program-campaign-header">
             <div>
-
-              <div className="program-detail-eyebrow">
-                RESEARCH CYCLES
-              </div>
-
-              <h2>
-                Iterations
-              </h2>
-
-              <p>
-                Each iteration represents a distinct
-                research objective within this Program.
-              </p>
-
+              <div className="program-detail-eyebrow">CAMPAIGN PORTFOLIO</div>
+              <h2>Campaigns under this Program</h2>
+              <p>Review ownership, operational state and geography before opening a Campaign.</p>
             </div>
-
-
-            <div className="iterations-count">
-              {iterations.length}
-              {" "}
-              {
-                iterations.length === 1
-                  ? "Iteration"
-                  : "Iterations"
-              }
+            <div className="program-campaign-count">
+              {campaigns.length} {campaigns.length === 1 ? "Campaign" : "Campaigns"}
             </div>
-
           </div>
 
+          {campaigns.length === 0 ? (
+            <div className="program-campaign-empty">
+              <Megaphone size={25} />
+              <strong>No Campaigns created</strong>
+              <span>Create the first Campaign within this Program’s approved parameters.</span>
+              <Link href={`/campaigns/new?programId=${program.id}`} className="program-detail-create-button">
+                <Plus size={15} /> Create Campaign
+              </Link>
+            </div>
+          ) : (
+            <div className="program-campaign-list">
+              {campaigns.map(function (campaign) {
+                return (
+                  <Link href={`/campaigns/${campaign.id}`} className="program-campaign-row" key={campaign.id}>
+                    <div className="program-campaign-icon"><Megaphone size={18} /></div>
+                    <div className="program-campaign-main">
+                      <span>{campaign.campaign_code}</span>
+                      <strong>{campaign.campaign_name}</strong>
+                      <small>{campaign.target_type} · {campaign.target_name} · {campaign.survey_stage || "BASE"}</small>
+                    </div>
+                    <CampaignFact icon={UserRound} label="Campaign Manager" value={campaign.campaign_manager_name || "Not assigned"} />
+                    <CampaignFact icon={CalendarDays} label="Schedule" value={formatSchedule(campaign.start_date, campaign.end_date)} />
+                    <span className={`program-campaign-status ${statusClass(campaign.status)}`}>{campaign.status}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
 
-          {
-            iterations.length === 0
-              ? (
-
-                <div className="iterations-empty">
-
-                  <ClipboardList size={24} />
-
-                  <strong>
-                    No research iterations yet
-                  </strong>
-
-                  <span>
-                    Campaign Managers create iterations from their campaign workspace.
-                  </span>
-
-                </div>
-
-              )
-              : (
-
-                <div className="iterations-list">
-
-                  {
-                    iterations.map(
-                      function (iteration) {
-
-                        return (
-
-                          <button
-                            type="button"
-
-                            key={
-                              iteration.id
-                            }
-
-                            onClick={
-                              function () {
-
-                                router.push(
-                                  `/iterations/${iteration.id}`
-                                );
-                              }
-                            }
-
-                            className="iteration-row"
-                          >
-
-                            <div className="iteration-row-main">
-
-                              <div className="iteration-number">
-                                {
-                                  iteration.iteration_number
-                                }
-                              </div>
-
-
-                              <div className="iteration-row-copy">
-
-                                <div className="iteration-row-title">
-
-                                  <h3>
-                                    {
-                                      iteration.iteration_name
-                                    }
-                                  </h3>
-
-                                  <IterationStatus
-                                    status={
-                                      iteration.status
-                                    }
-                                  />
-
-                                </div>
-
-
-                                <div className="iteration-row-meta">
-
-                                  <span>
-                                    {
-                                      surveyStageLabel(iteration.research_phase)
-                                    }
-                                  </span>
-
-                                  <span>
-                                    {
-                                      formatLabel(
-                                        iteration.sample_design_type
-                                      )
-                                    }
-                                  </span>
-
-                                </div>
-
-
-                                {
-                                  iteration.objective && (
-
-                                    <p>
-                                      {
-                                        iteration.objective
-                                      }
-                                    </p>
-
-                                  )
-                                }
-
-                              </div>
-
-                            </div>
-
-
-                            <div className="iteration-row-details">
-
-                              <IterationDetail
-                                icon={Target}
-                                label="Target"
-                                value={
-                                  iteration.target_sample_size
-                                    ?.toLocaleString() ||
-                                  "-"
-                                }
-                              />
-
-
-                              <IterationDetail
-                                icon={CalendarDays}
-                                label="Planned Start"
-                                value={
-                                  formatDate(
-                                    iteration.planned_start_date
-                                  )
-                                }
-                              />
-
-                              <IterationDetail
-                                icon={ClipboardList}
-                                label="Runs"
-                                value={String(iteration.run_count || 0)}
-                              />
-
-                            </div>
-
-
-                            <div className="iteration-open">
-
-                              <span>
-                                Open
-                              </span>
-
-                              <ChevronRight size={17} />
-
-                            </div>
-
-                          </button>
-
-                        );
-                      }
-                    )
-                  }
-
-                </div>
-
-              )
-          }
-
+          {summary.draft > 0 && (
+            <div className="program-campaign-footnote">
+              {summary.draft} Draft {summary.draft === 1 ? "Campaign requires" : "Campaigns require"} manager assignment and readiness review.
+            </div>
+          )}
         </section>
-
       </div>
-
     </AppShell>
   );
 }
 
-
-function ProgramMetric({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-
+function ProgramMetric({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
     <div className="program-detail-metric">
-
-      <div className="program-detail-metric-icon">
-        <Icon size={17} />
-      </div>
-
-      <div>
-
-        <div className="program-detail-metric-label">
-          {label}
-        </div>
-
-        <div className="program-detail-metric-value">
-          {value}
-        </div>
-
-      </div>
-
+      <div className="program-detail-metric-icon"><Icon size={18} /></div>
+      <div><div className="program-detail-metric-label">{label}</div><div className="program-detail-metric-value">{value}</div></div>
     </div>
   );
 }
 
-
-function Field({
-  label,
-  children,
-  span = false
-}: {
-  label: string;
-  children: React.ReactNode;
-  span?: boolean;
-}) {
-
+function CampaignFact({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
   return (
-    <div
-      className={
-        span
-          ? "iteration-field iteration-field-span"
-          : "iteration-field"
-      }
-    >
-
-      <label>
-        {label}
-      </label>
-
-      {children}
-
+    <div className="program-campaign-fact">
+      <Icon size={15} />
+      <span><small>{label}</small><strong>{value}</strong></span>
     </div>
   );
 }
 
-
-function IterationStatus({
-  status
-}: {
-  status: string;
-}) {
-
-  return (
-    <span className="iteration-status">
-      {
-        formatLabel(
-          status
-        )
-      }
-    </span>
-  );
+function formatDate(value: string | null) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 }
 
-
-function IterationDetail({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-
-  return (
-    <div className="iteration-detail">
-
-      <Icon size={14} />
-
-      <div>
-
-        <span>
-          {label}
-        </span>
-
-        <strong>
-          {value}
-        </strong>
-
-      </div>
-
-    </div>
-  );
+function formatSchedule(start: string | null, end: string | null) {
+  if (!start && !end) return "Not scheduled";
+  if (!end) return `From ${formatDate(start)}`;
+  if (!start) return `Until ${formatDate(end)}`;
+  return `${formatDate(start)} – ${formatDate(end)}`;
 }
 
-
-function formatLabel(
-  value: string | null
-) {
-
-  if (!value) {
-    return "-";
-  }
-
-  return value
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(
-      /\b\w/g,
-      function (character) {
-        return character.toUpperCase();
-      }
-    );
-}
-
-function surveyStageLabel(value: string | null) {
-  const normalized = String(value || "").toUpperCase();
-  const option = surveyStageOptions.find(function (item) { return item.value === normalized || `${item.value}_SURVEY` === normalized; });
-  return option?.label || formatLabel(value);
-}
-
-
-function formatDate(
-  value: string | null
-) {
-
-  if (!value) {
-    return "-";
-  }
-
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return value;
-  }
-
-  return date.toLocaleDateString();
+function statusClass(status: string) {
+  const normalized = String(status).toLowerCase();
+  if (["active", "running"].includes(normalized)) return "is-running";
+  if (["completed", "complete"].includes(normalized)) return "is-completed";
+  if (normalized === "paused") return "is-paused";
+  return "is-draft";
 }

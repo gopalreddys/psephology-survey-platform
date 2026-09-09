@@ -3588,7 +3588,7 @@ body {
 
 .program-detail-metrics {
   display: grid;
-  grid-template-columns: repeat(5,minmax(0,1fr));
+  grid-template-columns: repeat(4,minmax(0,1fr));
   gap: 12px;
   margin-top: 22px;
 }
@@ -8789,6 +8789,218 @@ textarea.question-input {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.program-detail-actions {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.program-campaign-panel {
+  margin-top: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(198,83,103,.10);
+  border-radius: 17px;
+  background: rgba(255,255,255,.82);
+}
+
+.program-campaign-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(198,83,103,.08);
+}
+
+.program-campaign-header h2 {
+  margin-top: 5px;
+  color: #4b333a;
+  font-size: 18px;
+}
+
+.program-campaign-header p {
+  margin-top: 5px;
+  color: #8a7078;
+  font-size: 12px;
+}
+
+.program-campaign-count {
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #a04d5e;
+  background: #fde8ec;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.program-campaign-list {
+  padding: 10px;
+}
+
+.program-campaign-row {
+  display: grid;
+  grid-template-columns: auto minmax(240px,1.3fr) minmax(170px,.7fr) minmax(180px,.8fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 15px;
+  border-radius: 13px;
+  color: inherit;
+  text-decoration: none;
+  transition: background .15s ease, transform .15s ease;
+}
+
+.program-campaign-row + .program-campaign-row {
+  border-top: 1px solid rgba(198,83,103,.06);
+}
+
+.program-campaign-row:hover {
+  transform: translateX(2px);
+  background: linear-gradient(90deg,#fff7f8,#fffaf9);
+}
+
+.program-campaign-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: #168c7f;
+  background: #e9fbf7;
+}
+
+.program-campaign-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.program-campaign-main > span {
+  color: #cf586d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.program-campaign-main > strong {
+  overflow: hidden;
+  color: #49363d;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.program-campaign-main > small,
+.program-campaign-fact small {
+  color: #8b97a5;
+}
+
+.program-campaign-fact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #b56676;
+}
+
+.program-campaign-fact > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.program-campaign-fact strong {
+  overflow: hidden;
+  color: #5d4a51;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.program-campaign-status {
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.program-campaign-status.is-running,
+.program-campaign-status.is-completed {
+  color: #168c7f;
+  background: #eafaf6;
+}
+
+.program-campaign-status.is-paused {
+  color: #9b6a18;
+  background: #fff5df;
+}
+
+.program-campaign-status.is-draft {
+  color: #a04d5e;
+  background: #fde8ec;
+}
+
+.program-campaign-empty {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  color: #c65367;
+}
+
+.program-campaign-empty strong {
+  color: #5d444b;
+  font-size: 15px;
+}
+
+.program-campaign-empty span {
+  color: #947b82;
+  font-size: 12px;
+}
+
+.program-campaign-empty .program-detail-create-button {
+  margin-top: 8px;
+}
+
+.program-campaign-footnote {
+  padding: 11px 20px;
+  border-top: 1px solid #f1e7e9;
+  color: #8a6b73;
+  background: #fffafb;
+  font-size: 11px;
+}
+
+@media (max-width: 1180px) {
+  .program-campaign-row {
+    grid-template-columns: auto minmax(220px,1fr) minmax(160px,.8fr) auto;
+  }
+
+  .program-campaign-row .program-campaign-fact:nth-of-type(2) {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .program-detail-actions,
+  .program-campaign-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .program-campaign-row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .program-campaign-fact,
+  .program-campaign-status {
+    grid-column: 2;
+  }
 }
 
 /* Final interaction states: keep shared feedback and sign-in controls consistent
