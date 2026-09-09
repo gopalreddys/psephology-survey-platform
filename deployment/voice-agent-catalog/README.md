@@ -1,6 +1,6 @@
 # Sarvam voice-agent catalog
 
-This package synchronizes callable Sarvam Voice Agent deployments into the platform. An Admin classifies each deployment as Urban Male, Urban Female, Rural Male or Rural Female. Campaign creation accepts only a synchronized, categorized, active outbound deployment and stores an immutable App ID/version/telephony snapshot.
+This package maintains callable Sarvam Voice Agents in the platform. It synchronizes formal Sarvam deployment records when available and lets an Admin register an outbound Agent App configuration when the workspace uses Sarvam Campaigns or Instant Outbound without a Deployment record. Each entry is classified as Urban Male, Urban Female, Rural Male or Rural Female. Campaign creation accepts only a categorized, active outbound configuration and stores an immutable App ID/version/telephony snapshot.
 
 ## Required API service environment
 
@@ -33,7 +33,9 @@ node src/db/patch-sarvam-runtime-agent-selection.js
 sudo systemctl restart psephology-api.service
 ```
 
-Use the Admin **Voice Agents** page to synchronize, classify and enable deployments. A synchronized deployment is campaign-selectable only when it is active, outbound/both, categorized, and has both a connection id and outbound phone number.
+Use the Admin **Voice Agents** page to synchronize deployment records or register the committed Agent App ID/version and outbound telephony configuration shown in Sarvam. A catalog entry is campaign-selectable only when it is active, outbound/both, categorized, and has both a connection id and outbound phone number.
+
+The migration is deliberately re-runnable. Deployments installed before Agent App registration was added should copy the latest SQL and run the same migration runner again.
 
 ## API
 
@@ -41,6 +43,7 @@ Use the Admin **Voice Agents** page to synchronize, classify and enable deployme
 GET   /api/voice-agents
 GET   /api/voice-agents?selectable=true
 POST  /api/voice-agents/sync
+POST  /api/voice-agents/register
 PATCH /api/voice-agents/:id
 ```
 

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { getDb } from "../db/postgres.js";
 import { fetchSarvamDeployments } from "../services/sarvam-voice-agents.service.js";
 
@@ -36,7 +37,7 @@ export async function listVoiceAgents({ selectableOnly = false } = {}) {
     SELECT agent.id, agent.provider_deployment_id, agent.app_id, agent.app_version,
       agent.provider_name, agent.description, agent.channel_direction,
       agent.provider_status, agent.connection_id, agent.outbound_phone_number,
-      agent.usage_category, agent.is_enabled, agent.last_synced_at,
+      agent.catalog_source, agent.usage_category, agent.is_enabled, agent.last_synced_at,
       (${selectableSql("agent")}) AS is_selectable
     FROM sarvam_voice_agents agent
     ${selectableOnly ? `WHERE ${selectableSql("agent")}` : ""}
@@ -63,8 +64,8 @@ export async function synchronizeVoiceAgents(actor) {
         INSERT INTO sarvam_voice_agents (
           provider_deployment_id, app_id, app_version, provider_name, description,
           channel_direction, provider_status, connection_id, outbound_phone_number,
-          provider_payload, last_synced_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,NOW(),NOW())
+          catalog_source, provider_payload, last_synced_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'SARVAM_DEPLOYMENT_API',$10::jsonb,NOW(),NOW())
         ON CONFLICT (provider_deployment_id) DO UPDATE SET
           app_id = EXCLUDED.app_id,
           app_version = EXCLUDED.app_version,
@@ -74,6 +75,7 @@ export async function synchronizeVoiceAgents(actor) {
           provider_status = EXCLUDED.provider_status,
           connection_id = EXCLUDED.connection_id,
           outbound_phone_number = EXCLUDED.outbound_phone_number,
+          catalog_source = 'SARVAM_DEPLOYMENT_API',
           provider_payload = EXCLUDED.provider_payload,
           last_synced_at = NOW(),
           updated_at = NOW()
@@ -85,7 +87,8 @@ export async function synchronizeVoiceAgents(actor) {
     await client.query(`
       UPDATE sarvam_voice_agents
       SET provider_status = 'unavailable', updated_at = NOW()
-      WHERE NOT (provider_deployment_id = ANY($1::text[]))
+      WHERE catalog_source = 'SARVAM_DEPLOYMENT_API'
+        AND NOT (provider_deployment_id = ANY($1::text[]))
     `, [seen]);
     await client.query("COMMIT");
   } catch (error) {
@@ -96,6 +99,52 @@ export async function synchronizeVoiceAgents(actor) {
   }
   const agents = await listVoiceAgents();
   return { synchronized: deployments.length, agents };
+}
+
+export async function registerVoiceAgent(input, actor) {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
+    throw errorWithStatus("Only Admin and Super Admin users can register Sarvam agents", 403);
+  }
+  const providerName = String(input.providerName || "").trim();
+  const appId = String(input.appId || "").trim();
+  const appVersion = Number(input.appVersion);
+  const connectionId = String(input.connectionId || "").trim();
+  const phoneNumber = String(input.outboundPhoneNumber || "").replace(/[\s()-]/g, "");
+  const category = String(input.usageCategory || "").trim().toUpperCase();
+  if (!providerName || !appId || !Number.isInteger(appVersion) || appVersion < 1 || !connectionId || !phoneNumber) {
+    throw errorWithStatus("Agent name, App ID, committed version, connection ID and outbound phone number are required", 400);
+  }
+  if (!CATEGORIES.has(category)) throw errorWithStatus("Voice-agent category is invalid", 400);
+  if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
+    throw errorWithStatus("Outbound phone number must use E.164 format, for example +918065356536", 400);
+  }
+  const fingerprint = crypto.createHash("sha256")
+    .update(`${appId}|${appVersion}|${connectionId}|${phoneNumber}`)
+    .digest("hex").slice(0, 32);
+  const providerDeploymentId = `MANUAL:${fingerprint}`;
+  const db = await getDb();
+  const result = await db.query(`
+    INSERT INTO sarvam_voice_agents (
+      provider_deployment_id, app_id, app_version, provider_name, description,
+      channel_direction, provider_status, connection_id, outbound_phone_number,
+      catalog_source, usage_category, is_enabled, provider_payload,
+      categorized_by_user_id, categorized_at, last_synced_at, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,'outbound','active',$6,$7,'MANUAL_AGENT_APP',$8,TRUE,$9::jsonb,$10,NOW(),NOW(),NOW())
+    ON CONFLICT (provider_deployment_id) DO UPDATE SET
+      provider_name = EXCLUDED.provider_name,
+      description = EXCLUDED.description,
+      usage_category = EXCLUDED.usage_category,
+      is_enabled = TRUE,
+      provider_status = 'active',
+      catalog_source = 'MANUAL_AGENT_APP',
+      provider_payload = EXCLUDED.provider_payload,
+      categorized_by_user_id = EXCLUDED.categorized_by_user_id,
+      categorized_at = NOW(), last_synced_at = NOW(), updated_at = NOW()
+    RETURNING *
+  `, [providerDeploymentId, appId, appVersion, providerName,
+    String(input.description || "").trim() || null, connectionId, phoneNumber, category,
+    JSON.stringify({ catalog_source: "MANUAL_AGENT_APP" }), actor.id]);
+  return result.rows[0];
 }
 
 export async function classifyVoiceAgent(id, input, actor) {
@@ -130,7 +179,7 @@ export async function getVoiceAgentForSelection(client, id) {
     FOR SHARE
   `, [id]);
   if (!result.rowCount) {
-    throw errorWithStatus("Select a synchronized, categorized, active outbound Sarvam voice agent", 400);
+    throw errorWithStatus("Select a registered, categorized, active outbound Sarvam voice agent", 400);
   }
   return result.rows[0];
 }

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS sarvam_voice_agents (
   provider_status text NOT NULL,
   connection_id text,
   outbound_phone_number text,
+  catalog_source text NOT NULL DEFAULT 'SARVAM_DEPLOYMENT_API',
   usage_category text CHECK (usage_category IN (
     'URBAN_MALE',
     'URBAN_FEMALE',
@@ -25,6 +26,9 @@ CREATE TABLE IF NOT EXISTS sarvam_voice_agents (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE sarvam_voice_agents
+  ADD COLUMN IF NOT EXISTS catalog_source text NOT NULL DEFAULT 'SARVAM_DEPLOYMENT_API';
 
 ALTER TABLE campaigns
   ADD COLUMN IF NOT EXISTS voice_agent_id uuid REFERENCES sarvam_voice_agents(id),
