@@ -642,9 +642,9 @@ export default function ProgramsPage() {
             </h1>
 
             <p>
-              Create and manage structured psephology
-              research programs from constituency scope
-              through survey execution and analysis.
+              Govern campaign-led voter thought-process
+              research from constituency scope through AI
+              conversations, sentiment analysis and predictive analytics.
             </p>
 
           </div>
@@ -734,8 +734,8 @@ export default function ProgramsPage() {
           <SummaryCard
             icon={BarChart3}
             label="Research Model"
-            value="Iterative"
-            detail="Program → Iteration → Run"
+            value="Voter Intelligence"
+            detail="Campaign-led sentiment and prediction"
           />
 
         </section>
@@ -1528,13 +1528,19 @@ export default function ProgramsPage() {
           <ArrowRight size={12} />
 
           <strong>
-            Evidence
+            Voter Signals
           </strong>
 
           <ArrowRight size={12} />
 
           <strong>
-            Analysis
+            Sentiment Analysis
+          </strong>
+
+          <ArrowRight size={12} />
+
+          <strong>
+            Predictive Analytics
           </strong>
 
         </div>
