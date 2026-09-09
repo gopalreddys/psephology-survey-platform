@@ -2,6 +2,13 @@ import { getDb } from "./postgres.js";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
+const selectMissingQualification = args.includes("--missing-qualification");
+const expectedCountArgument = args.find((value) =>
+  value.startsWith("--expected-count=")
+);
+const expectedCount = expectedCountArgument
+  ? Number(expectedCountArgument.split("=")[1])
+  : null;
 const epicNumbers = [
   ...new Set(
     args
@@ -11,9 +18,27 @@ const epicNumbers = [
   )
 ];
 
-if (epicNumbers.length === 0) {
+if (selectMissingQualification && epicNumbers.length > 0) {
   console.error(
-    "Usage: node src/db/mark-demo-voters.js [--apply] <EPIC_NUMBER> [EPIC_NUMBER ...]"
+    "Choose either --missing-qualification or explicit EPIC numbers, not both."
+  );
+  process.exit(1);
+}
+
+if (
+  selectMissingQualification &&
+  (!Number.isInteger(expectedCount) || expectedCount < 1)
+) {
+  console.error(
+    "--missing-qualification requires --expected-count=<positive integer>."
+  );
+  process.exit(1);
+}
+
+if (!selectMissingQualification && epicNumbers.length === 0) {
+  console.error(
+    "Usage: node src/db/mark-demo-voters.js [--apply] <EPIC_NUMBER> [EPIC_NUMBER ...]\n" +
+      "   or: node src/db/mark-demo-voters.js [--apply] --missing-qualification --expected-count=10"
   );
   process.exit(1);
 }
@@ -24,12 +49,31 @@ async function markDemoVoters() {
   let transactionStarted = false;
 
   try {
-    const result = await db.query(
-      `
+    const result = selectMissingQualification
+      ? await db.query(
+        `
+          SELECT
+            id,
+            epic_number,
+            full_name,
+            qualification,
+            contact_status,
+            is_active,
+            phone_number IS NOT NULL
+              AND length(trim(phone_number)) > 0 AS has_phone,
+            is_demo_contact
+          FROM voter_master
+          WHERE qualification IS NULL OR length(trim(qualification)) = 0
+          ORDER BY epic_number NULLS LAST, id
+        `
+      )
+      : await db.query(
+        `
         SELECT
           id,
           epic_number,
           full_name,
+          qualification,
           contact_status,
           is_active,
           phone_number IS NOT NULL
@@ -38,29 +82,41 @@ async function markDemoVoters() {
         FROM voter_master
         WHERE epic_number = ANY($1::text[])
         ORDER BY epic_number
-      `,
-      [epicNumbers]
-    );
+        `,
+        [epicNumbers]
+      );
 
-    const foundEpicNumbers = new Set(
-      result.rows.map((row) => row.epic_number)
-    );
-    const missing = epicNumbers.filter(
-      (epicNumber) => !foundEpicNumbers.has(epicNumber)
-    );
+    if (selectMissingQualification && result.rows.length !== expectedCount) {
+      throw new Error(
+        `Safety check failed: expected ${expectedCount} voters without qualification, found ${result.rows.length}. No records were changed.`
+      );
+    }
 
-    if (missing.length > 0) {
-      throw new Error(`Voter EPIC IDs not found: ${missing.join(", ")}`);
+    if (!selectMissingQualification) {
+      const foundEpicNumbers = new Set(
+        result.rows.map((row) => row.epic_number)
+      );
+      const missing = epicNumbers.filter(
+        (epicNumber) => !foundEpicNumbers.has(epicNumber)
+      );
+
+      if (missing.length > 0) {
+        throw new Error(`Voter EPIC IDs not found: ${missing.join(", ")}`);
+      }
     }
 
     const ineligible = result.rows.filter(
-      (row) => !row.is_active || row.contact_status !== "ACTIVE" || !row.has_phone
+      (row) =>
+        !row.is_active ||
+        row.contact_status !== "ACTIVE" ||
+        !row.has_phone ||
+        String(row.qualification || "").trim()
     );
 
     if (ineligible.length > 0) {
       throw new Error(
-        `Inactive or phone-ineligible voter EPIC IDs: ${ineligible
-          .map((row) => row.epic_number)
+        `Ineligible demo voter records: ${ineligible
+          .map((row) => row.epic_number || row.id)
           .join(", ")}`
       );
     }
@@ -103,7 +159,12 @@ async function markDemoVoters() {
           )
           VALUES ($1, FALSE, TRUE, $2)
         `,
-        [voter.id, "Approved as a consented demonstration voter by deployment utility"]
+        [
+          voter.id,
+          selectMissingQualification
+            ? "Approved as one of the expected voter records without qualification for demonstration use"
+            : "Approved as a consented demonstration voter by deployment utility"
+        ]
       );
     }
 

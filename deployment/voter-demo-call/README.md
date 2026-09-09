@@ -8,8 +8,8 @@ analytics.
 ## Safety contract
 
 - Only `SUPER_ADMIN` and `ADMIN` can access the endpoints.
-- Only voters explicitly classified with `is_demo_contact = true` can receive a
-  demo call; the database default is `false`.
+- Only voters explicitly classified with `is_demo_contact = true` and without
+  a qualification can receive a demo call; the database default is `false`.
 - The voter must be active and have an active phone contact.
 - The caller must explicitly confirm that the number is a consented test number.
 - A client-generated idempotency key prevents request replay.
@@ -118,6 +118,19 @@ node src/db/mark-demo-voters.js DEMO_EPIC_1 DEMO_EPIC_2
 node src/db/mark-demo-voters.js --apply DEMO_EPIC_1 DEMO_EPIC_2
 ```
 
-Only active voters with active phone contacts can be approved. Each change is
-recorded in `voter_demo_contact_audit`. Ordinary voters remain ineligible even
-if an administrator crafts the API request manually.
+For the current controlled demo cohort, select the 10 records without a
+qualification. The required expected count prevents a changed dataset from
+approving more or fewer records accidentally:
+
+```bash
+node src/db/mark-demo-voters.js \
+  --missing-qualification --expected-count=10
+
+node src/db/mark-demo-voters.js \
+  --apply --missing-qualification --expected-count=10
+```
+
+Only active voters with active phone contacts and a blank qualification can be
+approved. Each change is recorded in `voter_demo_contact_audit`. Qualified
+voters remain ineligible even if accidentally flagged or if an administrator
+crafts the API request manually.

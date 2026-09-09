@@ -89,6 +89,14 @@ export async function reserveVoterDemoCall({
       );
     }
 
+    if (String(voter.qualification || "").trim()) {
+      throw repositoryError(
+        "Demo calls are restricted to approved demo records without a qualification",
+        403,
+        "VOTER_NOT_DEMO_PROFILE"
+      );
+    }
+
     if (!String(voter.phone_number || "").trim()) {
       throw repositoryError(
         "The selected voter does not have a phone number",
@@ -166,6 +174,7 @@ export async function listVoterDemoContactIds() {
         AND contact_status = 'ACTIVE'
         AND phone_number IS NOT NULL
         AND length(trim(phone_number)) > 0
+        AND (qualification IS NULL OR length(trim(qualification)) = 0)
       ORDER BY id
     `
   );
