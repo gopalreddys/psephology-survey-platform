@@ -85,7 +85,6 @@ router.post(
 
       const provider = await dispatchVoterDemoCall({
         demoCallId: reservation.request.id,
-        idempotencyKey,
         voter: reservation.voter
       });
 

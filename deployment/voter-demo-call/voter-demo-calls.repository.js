@@ -55,6 +55,8 @@ export async function reserveVoterDemoCall({
           full_name,
           phone_number,
           preferred_language,
+          occupation,
+          qualification,
           contact_status,
           is_active
         FROM voter_master

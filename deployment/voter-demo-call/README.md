@@ -40,27 +40,30 @@ cp deployment/voter-demo-call/register-voter-demo-call-route.js \
   /opt/sarvam-voice-analytics/src/db/
 ```
 
-## Runtime adapter contract
+## Sarvam integration
 
-Set `DEMO_CALL_RUNTIME_URL` in the API service environment to an internal HTTPS
-endpoint that accepts one call request. Optionally set
-`DEMO_CALL_RUNTIME_TOKEN`. The API sends:
+The demo service directly reuses the API's existing
+`createInstantOutboundCall` Sarvam client. It defaults to the same Sarvam
+application, application version, connection and caller number currently used
+by `sarvam-execution.service.js`. No provider secret or API key is duplicated.
 
-```json
-{
-  "demo_call_id": "uuid",
-  "voter_id": "uuid",
-  "recipient_name": "Test recipient",
-  "phone_number": "+91...",
-  "preferred_language": "Telugu",
-  "source": "VOTER_MASTER_DEMO",
-  "analytics_excluded": true
-}
+The following optional service environment variables allow the demo profile to
+be changed later without a code deployment:
+
+```text
+SARVAM_DEMO_APP_ID
+SARVAM_DEMO_APP_VERSION
+SARVAM_DEMO_CONNECTION_ID
+SARVAM_DEMO_AGENT_PHONE_NUMBER
+SARVAM_DEMO_AGENT_CODE
+SARVAM_DEMO_VOICE_CODE
+SARVAM_DEMO_QUESTIONNAIRE_CODE
 ```
 
-The runtime should return HTTP 2xx with `provider_call_id`, `call_id`, or `id`.
-It must use its configured default demo agent and must not insert Program,
-Campaign, Iteration, Run, survey-response, or analytical records.
+The Sarvam request carries `source=VOTER_MASTER_DEMO` and
+`analytics_excluded=true`. It does not contain Run, Iteration, Campaign or
+Program identifiers. The demo prompt requires transparent AI identification,
+neutral questions and immediate termination when the participant asks to stop.
 
 ## Install and verify
 
