@@ -39,11 +39,24 @@ for (const item of guards) {
   const nextRoute = source.indexOf("\n\n\nrouter.", start + 1);
   const end = nextRoute < 0 ? source.length : nextRoute;
   const block = source.slice(start, end);
-  if (block.includes(item.guard)) continue;
-  const tryIndex = block.indexOf("try {");
-  if (tryIndex < 0) throw new Error(`Could not find handler body for ${item.route}`);
-  const insertionPoint = tryIndex + "try {".length;
-  const hardenedBlock = block.slice(0, insertionPoint) + `\n\n${item.guard}` + block.slice(insertionPoint);
+  let hardenedBlock = block;
+
+  if (!hardenedBlock.includes(item.guard)) {
+    const tryIndex = hardenedBlock.indexOf("try {");
+    if (tryIndex < 0) throw new Error(`Could not find handler body for ${item.route}`);
+    const insertionPoint = tryIndex + "try {".length;
+    hardenedBlock = hardenedBlock.slice(0, insertionPoint) + `\n\n${item.guard}` + hardenedBlock.slice(insertionPoint);
+  }
+
+  // Campaign iteration allocations are the authorization boundary for Runs.
+  // The legacy geography middleware checks user_geo_assignments instead and
+  // incorrectly rejects Campaigners who have a valid campaign allocation.
+  hardenedBlock = hardenedBlock.replace(
+    /\brequireGeographyAccess\s*,\s*/g,
+    ""
+  );
+
+  if (hardenedBlock === block) continue;
   source = source.slice(0, start) + hardenedBlock + source.slice(end);
 }
 

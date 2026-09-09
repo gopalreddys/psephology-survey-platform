@@ -181,6 +181,12 @@ node src/db/harden-run-voter-selection.js
 
 Both scripts create timestamped backups and fail before writing if the expected existing route or jurisdiction-wide selection block is not found.
 
+`harden-run-route-access.js` also removes the legacy `requireGeographyAccess`
+middleware from the protected Run handlers. Campaign Run authorization is based
+on the active `campaign_work_allocations` row for the exact iteration; retaining
+the legacy middleware would incorrectly require a second `user_geo_assignments`
+record and produce “No active geography assignment” for valid Campaigners.
+
 To grant the three designated test accounts the Campaigner role, copy and run:
 
 ```bash

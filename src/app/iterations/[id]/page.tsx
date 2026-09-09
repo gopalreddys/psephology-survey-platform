@@ -486,17 +486,23 @@ export default function IterationPage() {
 
           onClick={
             function () {
+              if (canCreateRuns) {
+                if (window.history.length > 1) {
+                  router.back();
+                } else {
+                  router.push("/campaigns");
+                }
+                return;
+              }
 
-              router.push(
-                `/programs/${iteration.study_id}`
-              );
+              router.push(`/programs/${iteration.study_id}`);
             }
           }
 
           className="iteration-detail-back"
         >
           <ArrowLeft size={15} />
-          Back to Program
+          {canCreateRuns ? "Back to Iterations" : "Back to Program"}
         </button>
 
 
