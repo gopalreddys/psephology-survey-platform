@@ -26,7 +26,8 @@ import {
   ShieldCheck,
   MapPinned,
   BrainCircuit,
-  PhoneCall
+  PhoneCall,
+  Bot
 } from "lucide-react";
 
 import {
@@ -92,6 +93,16 @@ const menuItems: MenuItem[] = [
       "SUPER_ADMIN",
       "ADMIN",
       "CAMPAIGN_MANAGER"
+    ]
+  },
+
+  {
+    label: "Voice Agents",
+    icon: Bot,
+    href: "/voice-agents",
+    roles: [
+      "SUPER_ADMIN",
+      "ADMIN"
     ]
   },
 

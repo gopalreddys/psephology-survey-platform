@@ -103,6 +103,11 @@
 .footer > div > span { display: grid; gap: 2px; }
 .footer small { color: #8a777e; }
 .detailHero { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; padding: 24px 26px; border: 1px solid #eadfe2; border-radius: 18px; background: #fff; }
+.agentAssignment { display: flex; align-items: center; gap: 12px; margin-top: 14px; border: 1px solid #bfe6df; border-radius: 14px; background: #f0fbf8; padding: 14px 18px; color: #168c7f; }
+.agentAssignment > div { display: grid; gap: 2px; }
+.agentAssignment span { font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.agentAssignment strong { color: #34445a; }
+.agentAssignment small { color: #657b79; }
 .detailActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
 .detailActions .primaryAction, .detailActions .secondaryButton { min-height: 38px; padding: 9px 13px; font-size: 12px; }
 .detailActions .secondaryButton { border: 1px solid #d9e0e5; border-radius: 12px; background: #fff; color: #607187; box-shadow: none; font-weight: 750; cursor: pointer; }

@@ -1,0 +1,44 @@
+.page { padding: 42px 44px 64px; }
+.header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+.header > div { max-width: 850px; }
+.header span, .panelHeader span { color: #cf586d; font-size: 12px; font-weight: 800; letter-spacing: .15em; }
+.header h1 { margin: 8px 0; color: #402a31; font-size: 38px; line-height: 1.05; }
+.header p, .panelHeader p { margin: 0; color: #8b747b; line-height: 1.55; }
+.header button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border: 0; border-radius: 12px; background: #d85f75; padding: 0 18px; color: #fff; font: inherit; font-weight: 800; cursor: pointer; box-shadow: 0 12px 24px rgba(207,88,109,.18); }
+.header button:disabled { cursor: wait; opacity: .58; }
+.metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; margin: 24px 0; }
+.metric { display: flex; align-items: center; gap: 13px; min-height: 84px; border: 1px solid #eadfe2; border-radius: 16px; background: #fff; padding: 15px 17px; }
+.metric > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #e9fbf7; color: #168c7f; }
+.metric div { display: grid; gap: 3px; }
+.metric small { color: #8c7a80; }
+.metric strong { color: #352c3a; font-size: 22px; }
+.panel { overflow: hidden; border: 1px solid #eadfe2; border-radius: 20px; background: #fff; }
+.panelHeader { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 23px 26px; border-bottom: 1px solid #f1e7e9; }
+.panelHeader h2 { margin: 6px 0; color: #402a31; font-size: 25px; }
+.panelHeader > strong { color: #657386; white-space: nowrap; }
+.list { display: grid; gap: 12px; padding: 20px 22px 24px; background: #fffafb; }
+.agentCard, .readyCard { display: grid; grid-template-columns: auto minmax(240px,1.4fr) minmax(190px,.8fr) minmax(190px,.75fr) auto auto; align-items: center; gap: 16px; border: 1px solid #e1e7eb; border-radius: 14px; background: #fff; padding: 16px; }
+.readyCard { border-color: #b9ded7; }
+.agentIcon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #e9fbf7; color: #168c7f; }
+.identity { display: grid; gap: 3px; min-width: 0; }
+.identity > span { color: #34445a; font-weight: 800; }
+.identity strong, .identity small { overflow: hidden; color: #7f8d9c; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.identity p { margin: 3px 0 0; color: #8b747b; font-size: 12px; }
+.telephony { display: grid; gap: 4px; min-width: 0; }
+.telephony span { display: flex; align-items: center; gap: 5px; color: #52677b; font-size: 12px; font-weight: 750; text-transform: capitalize; }
+.telephony small { overflow: hidden; color: #8996a4; text-overflow: ellipsis; white-space: nowrap; }
+.category { display: grid; gap: 6px; color: #6e5961; font-size: 11px; font-weight: 750; }
+.category select { width: 100%; min-height: 41px; border: 1px solid #dfd5d9; border-radius: 10px; background: #fff; padding: 0 10px; color: #35455a; font: inherit; outline: none; }
+.category select:focus { border-color: #168c7f; box-shadow: 0 0 0 3px rgba(22,140,127,.08); }
+.toggle { display: flex; align-items: center; gap: 6px; color: #607187; font-size: 12px; font-weight: 700; }
+.ready, .attention { justify-self: end; border-radius: 999px; padding: 6px 9px; font-size: 10px; font-style: normal; font-weight: 800; white-space: nowrap; }
+.ready { background: #eafaf6; color: #168c7f; }
+.attention { background: #fff5df; color: #a16b14; }
+.empty { display: grid; place-items: center; gap: 8px; min-height: 220px; padding: 32px; color: #8b97a5; text-align: center; }
+.empty svg { color: #d36578; }
+.empty strong { color: #465568; }
+.contract { display: flex; align-items: center; gap: 12px; margin-top: 20px; border: 1px solid #bfe6df; border-radius: 14px; background: #f0fbf8; padding: 16px 18px; color: #168c7f; }
+.contract div { display: grid; gap: 3px; }
+.contract span { color: #657b79; font-size: 13px; }
+@media (max-width: 1180px) { .agentCard, .readyCard { grid-template-columns: auto 1fr 1fr; } .category { grid-column: 2; } .toggle { grid-column: 3; } .ready, .attention { grid-column: 3; justify-self: start; } }
+@media (max-width: 800px) { .page { padding: 28px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .metrics { grid-template-columns: 1fr 1fr; } .agentCard, .readyCard { grid-template-columns: auto 1fr; } .telephony, .category, .toggle, .ready, .attention { grid-column: 2; } .panelHeader { align-items: flex-start; flex-direction: column; } }

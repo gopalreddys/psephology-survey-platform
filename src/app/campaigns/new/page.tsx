@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Building2, Check, ChevronRight, Landmark, MapPin, Search, ShieldCheck } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -20,6 +21,7 @@ type Jurisdiction = { id: string; name: string; code: string | null; type_code: 
 type Geography = { id: string; parent_id: string | null; name: string; geo_type: string; code: string | null; coverage_type?: "FULL" | "PARTIAL"; verification_status?: string };
 type LocalBody = { id: string; name: string; code: string | null; body_type: string; administrative_units: Geography[] };
 type LocalArea = { id: string; name: string; display_label: string | null; code: string | null; area_type: string; administrative_units?: Geography[] };
+type VoiceAgent = { id: string; provider_name: string | null; app_id: string; app_version: number; usage_category: "URBAN_MALE" | "URBAN_FEMALE" | "RURAL_MALE" | "RURAL_FEMALE"; channel_direction: string; provider_deployment_id: string };
 type Domain = "LEGISLATIVE" | "LOCAL_BODY";
 type Office = "MP" | "MLA" | "MLC";
 
@@ -33,6 +35,7 @@ const localModes = [
 ];
 
 export default function NewCampaignPage() {
+  const router = useRouter();
   const { user } = useCurrentUser();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [jurisdictions, setJurisdictions] = useState<Jurisdiction[]>([]);
@@ -40,6 +43,7 @@ export default function NewCampaignPage() {
   const [existingCampaignCodes, setExistingCampaignCodes] = useState<string[]>([]);
   const [localBodies, setLocalBodies] = useState<LocalBody[]>([]);
   const [localAreas, setLocalAreas] = useState<LocalArea[]>([]);
+  const [voiceAgents, setVoiceAgents] = useState<VoiceAgent[]>([]);
   const [domain, setDomain] = useState<Domain>("LEGISLATIVE");
   const [office, setOffice] = useState<Office>("MLA");
   const [bodyType, setBodyType] = useState("ZILLA_PARISHAD");
@@ -47,17 +51,18 @@ export default function NewCampaignPage() {
   const [targetId, setTargetId] = useState("");
   const [scopeLinks, setScopeLinks] = useState<Geography[]>([]);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ code: "", name: "", programId: "", startDate: "", endDate: "" });
+  const [form, setForm] = useState({ code: "", name: "", programId: "", voiceAgentId: "", startDate: "", endDate: "" });
   const [saving, setSaving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(function () {
     if (!user) return;
-    Promise.all([apiFetch("/api/campaign-programs"), apiFetch("/api/jurisdictions"), apiFetch("/api/geographies"), apiFetch("/api/local-bodies?limit=10000"), apiFetch("/api/campaigns").catch(function () { return []; })])
-      .then(function ([programData, jurisdictionData, geographyData, bodyData, campaignData]) {
+    Promise.all([apiFetch("/api/campaign-programs"), apiFetch("/api/jurisdictions"), apiFetch("/api/geographies"), apiFetch("/api/local-bodies?limit=10000"), apiFetch("/api/campaigns").catch(function () { return []; }), apiFetch("/api/voice-agents?selectable=true")])
+      .then(function ([programData, jurisdictionData, geographyData, bodyData, campaignData, voiceAgentData]) {
         setPrograms(programData); setJurisdictions(jurisdictionData); setGeographies(geographyData);
         setLocalBodies(bodyData.items || bodyData);
+        setVoiceAgents(voiceAgentData || []);
         setExistingCampaignCodes((campaignData || []).map(function (item: { campaign_code?: string }) { return item.campaign_code || ""; }));
         const requestedProgramId = new URLSearchParams(window.location.search).get("programId");
         if (requestedProgramId && programData.some(function (program: Program) { return program.id === requestedProgramId; })) {
@@ -69,6 +74,7 @@ export default function NewCampaignPage() {
   const geoById = useMemo(function () { return new globalThis.Map(geographies.map(function (geo) { return [geo.id, geo]; })); }, [geographies]);
   const target = domain === "LEGISLATIVE" ? jurisdictions.find(function (item) { return item.id === targetId; }) : localBodies.find(function (item) { return item.id === targetId; });
   const selectedProgram = programs.find(function (item) { return item.id === form.programId; });
+  const selectedVoiceAgent = voiceAgents.find(function (item) { return item.id === form.voiceAgentId; });
   const targetElectionType = domain === "LEGISLATIVE" ? ((target as Jurisdiction | undefined)?.type_code || office) : "LOCAL";
   const generatedCampaignCode = useMemo(function () {
     if (!target || !form.programId) return "";
@@ -131,18 +137,18 @@ export default function NewCampaignPage() {
   }
 
   async function save() {
-    if (!generatedCampaignCode || !form.name.trim() || !form.programId || !target || !mandals.length) { setMessage("Complete the campaign details, select an assigned research program and choose a verified target geography."); return; }
+    if (!generatedCampaignCode || !form.name.trim() || !form.programId || !form.voiceAgentId || !target || !mandals.length) { setMessage("Complete the campaign details, select an assigned research program, choose a voice agent and confirm a verified target geography."); return; }
     const mode = localModes.find(function (item) { return item.type === bodyType; });
     setSaving(true); setMessage(null);
     try {
       const created = await apiFetch("/api/campaigns", { method: "POST", body: JSON.stringify({
-        campaignCode: generatedCampaignCode, campaignName: form.name.trim(), programId: form.programId || null, surveyStage,
+        campaignCode: generatedCampaignCode, campaignName: form.name.trim(), programId: form.programId || null, voiceAgentId: form.voiceAgentId, surveyStage,
         targetDomain: domain, targetType: domain === "LEGISLATIVE" ? office : mode?.target,
         jurisdictionId: domain === "LEGISLATIVE" ? target.id : null, localBodyId: domain === "LOCAL_BODY" ? target.id : null,
         targetName: target.name, targetCode: target.code, startDate: form.startDate || null, endDate: form.endDate || null,
         mandalIds: mandals.map(function (mandal) { return mandal.id; })
       }) });
-      window.location.href = `/campaigns/${created.id}`;
+      router.push(`/campaigns/${created.id}`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to create campaign"); setSaving(false); }
   }
 
@@ -155,8 +161,9 @@ export default function NewCampaignPage() {
     {message && <FeedbackMessage message={message} className={styles.message} />}
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 1</span><h2>Campaign details</h2><p>This identifies the campaign independently from its research program.</p></div></div>
-      <div className={styles.formGrid}><Field label="Generated campaign code"><input value={generatedCampaignCode || "Select a program and target"} readOnly /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program *"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">Select an assigned program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}{program.study_code ? ` · ${program.study_code}` : ""}</option>; })}</select></Field><Field label="Survey stage *"><select value={surveyStage} onChange={function (e) { setSurveyStage(e.target.value as SurveyStage); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
+      <div className={styles.formGrid}><Field label="Generated campaign code"><input value={generatedCampaignCode || "Select a program and target"} readOnly /></Field><Field label="Campaign name"><input value={form.name} onChange={function (e) { setForm({ ...form, name: e.target.value }); }} placeholder="Campaign name" /></Field><Field label="Research program *"><select value={form.programId} onChange={function (e) { setForm({ ...form, programId: e.target.value }); }}><option value="">Select an assigned program</option>{programs.map(function (program) { return <option key={program.id} value={program.id}>{program.study_name}{program.study_code ? ` · ${program.study_code}` : ""}</option>; })}</select></Field><Field label="AI voice agent *"><select value={form.voiceAgentId} onChange={function (e) { setForm({ ...form, voiceAgentId: e.target.value }); }}><option value="">Select a synchronized agent</option>{voiceAgents.map(function (agent) { return <option key={agent.id} value={agent.id}>{formatAgentCategory(agent.usage_category)} · {agent.provider_name || agent.app_id} · v{agent.app_version}</option>; })}</select></Field><Field label="Survey stage *"><select value={surveyStage} onChange={function (e) { setSurveyStage(e.target.value as SurveyStage); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></Field><Field label="Schedule"><div className={styles.datePair}><input type="date" value={form.startDate} onChange={function (e) { setForm({ ...form, startDate: e.target.value }); }} /><input type="date" value={form.endDate} onChange={function (e) { setForm({ ...form, endDate: e.target.value }); }} /></div></Field></div>
       {!programs.length && <FeedbackMessage message="No active research program is available. Create a Program before creating its Campaign." className={styles.message} />}
+      {!voiceAgents.length && <FeedbackMessage message={<span>No deployable voice agent is available. <Link href="/voice-agents">Synchronize and classify Sarvam agents</Link> before creating a campaign.</span>} tone="error" className={styles.message} />}
     </section>
     <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 2</span><h2>Election target</h2><p>Legislative and Local Body campaigns use the same canonical Administrative geography.</p></div></div>
@@ -174,10 +181,14 @@ export default function NewCampaignPage() {
     </section>}
     {reviewing && target && <section className={styles.createPanel}>
       <div className={styles.panelHeader}><div><span>STEP 4</span><h2>Review campaign</h2><p>Confirm the constituency, voter geography and campaigner workload before creating the draft.</p></div></div>
-      <div className={styles.reviewGrid}><div><small>Campaign identity</small><strong>{form.name || "Campaign name required"}</strong><span>{generatedCampaignCode || "Code generated after target selection"}</span></div><div><small>Research program</small><strong>{programs.find(function (program) { return program.id === form.programId; })?.study_name || "Program required"}</strong><span>Admin-assigned program</span></div><div><small>Survey stage</small><strong>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.label}</strong><span>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.detail}</span></div><div><small>Election constituency</small><strong>{target.name}</strong><span>{domain === "LEGISLATIVE" ? `${office} constituency` : localModes.find(function (item) { return item.type === bodyType; })?.label}</span></div><div><small>Geography scope</small><strong>{districts.length} District · {mandals.length} Mandal</strong><span>{scopeNames || "No administrative geography resolved"}</span></div><div className={styles.reviewWarning}><small>Next owner</small><strong>Campaign Manager</strong><span>Assign the draft after creation, then the manager creates iterations and Campaigner allocations.</span></div></div>
-      <div className={styles.footer}><button type="button" className={styles.secondaryButton} onClick={function () { setReviewing(false); }}>Back to allocation</button><button type="button" disabled={saving || !generatedCampaignCode || !form.name.trim() || !form.programId} onClick={save}>{saving ? "Creating Draft…" : "Create Draft Campaign"}<ChevronRight size={16} /></button></div>
+      <div className={styles.reviewGrid}><div><small>Campaign identity</small><strong>{form.name || "Campaign name required"}</strong><span>{generatedCampaignCode || "Code generated after target selection"}</span></div><div><small>Research program</small><strong>{programs.find(function (program) { return program.id === form.programId; })?.study_name || "Program required"}</strong><span>Admin-assigned program</span></div><div><small>Survey stage</small><strong>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.label}</strong><span>{surveyStageOptions.find(function (option) { return option.value === surveyStage; })?.detail}</span></div><div><small>AI voice agent</small><strong>{selectedVoiceAgent?.provider_name || "Voice agent required"}</strong><span>{selectedVoiceAgent ? `${formatAgentCategory(selectedVoiceAgent.usage_category)} · App version ${selectedVoiceAgent.app_version}` : "Select a deployable Sarvam agent"}</span></div><div><small>Election constituency</small><strong>{target.name}</strong><span>{domain === "LEGISLATIVE" ? `${office} constituency` : localModes.find(function (item) { return item.type === bodyType; })?.label}</span></div><div><small>Geography scope</small><strong>{districts.length} District · {mandals.length} Mandal</strong><span>{scopeNames || "No administrative geography resolved"}</span></div><div className={styles.reviewWarning}><small>Next owner</small><strong>Campaign Manager</strong><span>Assign the draft after creation, then the manager creates iterations and Campaigner allocations.</span></div></div>
+      <div className={styles.footer}><button type="button" className={styles.secondaryButton} onClick={function () { setReviewing(false); }}>Back to allocation</button><button type="button" disabled={saving || !generatedCampaignCode || !form.name.trim() || !form.programId || !form.voiceAgentId} onClick={save}>{saving ? "Creating Draft…" : "Create Draft Campaign"}<ChevronRight size={16} /></button></div>
     </section>}
   </div></AppShell>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className={styles.field}><span>{label}</span>{children}</label>; }
+
+function formatAgentCategory(value: VoiceAgent["usage_category"]) {
+  return value.split("_").map(function (word) { return word.charAt(0) + word.slice(1).toLowerCase(); }).join(" ");
+}

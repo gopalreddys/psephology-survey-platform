@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Building2, ChevronRight, ClipboardList, MapPin, Megaphone, PhoneCall, Plus, ShieldCheck, Target, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Bot, Building2, ChevronRight, ClipboardList, MapPin, Megaphone, PhoneCall, Plus, ShieldCheck, Target, Trash2, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { apiFetch } from "@/lib/api";
@@ -14,7 +15,7 @@ type ScopeRow = { id: string; name: string; code: string | null; district_id: st
 type LocalArea = { id: string; name: string; display_label?: string | null; code: string | null; area_type: string };
 type Allocation = { id: string; iteration_id?: string | null; allocation_level: string; geo_unit_id?: string | null; local_body_area_id?: string | null; geography_name: string; geography_code: string | null; campaigner_user_id?: string; campaigner_name: string; status: string; iteration_number?: number | null; iteration_name?: string | null };
 type CampaignIteration = { id: string; campaign_id?: string | null; study_id: string; iteration_number: number; iteration_name: string; research_phase: string; status: string; target_sample_size: number | null; planned_start_date: string | null; run_count?: number };
-type Campaign = { id: string; campaign_code: string; campaign_name: string; program_id?: string | null; target_domain: string; target_type: string; target_name: string; target_code: string | null; local_body_id?: string | null; survey_stage?: "BASE" | "CAMPAIGN" | "TURNOUT"; status: string; created_by_user_id?: string | null; created_by_name: string | null; campaign_manager_user_id?: string | null; campaign_manager_name?: string | null; start_date: string | null; end_date: string | null; scope: ScopeRow[]; allocations: Allocation[] };
+type Campaign = { id: string; campaign_code: string; campaign_name: string; program_id?: string | null; target_domain: string; target_type: string; target_name: string; target_code: string | null; local_body_id?: string | null; survey_stage?: "BASE" | "CAMPAIGN" | "TURNOUT"; status: string; created_by_user_id?: string | null; created_by_name: string | null; campaign_manager_user_id?: string | null; campaign_manager_name?: string | null; voice_agent_id?: string | null; voice_agent_name?: string | null; voice_agent_category?: string | null; voice_agent_app_id?: string | null; voice_agent_app_version?: number | null; start_date: string | null; end_date: string | null; scope: ScopeRow[]; allocations: Allocation[] };
 type Campaigner = { id: string; full_name: string; email?: string; role_code: string; status?: string };
 type AllocationSummaryRow = { id: string; name: string; code: string; district?: string; campaigner: string | null };
 
@@ -23,6 +24,7 @@ function normalizedAssignments(value: Record<string, string>) {
 }
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
   const { id } = use(params);
   const { user } = useCurrentUser();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -175,7 +177,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     setUpdatingStatus(true); setError(null);
     try {
       await apiFetch(`/api/campaigns/${id}`, { method: "DELETE" });
-      window.location.href = "/campaigns";
+      router.push("/campaigns");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to delete campaign"); setUpdatingStatus(false); }
   }
 
@@ -241,6 +243,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     {error ? <FeedbackMessage message={error} className={styles.message} /> : !campaign ? <div className={styles.empty}>Loading campaign…</div> : <>
       {actionNotice && <FeedbackMessage message={actionNotice} className={styles.successMessage} />}
       <section className={styles.detailHero}><div className={styles.campaignIcon}><Megaphone size={18} /></div><div><span>{campaign.campaign_code} · {campaign.target_domain === "LOCAL_BODY" ? "LOCAL BODY" : "LEGISLATIVE"}</span><h1>{campaign.campaign_name}</h1><p>{campaign.target_type} · {campaign.target_name}{campaign.target_code ? ` · ${campaign.target_code}` : ""} · {campaign.survey_stage || "BASE"} survey</p></div><div className={styles.detailActions}><em>{campaign.status}</em>{canReview && statusAction && <button type="button" className={styles.primaryAction} disabled={updatingStatus || (statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id)} onClick={function () { changeStatus(statusAction.status); }}>{updatingStatus ? "Updating…" : statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id ? "Assign manager first" : statusAction.label}</button>}{canReview && campaign.status === "ACTIVE" && <button type="button" className={styles.secondaryButton} disabled={updatingStatus} onClick={function () { changeStatus("COMPLETED"); }}>Mark completed</button>}{canDelete && <button type="button" className={styles.dangerButton} disabled={updatingStatus} onClick={removeCampaign}><Trash2 size={14} />Delete draft</button>}</div></section>
+      <section className={styles.agentAssignment}><Bot size={20} /><div><span>CAMPAIGN VOICE AGENT</span><strong>{campaign.voice_agent_name || "No voice agent assigned"}</strong><small>{campaign.voice_agent_category ? `${campaign.voice_agent_category.replaceAll("_", " ")} · ` : ""}{campaign.voice_agent_app_id ? `${campaign.voice_agent_app_id} · version ${campaign.voice_agent_app_version}` : "Legacy campaign — assign a synchronized Sarvam deployment before execution."}</small></div></section>
       {canAssignManager && <section className={styles.managerPanel}><div><span>CAMPAIGN OWNERSHIP</span><h2>Assign Campaign Manager</h2><p>The manager receives this campaign and owns its iteration planning.</p>{managerNotice && <FeedbackMessage message={managerNotice} className={styles.successMessage} />}</div><div className={styles.managerControls}><select value={managerId} onChange={function (event) { setManagerId(event.target.value); setManagerNotice(null); }}><option value="">Select Campaign Manager</option>{managers.map(function (manager) { return <option key={manager.id} value={manager.id}>{manager.full_name}</option>; })}</select><button type="button" className={styles.primaryAction} disabled={!managerDirty || savingManager} onClick={assignManager}>{savingManager ? "Assigning…" : managerDirty ? "Assign manager" : "Manager assigned"}</button></div></section>}
       <section className={styles.metrics}><DetailMetric icon={MapPin} label="Districts" value={districts.length} /><DetailMetric icon={Building2} label="Mandals" value={campaign.scope.length} /><DetailMetric icon={ClipboardList} label="Iterations" value={iterations.length} /><DetailMetric icon={Users} label="Campaign Manager" value={campaign.campaign_manager_name || "Unassigned"} /></section>
       <section className={styles.iterationPanel}>
