@@ -106,7 +106,7 @@ async function deleteOperationalChain(db) {
     WHERE call_record.run_id IN (SELECT id FROM campaign_runs)
        OR call_record.iteration_id IN (SELECT id FROM program_iterations)
        OR call_record.study_id IN (SELECT id FROM survey_studies)
-       OR call_record.campaign_id IN (SELECT id FROM campaigns)
+       OR call_record.campaign_id::text IN (SELECT id::text FROM campaigns)
   `);
 
   await db.query("DELETE FROM campaign_run_contacts");
