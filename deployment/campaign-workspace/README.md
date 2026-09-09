@@ -39,6 +39,7 @@ This package adds the operational campaign tables and secured endpoints required
 - `campaigns.routes.js` → `src/routes/campaigns.routes.js`
 - `campaign-programs.repository.js` → `src/repositories/campaign-programs.repository.js`
 - `campaign-programs.routes.js` → `src/routes/campaign-programs.routes.js`
+- `reset-demo-operations.js` → `src/db/reset-demo-operations.js`
 
 ## Register the route
 
@@ -95,6 +96,26 @@ Campaign visibility is enforced from `req.platformUser`: Admin roles see all cam
 Only Admin or Super Admin users can delete a campaign, and deletion is allowed only while the campaign is still `DRAFT`. Active, paused and completed campaigns are retained for audit history.
 
 Voter totals are calculated dynamically from each campaign's selected Mandals and all child geography records. No voter row is copied into campaign tables.
+
+## Reset the demo operational chain
+
+`reset-demo-operations.js` provides a controlled way to restart Program,
+Campaign, Iteration and Run testing. Its default mode is read-only. With
+`--apply`, it creates a timestamped PostgreSQL backup schema and removes the
+linked operational chain in one transaction. Users, roles, geography, voters,
+questionnaires and agent profiles are counted before and after and must remain
+unchanged or the transaction is rolled back. Unrelated legacy call rows are
+preserved.
+
+Stop the API so no new operational record can be written during the reset:
+
+```bash
+node src/db/reset-demo-operations.js
+sudo systemctl stop psephology-api.service
+node src/db/reset-demo-operations.js --apply
+sudo systemctl start psephology-api.service
+curl -i http://127.0.0.1:3000/health
+```
 
 ## Program governance contract
 
