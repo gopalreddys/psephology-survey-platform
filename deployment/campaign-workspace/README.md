@@ -207,6 +207,10 @@ middleware from the protected Run handlers. Campaign Run authorization is based
 on the active `campaign_work_allocations` row for the exact iteration; retaining
 the legacy middleware would incorrectly require a second `user_geo_assignments`
 record and produce “No active geography assignment” for valid Campaigners.
+Re-run the latest script even if an earlier version was applied: the current
+version removes both bare middleware references and configured
+`requireGeographyAccess({...})` calls, then verifies that no protected Run route
+still contains the legacy gate before writing the file.
 
 To grant the three designated test accounts the Campaigner role, copy and run:
 

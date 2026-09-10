@@ -107,10 +107,26 @@ export async function apiFetch(
   }
 
   if (!response.ok) {
+    const primaryMessage =
+      typeof body.error === "string"
+        ? body.error
+        : "";
+
+    const detailMessage =
+      typeof body.message === "string"
+        ? body.message
+        : "";
+
+    const errorMessage =
+      detailMessage &&
+      detailMessage !== primaryMessage
+        ? `${primaryMessage || `Request failed (${response.status})`}: ${detailMessage}`
+        : primaryMessage ||
+          detailMessage ||
+          `API returned ${response.status}`;
+
     throw new Error(
-      body.error ||
-      body.message ||
-      `API returned ${response.status}`
+      errorMessage
     );
   }
 
