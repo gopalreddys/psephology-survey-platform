@@ -106,9 +106,8 @@ export default function VoiceAgentsPage() {
         return [{ ...created, is_selectable: true }, ...next];
       });
       setRegistration(emptyRegistration);
-      setShowRegistration(false);
       setTone("success");
-      setMessage(`${created.provider_name} registered and ready for campaign assignment.`);
+      setMessage(`${created.provider_name} registered and ready for iteration assignment. You can register the next Sarvam Agent App below.`);
     } catch (error) {
       setTone("error");
       setMessage(error instanceof Error ? error.message : "Unable to register Sarvam Agent App");
@@ -150,7 +149,7 @@ export default function VoiceAgentsPage() {
 
   return <AppShell><div className={styles.page}>
     <header className={styles.header}>
-      <div><span>AI CONVERSATION OPERATIONS</span><h1>Voice Agents</h1><p>Maintain the approved Sarvam Agent Apps, committed versions and outbound connections that campaigns may use.</p></div>
+      <div><span>AI CONVERSATION OPERATIONS</span><h1>Voice Agents</h1><p>Maintain every approved Sarvam Agent App, committed version and outbound connection that Campaign Managers may select for an iteration.</p></div>
       <div className={styles.headerActions}><button type="button" className={styles.secondaryAction} onClick={function () { setShowRegistration(function (value) { return !value; }); }}><Plus size={17} />Register Agent App</button><button type="button" onClick={synchronize} disabled={syncing}><CloudDownload size={17} />{syncing ? "Synchronizing…" : "Sync Deployments"}</button></div>
     </header>
 
@@ -160,40 +159,40 @@ export default function VoiceAgentsPage() {
       <div className={styles.registrationHeader}><div><span>OUTBOUND AGENT APP</span><h2>Register callable Sarvam configuration</h2><p>Copy these values from the committed Sarvam agent and its outbound telephony connection.</p></div><button type="button" aria-label="Close registration" onClick={function () { setShowRegistration(false); }}><X size={18} /></button></div>
       <form onSubmit={registerAgent} className={styles.registrationForm}>
         <Field label="Agent display name *"><input value={registration.providerName} onChange={function (event) { setRegistration({ ...registration, providerName: event.target.value }); }} placeholder="Telangana Urban Male Agent" required /></Field>
-        <Field label="Campaign category *"><select value={registration.usageCategory} onChange={function (event) { setRegistration({ ...registration, usageCategory: event.target.value as Category | "" }); }} required><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></Field>
+        <Field label="Audience category *"><select value={registration.usageCategory} onChange={function (event) { setRegistration({ ...registration, usageCategory: event.target.value as Category | "" }); }} required><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></Field>
         <Field label="Sarvam Agent App ID *"><input value={registration.appId} onChange={function (event) { setRegistration({ ...registration, appId: event.target.value }); }} placeholder="Conversatio-…" required /></Field>
         <Field label="Committed version *"><input type="number" min="1" step="1" value={registration.appVersion} onChange={function (event) { setRegistration({ ...registration, appVersion: event.target.value }); }} placeholder="9" required /></Field>
         <Field label="Connection ID *"><input value={registration.connectionId} onChange={function (event) { setRegistration({ ...registration, connectionId: event.target.value }); }} placeholder="Exotel-Sarv-…" required /></Field>
         <Field label="Outbound phone number *"><input value={registration.outboundPhoneNumber} onChange={function (event) { setRegistration({ ...registration, outboundPhoneNumber: event.target.value }); }} placeholder="+9180…" required /></Field>
         <Field label="Operational note"><input value={registration.description} onChange={function (event) { setRegistration({ ...registration, description: event.target.value }); }} placeholder="Telugu urban research voice" /></Field>
-        <div className={styles.registrationFooter}><span>Saving this record makes it selectable for new campaigns.</span><button type="submit" disabled={registering}>{registering ? "Registering…" : "Register Agent"}</button></div>
+        <div className={styles.registrationFooter}><span>Register each Sarvam Agent App once. Saving makes it selectable for new iterations.</span><button type="submit" disabled={registering}>{registering ? "Registering…" : "Register Agent"}</button></div>
       </form>
     </section>}
 
     <section className={styles.metrics}>
       <Metric icon={<CloudDownload size={20} />} label="Synchronized" value={metrics.synchronized} />
       <Metric icon={<Tags size={20} />} label="Categorized" value={metrics.categorized} />
-      <Metric icon={<CheckCircle2 size={20} />} label="Campaign ready" value={metrics.selectable} />
+      <Metric icon={<CheckCircle2 size={20} />} label="Iteration ready" value={metrics.selectable} />
       <Metric icon={<ShieldCheck size={20} />} label="Needs attention" value={metrics.attention} />
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHeader}><div><span>APPROVED SARVAM CATALOG</span><h2>Available voice agents</h2><p>Only active outbound agents with a category and complete telephony configuration appear during campaign creation.</p></div><strong>{agents.length} agents</strong></div>
+      <div className={styles.panelHeader}><div><span>APPROVED SARVAM CATALOG</span><h2>Available voice agents</h2><p>Only active outbound agents with a category and complete telephony configuration appear during iteration creation.</p></div><strong>{agents.length} agents</strong></div>
       {loading ? <div className={styles.empty}>Loading voice-agent catalog…</div> : !agents.length ? <div className={styles.empty}><Bot size={28} /><strong>No callable Sarvam agents registered</strong><span>Register the Agent App ID, committed version and outbound connection used for calling.</span><button type="button" onClick={function () { setShowRegistration(true); }}>Register first agent</button></div> : <div className={styles.list}>
         {agents.map(function (agent) {
           return <article key={agent.id} className={agent.is_selectable ? styles.readyCard : styles.agentCard}>
             <div className={styles.agentIcon}><Bot size={20} /></div>
             <div className={styles.identity}><span>{agent.provider_name || "Unnamed Sarvam agent"}</span><strong>{agent.app_id}</strong><small>Version {agent.app_version} · {agent.catalog_source === "MANUAL_AGENT_APP" ? "Agent App" : "Deployment API"}</small>{agent.description && <p>{agent.description}</p>}</div>
             <div className={styles.telephony}><span><PhoneCall size={14} />{agent.channel_direction}</span><small>{agent.outbound_phone_number || "No outbound number"}</small><small>{agent.connection_id || "No connection id"}</small></div>
-            <label className={styles.category}><span>Campaign category</span><select value={agent.usage_category || ""} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { usageCategory: event.target.value as Category | "" }); }}><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></label>
+            <label className={styles.category}><span>Audience category</span><select value={agent.usage_category || ""} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { usageCategory: event.target.value as Category | "" }); }}><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></label>
             <label className={styles.toggle}><input type="checkbox" checked={agent.is_enabled} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { isEnabled: event.target.checked }); }} /><span>Enabled</span></label>
-            <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Campaign ready" : "Not selectable"}</em>
+            <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Iteration ready" : "Not selectable"}</em>
           </article>;
         })}
       </div>}
     </section>
 
-    <div className={styles.contract}><ShieldCheck size={20} /><div><strong>Research consistency contract</strong><span>The selected App ID, version, connection and phone number are frozen into the campaign. Runs cannot silently switch when Sarvam is edited later.</span></div></div>
+    <div className={styles.contract}><ShieldCheck size={20} /><div><strong>Research consistency contract</strong><span>The selected App ID, version, connection and phone number are frozen into each iteration. Its runs cannot silently switch when Sarvam is edited later.</span></div></div>
   </div></AppShell>;
 }
 

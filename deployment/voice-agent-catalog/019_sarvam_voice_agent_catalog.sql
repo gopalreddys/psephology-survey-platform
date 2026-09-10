@@ -34,11 +34,38 @@ ALTER TABLE campaigns
   ADD COLUMN IF NOT EXISTS voice_agent_id uuid REFERENCES sarvam_voice_agents(id),
   ADD COLUMN IF NOT EXISTS voice_agent_snapshot jsonb;
 
+ALTER TABLE program_iterations
+  ADD COLUMN IF NOT EXISTS voice_agent_id uuid REFERENCES sarvam_voice_agents(id),
+  ADD COLUMN IF NOT EXISTS voice_agent_snapshot jsonb;
+
+-- Preserve callable legacy iterations created while the agent snapshot lived on campaigns.
+UPDATE program_iterations iteration
+SET (voice_agent_id, voice_agent_snapshot) = (
+  SELECT campaign.voice_agent_id, campaign.voice_agent_snapshot
+  FROM campaign_iteration_links link
+  JOIN campaigns campaign ON campaign.id = link.campaign_id
+  WHERE link.iteration_id = iteration.id
+    AND campaign.voice_agent_snapshot IS NOT NULL
+  ORDER BY link.created_at DESC
+  LIMIT 1
+)
+WHERE iteration.voice_agent_snapshot IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM campaign_iteration_links link
+    JOIN campaigns campaign ON campaign.id = link.campaign_id
+    WHERE link.iteration_id = iteration.id
+      AND campaign.voice_agent_snapshot IS NOT NULL
+  );
+
 CREATE INDEX IF NOT EXISTS idx_sarvam_voice_agents_selectable
   ON sarvam_voice_agents(provider_status, channel_direction, usage_category)
   WHERE is_enabled = TRUE;
 
 CREATE INDEX IF NOT EXISTS idx_campaigns_voice_agent
   ON campaigns(voice_agent_id);
+
+CREATE INDEX IF NOT EXISTS idx_program_iterations_voice_agent
+  ON program_iterations(voice_agent_id);
 
 COMMIT;

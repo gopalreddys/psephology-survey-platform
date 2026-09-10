@@ -40,6 +40,7 @@ router.post("/campaigns/:id/iterations", requireAuth, requireRole(["CAMPAIGN_MAN
       targetSampleSize: body.targetSampleSize,
       plannedStartDate: body.plannedStartDate,
       plannedEndDate: body.plannedEndDate,
+      voiceAgentId: body.voiceAgentId,
       createdBy: req.platformUser.id
     });
     return res.status(201).json(result);

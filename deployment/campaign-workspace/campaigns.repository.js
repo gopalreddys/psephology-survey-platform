@@ -1,6 +1,5 @@
 import { getDb } from "../db/postgres.js";
 import { assertCampaignProgramAccess } from "./campaign-programs.repository.js";
-import { getVoiceAgentForSelection, voiceAgentSnapshot } from "./voice-agents.repository.js";
 
 function visibilitySql(actor, parameterNumber) {
   if (["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) return { sql: "TRUE", values: [] };
@@ -47,10 +46,6 @@ export async function listCampaigns(actor) {
       campaign.status, campaign.survey_stage, campaign.start_date, campaign.end_date,
       owner.full_name AS created_by_name, manager.full_name AS campaign_manager_name,
       campaign.campaign_manager_user_id,
-      campaign.voice_agent_id, voice_agent.provider_name AS voice_agent_name,
-      voice_agent.usage_category AS voice_agent_category,
-      voice_agent.app_id AS voice_agent_app_id,
-      voice_agent.app_version AS voice_agent_app_version,
       COALESCE(scope_count.mandal_count, 0) AS mandal_count,
       COALESCE(allocation_count.assignment_count, 0) AS assignment_count,
       COALESCE(voter_count.eligible_voters, 0) AS eligible_voters
@@ -58,7 +53,6 @@ export async function listCampaigns(actor) {
     LEFT JOIN survey_studies program ON program.id = campaign.program_id
     LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
     LEFT JOIN users manager ON manager.id = campaign.campaign_manager_user_id
-    LEFT JOIN sarvam_voice_agents voice_agent ON voice_agent.id = campaign.voice_agent_id
     LEFT JOIN scope_counts scope_count ON scope_count.campaign_id = campaign.id
     LEFT JOIN allocation_counts allocation_count ON allocation_count.campaign_id = campaign.id
     LEFT JOIN voter_counts voter_count ON voter_count.campaign_id = campaign.id
@@ -73,15 +67,10 @@ export async function getCampaignById(id, actor) {
   const visibility = visibilitySql(actor, 2);
   const campaignResult = await db.query(`
     SELECT campaign.*, owner.full_name AS created_by_name,
-      manager.full_name AS campaign_manager_name,
-      voice_agent.provider_name AS voice_agent_name,
-      voice_agent.usage_category AS voice_agent_category,
-      voice_agent.app_id AS voice_agent_app_id,
-      voice_agent.app_version AS voice_agent_app_version
+      manager.full_name AS campaign_manager_name
     FROM campaigns campaign
     LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
     LEFT JOIN users manager ON manager.id = campaign.campaign_manager_user_id
-    LEFT JOIN sarvam_voice_agents voice_agent ON voice_agent.id = campaign.voice_agent_id
     WHERE campaign.id = $1 AND ${visibility.sql}
   `, [id, ...visibility.values]);
   if (!campaignResult.rowCount) return null;
@@ -156,12 +145,11 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
     const readiness = await db.query(`
       SELECT
         (SELECT COUNT(*) FROM campaign_geo_scope WHERE campaign_id = $1)::int AS scope_count,
-        (SELECT campaign_manager_user_id FROM campaigns WHERE id = $1) AS campaign_manager_user_id,
-        (SELECT voice_agent_snapshot FROM campaigns WHERE id = $1) AS voice_agent_snapshot
+        (SELECT campaign_manager_user_id FROM campaigns WHERE id = $1) AS campaign_manager_user_id
     `, [id]);
     const row = readiness.rows[0];
-    if (!Number(row.scope_count) || !row.campaign_manager_user_id || !row.voice_agent_snapshot?.app_id) {
-      const error = new Error("A campaign needs verified geography, an assigned Campaign Manager and a frozen Sarvam voice agent before activation"); error.statusCode = 400; throw error;
+    if (!Number(row.scope_count) || !row.campaign_manager_user_id) {
+      const error = new Error("A campaign needs verified geography and an assigned Campaign Manager before activation"); error.statusCode = 400; throw error;
     }
   }
   const result = await db.query("UPDATE campaigns SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, status, updated_at", [id, status]);
@@ -254,10 +242,9 @@ export async function createCampaign(input, actor) {
   const targetName = String(input.targetName || "").trim();
   const programId = String(input.programId || "").trim();
   const surveyStage = String(input.surveyStage || "BASE").trim().toUpperCase();
-  const voiceAgentId = String(input.voiceAgentId || "").trim();
   const mandalIds = Array.from(new Set(Array.isArray(input.mandalIds) ? input.mandalIds : []));
-  if (!campaignCode || !campaignName || !programId || !targetName || !mandalIds.length || !voiceAgentId) {
-    const error = new Error("Campaign code, name, assigned research program, target, Administrative scope and voice agent are required"); error.statusCode = 400; throw error;
+  if (!campaignCode || !campaignName || !programId || !targetName || !mandalIds.length) {
+    const error = new Error("Campaign code, name, assigned research program, target and Administrative scope are required"); error.statusCode = 400; throw error;
   }
   if (!["BASE", "CAMPAIGN", "TURNOUT"].includes(surveyStage)) {
     const error = new Error("Survey iteration must be BASE, CAMPAIGN or TURNOUT"); error.statusCode = 400; throw error;
@@ -266,7 +253,6 @@ export async function createCampaign(input, actor) {
   try {
     await client.query("BEGIN");
     await assertCampaignProgramAccess(programId, actor, client);
-    const voiceAgent = await getVoiceAgentForSelection(client, voiceAgentId);
     const validMandals = await client.query(`
       SELECT id, parent_id FROM geo_units
       WHERE id = ANY($1::uuid[]) AND geo_type = 'MANDAL' AND is_active = TRUE
@@ -313,13 +299,12 @@ export async function createCampaign(input, actor) {
     const campaignResult = await client.query(`
       INSERT INTO campaigns (campaign_code, campaign_name, program_id, survey_stage, target_domain,
         target_type, jurisdiction_id, local_body_id, local_body_area_id, target_name,
-        target_code, start_date, end_date, created_by_user_id, voice_agent_id, voice_agent_snapshot)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb) RETURNING *
+        target_code, start_date, end_date, created_by_user_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *
     `, [campaignCode, campaignName, programId, surveyStage, input.targetDomain || "LEGISLATIVE",
       input.targetType, input.jurisdictionId || null, input.localBodyId || null,
       input.localBodyAreaId || null, targetName, input.targetCode || null,
-      input.startDate || null, input.endDate || null, actor.id, voiceAgent.id,
-      JSON.stringify(voiceAgentSnapshot(voiceAgent))]);
+      input.startDate || null, input.endDate || null, actor.id]);
     const campaign = campaignResult.rows[0];
     await client.query(`INSERT INTO campaign_geo_scope (campaign_id, geo_unit_id) SELECT $1, unnest($2::uuid[])`, [campaign.id, mandalIds]);
     await client.query("COMMIT");

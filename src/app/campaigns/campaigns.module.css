@@ -153,7 +153,7 @@
 .footer > .secondaryButton { border: 1px solid #d9e0e5; background: #fff; color: #607187; box-shadow: none; }
 .iterationPanel { overflow: hidden; margin-bottom: 26px; border: 1px solid #eadfe2; border-radius: 20px; background: #fff; }
 .iterationPanel .listHeader p { margin: 0; color: #8b747b; font-size: 13px; }
-.iterationForm { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; padding: 20px 26px; border-bottom: 1px solid #f1e7e9; background: #fffafb; }
+.iterationForm { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; padding: 20px 26px; border-bottom: 1px solid #f1e7e9; background: #fffafb; }
 .iterationForm label { display: grid; gap: 7px; color: #6e5961; font-size: 12px; font-weight: 750; }
 .iterationForm input, .iterationForm select { width: 100%; min-height: 43px; box-sizing: border-box; border: 1px solid #dfd5d9; border-radius: 10px; background: #fff; padding: 0 11px; color: #35455a; font: inherit; outline: none; }
 .iterationForm input:focus, .iterationForm select:focus { border-color: #168c7f; box-shadow: 0 0 0 3px rgba(22,140,127,.08); }

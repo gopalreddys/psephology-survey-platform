@@ -5,13 +5,14 @@ import { classifyVoiceAgent, listVoiceAgents, registerVoiceAgent, synchronizeVoi
 
 const router = express.Router();
 const adminRoles = ["SUPER_ADMIN", "ADMIN"];
+const catalogRoles = ["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"];
 
 function sendError(res, error, fallback) {
   console.error(fallback, error);
   return res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : fallback });
 }
 
-router.get("/voice-agents", requireAuth, requireRole(adminRoles), async function (req, res) {
+router.get("/voice-agents", requireAuth, requireRole(catalogRoles), async function (req, res) {
   try {
     return res.json(await listVoiceAgents({ selectableOnly: req.query.selectable === "true" }));
   } catch (error) {

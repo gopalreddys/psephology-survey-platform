@@ -27,5 +27,5 @@ const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
 const backupPath = `${servicePath}.bak-voice-agent-selection-${timestamp}`;
 fs.copyFileSync(servicePath, backupPath);
 fs.writeFileSync(servicePath, source);
-console.log(`Enabled campaign voice-agent selection in ${servicePath}`);
+console.log(`Enabled iteration voice-agent selection in ${servicePath}`);
 console.log(`Backup written to ${backupPath}`);

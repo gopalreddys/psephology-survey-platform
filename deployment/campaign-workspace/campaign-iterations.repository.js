@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { getVoiceAgentForSelection, voiceAgentSnapshot } from "./voice-agents.repository.js";
 
 const STAGES = new Set(["BASE", "CAMPAIGN", "TURNOUT"]);
 const STATUSES = new Set(["PLANNED", "ACTIVE", "PAUSED", "COMPLETED", "LOCKED"]);
@@ -65,6 +66,11 @@ export async function listCampaignIterations(campaignId, actor) {
       iteration.target_sample_size,
       iteration.planned_start_date,
       iteration.planned_end_date,
+      iteration.voice_agent_id,
+      voice_agent.provider_name AS voice_agent_name,
+      voice_agent.usage_category AS voice_agent_category,
+      voice_agent.app_id AS voice_agent_app_id,
+      voice_agent.app_version AS voice_agent_app_version,
       COALESCE(link.status, CASE WHEN iteration.status = 'DRAFT' THEN 'PLANNED' ELSE iteration.status END) AS status,
       iteration.created_at,
       iteration.updated_at,
@@ -72,6 +78,7 @@ export async function listCampaignIterations(campaignId, actor) {
     FROM campaign_iteration_links link
     JOIN campaigns campaign ON campaign.id = link.campaign_id
     JOIN program_iterations iteration ON iteration.id = link.iteration_id
+    LEFT JOIN sarvam_voice_agents voice_agent ON voice_agent.id = iteration.voice_agent_id
     WHERE link.campaign_id = $1 AND ${visibility.sql}
     ORDER BY iteration.iteration_number
   `, [campaignId, ...visibility.values]);
@@ -79,12 +86,15 @@ export async function listCampaignIterations(campaignId, actor) {
 }
 
 export async function createCampaignIteration({ campaignId, iterationName, researchPhase, objective,
-  sampleDesignType, targetSampleSize, plannedStartDate, plannedEndDate, createdBy }) {
+  sampleDesignType, targetSampleSize, plannedStartDate, plannedEndDate, voiceAgentId, createdBy }) {
   const stage = String(researchPhase || "").trim().toUpperCase();
   if (!STAGES.has(stage)) throw errorWithStatus("Unsupported survey stage", 400);
   if (!String(iterationName || "").trim()) throw errorWithStatus("Iteration name is required", 400);
   if (!Number.isInteger(Number(targetSampleSize)) || Number(targetSampleSize) < 1) {
     throw errorWithStatus("Target sample size must be greater than zero", 400);
+  }
+  if (!String(voiceAgentId || "").trim()) {
+    throw errorWithStatus("Select a Sarvam voice agent for this iteration", 400);
   }
 
   const db = await getDb();
@@ -100,6 +110,7 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
     if (["COMPLETED", "ARCHIVED"].includes(campaign.status)) {
       throw errorWithStatus("Iterations cannot be added to a completed or archived campaign", 409);
     }
+    const voiceAgent = await getVoiceAgentForSelection(client, String(voiceAgentId).trim());
 
     const numberResult = await client.query(`
       SELECT COALESCE(MAX(iteration_number), 0) + 1 AS next_number
@@ -117,8 +128,9 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       INSERT INTO program_iterations (
         study_id, iteration_number, iteration_name, research_phase, objective,
         sample_design_type, target_sample_size, planned_start_date, planned_end_date,
-        questionnaire_id, agent_config, calling_profile, status, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,'{}'::jsonb,'{}'::jsonb,'DRAFT',$10)
+        questionnaire_id, agent_config, calling_profile, status, created_by,
+        voice_agent_id, voice_agent_snapshot
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,'{}'::jsonb,'{}'::jsonb,'DRAFT',$10,$11,$12::jsonb)
       RETURNING *
     `, [
       campaign.program_id,
@@ -130,7 +142,9 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       Number(targetSampleSize),
       plannedStartDate || null,
       plannedEndDate || null,
-      createdBy
+      createdBy,
+      voiceAgent.id,
+      JSON.stringify(voiceAgentSnapshot(voiceAgent))
     ]);
 
     const iteration = iterationResult.rows[0];
@@ -140,7 +154,16 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
     `, [campaignId, iteration.id, createdBy]);
 
     await client.query("COMMIT");
-    return { ...iteration, campaign_id: campaignId, status: "PLANNED", run_count: 0 };
+    return {
+      ...iteration,
+      campaign_id: campaignId,
+      status: "PLANNED",
+      run_count: 0,
+      voice_agent_name: voiceAgent.provider_name,
+      voice_agent_category: voiceAgent.usage_category,
+      voice_agent_app_id: voiceAgent.app_id,
+      voice_agent_app_version: voiceAgent.app_version
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

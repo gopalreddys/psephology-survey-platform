@@ -202,18 +202,16 @@ export function voiceAgentSnapshot(agent) {
 export async function getSarvamVoiceAgentForRunContact(runContactId) {
   const db = await getDb();
   const result = await db.query(`
-    SELECT campaign.voice_agent_snapshot
+    SELECT iteration.voice_agent_snapshot
     FROM campaign_run_contacts contact
     JOIN campaign_runs run ON run.id = contact.run_id
-    JOIN campaign_iteration_links link ON link.iteration_id = run.iteration_id
-    JOIN campaigns campaign ON campaign.id = link.campaign_id
+    JOIN program_iterations iteration ON iteration.id = run.iteration_id
     WHERE contact.id = $1
-    ORDER BY link.created_at DESC
     LIMIT 1
   `, [runContactId]);
   const snapshot = result.rows[0]?.voice_agent_snapshot;
   if (!snapshot?.app_id || !snapshot?.app_version || !snapshot?.connection_id || !snapshot?.outbound_phone_number) {
-    throw errorWithStatus("This campaign has no complete Sarvam voice-agent assignment", 409);
+    throw errorWithStatus("This iteration has no complete Sarvam voice-agent assignment", 409);
   }
   return snapshot;
 }
