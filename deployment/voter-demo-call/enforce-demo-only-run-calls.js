@@ -33,9 +33,9 @@ function patchSelection(source) {
   const activeReplacement = `${activeNeedle}\n${demoPredicate("voter", "        ")}`;
   const activeOccurrences = source.split(activeNeedle).length - 1;
 
-  if (activeOccurrences !== 2 && !source.includes("voter.is_demo_contact = TRUE")) {
+  if (activeOccurrences < 1 && !source.includes("voter.is_demo_contact = TRUE")) {
     throw new Error(
-      `Expected two voter selection anchors in ${selectionPath}; found ${activeOccurrences}`
+      `Could not find a voter selection anchor in ${selectionPath}`
     );
   }
 
@@ -44,8 +44,8 @@ function patchSelection(source) {
   }
 
   const demoOccurrences = source.split("voter.is_demo_contact = TRUE").length - 1;
-  if (demoOccurrences < 2) {
-    throw new Error("Demo-only voter selection was not applied to initial and retry Runs");
+  if (demoOccurrences < Math.max(activeOccurrences, 1)) {
+    throw new Error("Demo-only voter selection was not applied to every available Run selection query");
   }
 
   return source;
@@ -57,9 +57,9 @@ function patchLaunch(source) {
 
   if (!source.includes("RUN_LAUNCH_DEMO_ONLY")) {
     const occurrences = source.split(contactSelect).length - 1;
-    if (occurrences !== 2) {
+    if (occurrences < 1) {
       throw new Error(
-        `Expected two launch contact queries in ${launchPath}; found ${occurrences}`
+        `Could not find a launch contact query in ${launchPath}`
       );
     }
 
@@ -71,8 +71,8 @@ function patchLaunch(source) {
   }
 
   const guards = source.split("RUN_LAUNCH_DEMO_ONLY").length - 1;
-  if (guards !== 2) {
-    throw new Error("Demo-only launch guards were not applied to initial and retry cycles");
+  if (guards < 1) {
+    throw new Error("No demo-only launch guard was applied");
   }
 
   return source;

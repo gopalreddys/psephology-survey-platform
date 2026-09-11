@@ -150,7 +150,9 @@ node src/db/enforce-demo-only-run-calls.js /opt/sarvam-voice-analytics
 sudo systemctl restart psephology-api.service
 ```
 
-The patch is idempotent and creates timestamped backups. It requires
+The patch supports both the legacy single-selection backend and the newer
+initial/retry selection implementation. It is idempotent and creates
+timestamped backups. It requires
 `is_demo_contact = true`, an active contact and a blank qualification. This
 three-layer check protects existing Runs created before the restriction as well
 as newly selected Run cohorts.
