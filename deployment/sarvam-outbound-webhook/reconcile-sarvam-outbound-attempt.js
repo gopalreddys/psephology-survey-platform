@@ -1,7 +1,6 @@
-import {
-  getAttempts,
-  getTranscript
-} from "../clients/sarvam.js";
+import { config } from "../config/config.js";
+import { getSarvamSecret } from "../config/secrets.js";
+import { getDb } from "./postgres.js";
 import {
   recordSarvamOutboundResult
 } from "../repositories/sarvam-outbound-webhook.repository.js";
@@ -58,18 +57,94 @@ function normalizeConnectivity(value) {
   );
 }
 
+async function resolveAgentAppId() {
+  const db = await getDb();
+  const result = await db.query(
+    `
+      SELECT COALESCE(
+        iteration.voice_agent_snapshot ->> 'app_id',
+        agent.app_id,
+        $2::text
+      ) AS app_id
+      FROM call_executions execution
+      LEFT JOIN campaign_runs run ON run.id = execution.run_id
+      LEFT JOIN program_iterations iteration ON iteration.id = run.iteration_id
+      LEFT JOIN sarvam_voice_agents agent ON agent.id = iteration.voice_agent_id
+      WHERE execution.provider_attempt_id = $1
+      ORDER BY execution.created_at DESC
+      LIMIT 1
+    `,
+    [attemptId, config.sarvam.agentId || null]
+  );
+
+  const appId = String(result.rows[0]?.app_id || "").trim();
+
+  if (!appId) {
+    throw new Error(
+      "No Sarvam agent app ID is recorded for this call execution"
+    );
+  }
+
+  return appId;
+}
+
+async function sarvamGet(url) {
+  const secret = await getSarvamSecret();
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "X-API-Key": secret.apiKey,
+      "Accept": "application/json"
+    }
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const error = new Error(`Sarvam API returned ${response.status}`);
+    error.status = response.status;
+    error.body = body;
+    throw error;
+  }
+
+  return body;
+}
+
+function analyticsBaseUrl(agentAppId) {
+  return `${config.sarvam.baseUrl}/analytics/v1/` +
+    `${encodeURIComponent(config.sarvam.organizationId)}/` +
+    `${encodeURIComponent(config.sarvam.workspaceId)}/` +
+    `${encodeURIComponent(agentAppId)}`;
+}
+
+async function getAttemptsForAgent(agentAppId) {
+  const url = new URL(`${analyticsBaseUrl(agentAppId)}/attempts`);
+  url.searchParams.set("start_datetime", startDatetime);
+  url.searchParams.set("end_datetime", endDatetime);
+  url.searchParams.set("limit", "1000");
+  url.searchParams.set("offset", "0");
+  return sarvamGet(url);
+}
+
+async function getTranscriptForAgent(agentAppId, interactionId) {
+  return sarvamGet(
+    `${analyticsBaseUrl(agentAppId)}/transcripts/` +
+    encodeURIComponent(interactionId)
+  );
+}
+
 console.log("Fetching Sarvam attempt for reconciliation...", {
   attemptId,
   startDatetime,
   endDatetime
 });
 
-const attemptsResult = await getAttempts({
-  startDatetime,
-  endDatetime,
-  limit: 1000,
-  offset: 0
-});
+const agentAppId = await resolveAgentAppId();
+console.log("Resolved Sarvam agent app:", agentAppId);
+
+const attemptsResult = await getAttemptsForAgent(agentAppId);
 const attempt = attemptItems(attemptsResult)
   .find((item) => String(item.attempt_id) === attemptId);
 
@@ -86,7 +161,10 @@ const status = normalizeConnectivity(
 let transcript = [];
 
 if (attempt.interaction_id) {
-  const transcriptResult = await getTranscript(attempt.interaction_id);
+  const transcriptResult = await getTranscriptForAgent(
+    agentAppId,
+    attempt.interaction_id
+  );
   transcript = transcriptItems(transcriptResult);
 }
 
