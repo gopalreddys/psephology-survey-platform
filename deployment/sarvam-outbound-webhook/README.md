@@ -28,6 +28,7 @@ cd /opt/sarvam-voice-analytics
 node --check src/clients/sarvam.js
 node --check src/routes/sarvam-outbound-webhook.routes.js
 node --check src/repositories/sarvam-outbound-webhook.repository.js
+node --check src/db/finalize-resolved-runs.js
 node --check src/server.js
 node src/db/migrate-sarvam-outbound-webhook.js
 ```
@@ -133,3 +134,19 @@ sudo bash -c '
 The utility retrieves the authoritative Sarvam attempt and transcript and
 passes them through the same idempotent callback processor. It can be safely
 re-run with the same attempt ID.
+
+## Finalize Runs completed before automatic roll-up was installed
+
+Every new callback now checks the complete Run cohort. The final callback
+closes the active cycle and Run only when no selected contact remains pending
+or submitted. The Run-level advisory lock prevents concurrent final callbacks
+from missing the roll-up.
+
+Use the repair utility once for Runs whose callbacks were processed before
+this behavior was deployed. It is read-only without `--apply`:
+
+```bash
+cd /opt/sarvam-voice-analytics
+node src/db/finalize-resolved-runs.js
+node src/db/finalize-resolved-runs.js --apply
+```

@@ -31,6 +31,10 @@ await copy(
   "reconcile-sarvam-outbound-attempt.js",
   path.join(runtimeRoot, "src/db/reconcile-sarvam-outbound-attempt.js")
 );
+await copy(
+  "finalize-resolved-runs.js",
+  path.join(runtimeRoot, "src/db/finalize-resolved-runs.js")
+);
 
 const clientPath = path.join(runtimeRoot, "src/clients/sarvam.js");
 let clientSource = await readFile(clientPath, "utf8");

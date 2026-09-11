@@ -987,7 +987,8 @@ export default function IterationPage() {
                   <span>
                     This Run freezes the selected voter cohort.
                     Successful or terminal voters remain excluded
-                    from later retry cycles within the same Run.
+                    from later Runs. Only unresolved, retry-eligible
+                    voters move into the next Run.
                   </span>
 
                 </div>
@@ -1426,7 +1427,7 @@ export default function IterationPage() {
             <ChevronRight size={13} />
 
             <span>
-              Retry Cycles
+              Retry Run
             </span>
 
             <ChevronRight size={13} />

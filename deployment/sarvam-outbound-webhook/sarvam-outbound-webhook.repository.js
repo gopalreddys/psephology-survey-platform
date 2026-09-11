@@ -173,6 +173,15 @@ export async function recordSarvamOutboundResult(payload) {
       return { matched: false, attemptId };
     }
 
+    // Serialize callbacks belonging to the same Run. Under PostgreSQL's
+    // READ COMMITTED isolation, the callback that obtains this lock last will
+    // see every earlier committed contact result and can safely finalize the
+    // Run without a last-callback race.
+    await db.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1))",
+      [String(execution.run_id)]
+    );
+
     const successful = providerStatus === "connected";
     const retryEligible = !successful;
     const normalizedStatus = successful
@@ -425,6 +434,47 @@ export async function recordSarvamOutboundResult(payload) {
       }
     }
 
+    const runStateResult = await db.query(
+      `
+        SELECT
+          COUNT(*)::int AS total_contacts,
+          COUNT(*) FILTER (
+            WHERE attempt_status NOT IN ('COMPLETED', 'FAILED')
+          )::int AS active_contacts
+        FROM campaign_run_contacts
+        WHERE run_id = $1
+      `,
+      [execution.run_id]
+    );
+
+    const runState = runStateResult.rows[0];
+    const runFinalized =
+      Number(runState?.total_contacts || 0) > 0 &&
+      Number(runState?.active_contacts || 0) === 0;
+
+    if (runFinalized) {
+      await db.query(
+        `
+          UPDATE campaign_run_cycles
+          SET status = 'COMPLETED'
+          WHERE id = $1
+            AND status IN ('READY', 'RUNNING')
+        `,
+        [execution.attempt_cycle_id]
+      );
+
+      await db.query(
+        `
+          UPDATE campaign_runs
+          SET status = 'COMPLETED',
+              updated_at = now()
+          WHERE id = $1
+            AND status IN ('READY', 'RUNNING')
+        `,
+        [execution.run_id]
+      );
+    }
+
     await db.query(
       `
         UPDATE sarvam_outbound_webhook_events
@@ -444,6 +494,7 @@ export async function recordSarvamOutboundResult(payload) {
       attemptId,
       callId,
       status: normalizedStatus,
+      runFinalized,
       transcriptTurns: transcript.length,
       responseVariables: Object.keys(finalVariables)
         .filter((key) => !TECHNICAL_VARIABLES.has(key)).length
