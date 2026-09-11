@@ -76,13 +76,14 @@ export async function selectAssignedVoters(db, {
         AND voter.is_demo_contact = TRUE
         AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
         AND ($2::text IS NULL OR voter.source_name = $2)
+        AND previous_contact.retry_eligible = TRUE
+        AND previous_contact.retry_exhausted = FALSE
         AND COALESCE(previous_contact.final_status, 'UNRESOLVED') NOT IN (
           'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL',
           'REFUSED_TERMINAL', 'DO_NOT_CALL', 'INVALID_NUMBER'
         )
       ORDER BY voter.id
-      LIMIT $3
-    `, [previousRunResult.rows[0].id, sourceName, targetContacts]);
+    `, [previousRunResult.rows[0].id, sourceName]);
 
     if (!result.rowCount) {
       const error = new Error(`Run ${runNumber - 1} has no unresolved contacts; no new Run is required`);

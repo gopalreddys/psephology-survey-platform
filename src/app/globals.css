@@ -4371,6 +4371,45 @@ textarea.iteration-input {
     rgba(233,133,145,.10);
 }
 
+.run-input:read-only,
+.run-input:disabled {
+  cursor: not-allowed;
+  color: #745b62;
+  background: #f8f3f4;
+  opacity: 1;
+}
+
+.run-retry-cohort-summary {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 10px;
+  margin-top: 17px;
+  padding: 13px;
+  border: 1px solid rgba(28,151,136,.15);
+  border-radius: 11px;
+  background: #f0fbf8;
+}
+
+.run-retry-cohort-summary div {
+  min-width: 0;
+}
+
+.run-retry-cohort-summary span,
+.run-retry-cohort-summary strong {
+  display: block;
+}
+
+.run-retry-cohort-summary span {
+  color: #6e8b86;
+  font-size: 11px;
+}
+
+.run-retry-cohort-summary strong {
+  margin-top: 3px;
+  color: #216f65;
+  font-size: 14px;
+}
+
 .run-policy-note {
   display: flex;
   gap: 10px;

@@ -294,7 +294,50 @@ export default function IterationPage() {
   function openCreateRun() {
 
     const nextRunNumber =
-      runs.length + 1;
+      runs.reduce(
+        function (highest, run) {
+          return Math.max(
+            highest,
+            Number(run.run_number || 0)
+          );
+        },
+        0
+      ) + 1;
+
+    const previousRun =
+      nextRunNumber > 1
+        ? runs.find(
+            function (run) {
+              return Number(run.run_number) === nextRunNumber - 1;
+            }
+          )
+        : null;
+
+    if (
+      previousRun &&
+      !["COMPLETED", "FAILED"].includes(previousRun.status)
+    ) {
+      setMessage(
+        `Run ${previousRun.run_number} must finish before Run ${nextRunNumber} can be created.`
+      );
+      return;
+    }
+
+    const retryEligibleContacts =
+      Number(
+        previousRun?.retry_eligible_contacts ||
+        0
+      );
+
+    if (
+      nextRunNumber > 1 &&
+      retryEligibleContacts < 1
+    ) {
+      setMessage(
+        `Run ${nextRunNumber - 1} has no unresolved, retry-eligible voters. Another Run is not required.`
+      );
+      return;
+    }
 
     setForm(
       function (current) {
@@ -307,11 +350,26 @@ export default function IterationPage() {
             ),
 
           runName:
-            `Run ${nextRunNumber}`
+            `Run ${nextRunNumber}`,
+
+          targetContacts:
+            nextRunNumber > 1
+              ? String(retryEligibleContacts)
+              : String(
+                  iteration?.target_sample_size ||
+                  current.targetContacts ||
+                  0
+                ),
+
+          sourceName:
+            nextRunNumber > 1
+              ? "PSEPHOLOGY_DEMO_CONTACTS"
+              : current.sourceName
         };
       }
     );
 
+    setMessage(null);
     setShowCreate(true);
   }
 
@@ -538,6 +596,41 @@ export default function IterationPage() {
       </AppShell>
     );
   }
+
+
+  const formRunNumber =
+    Number(form.runNumber);
+
+  const isRetryRun =
+    formRunNumber > 1;
+
+  const previousRun =
+    isRetryRun
+      ? runs.find(
+          function (run) {
+            return Number(run.run_number) === formRunNumber - 1;
+          }
+        )
+      : null;
+
+  const previousSelectedContacts =
+    Number(
+      previousRun?.total_contacts ??
+      previousRun?.selected_contacts ??
+      0
+    );
+
+  const previousSuccessfulContacts =
+    Number(
+      previousRun?.successful_contacts ||
+      0
+    );
+
+  const retryEligibleContacts =
+    Number(
+      previousRun?.retry_eligible_contacts ||
+      0
+    );
 
 
   return (
@@ -798,6 +891,7 @@ export default function IterationPage() {
                   <input
                     type="number"
                     min={1}
+                    readOnly
 
                     value={
                       form.runNumber
@@ -892,7 +986,8 @@ export default function IterationPage() {
 
                         if (
                           value ===
-                          "PSEPHOLOGY_DEMO_CONTACTS"
+                          "PSEPHOLOGY_DEMO_CONTACTS" &&
+                          !isRetryRun
                         ) {
 
                           updateForm(
@@ -904,6 +999,7 @@ export default function IterationPage() {
                     }
 
                     className="run-input"
+                    disabled={isRetryRun}
                   >
 
                     <option value="">
@@ -919,11 +1015,18 @@ export default function IterationPage() {
                 </Field>
 
 
-                <Field label="Target Voters">
+                <Field
+                  label={
+                    isRetryRun
+                      ? "Retry-eligible Voters"
+                      : "Target Voters"
+                  }
+                >
 
                   <input
                     type="number"
                     min={1}
+                    readOnly={isRetryRun}
 
                     value={
                       form.targetContacts
@@ -972,6 +1075,55 @@ export default function IterationPage() {
                 </Field>
 
               </div>
+
+
+              {isRetryRun && previousRun && (
+
+                <div className="run-retry-cohort-summary">
+
+                  <div>
+                    <span>
+                      Previous Run
+                    </span>
+
+                    <strong>
+                      Run {previousRun.run_number}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Successful — excluded
+                    </span>
+
+                    <strong>
+                      {previousSuccessfulContacts.toLocaleString()}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Retry eligible — included
+                    </span>
+
+                    <strong>
+                      {retryEligibleContacts.toLocaleString()}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Previous cohort
+                    </span>
+
+                    <strong>
+                      {previousSelectedContacts.toLocaleString()}
+                    </strong>
+                  </div>
+
+                </div>
+
+              )}
 
 
               <div className="run-policy-note">
