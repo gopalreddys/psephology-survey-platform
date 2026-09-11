@@ -4484,6 +4484,122 @@ textarea.iteration-input {
   justify-content: space-between;
 }
 
+.run-launch-preview {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(20, 145, 130, .18);
+  border-radius: 12px;
+  background: rgba(239, 252, 249, .78);
+}
+
+.run-launch-preview-header,
+.run-launch-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+}
+
+.run-launch-preview-header {
+  border-bottom: 1px solid rgba(20, 145, 130, .12);
+}
+
+.run-launch-preview-header strong,
+.run-launch-preview-header span {
+  display: block;
+}
+
+.run-launch-preview-header strong {
+  color: #31524f;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.run-launch-preview-header span,
+.run-launch-preview-actions > span {
+  margin-top: 3px;
+  color: #708b88;
+  font-size: 11px;
+}
+
+.run-launch-preview-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(20, 145, 130, .13);
+  border-radius: 8px;
+  color: #537875;
+  background: rgba(255, 255, 255, .72);
+}
+
+.run-launch-contact-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.run-launch-contact {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border: 1px solid rgba(20, 145, 130, .10);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .78);
+}
+
+.run-launch-contact strong,
+.run-launch-contact span {
+  display: block;
+}
+
+.run-launch-contact strong {
+  overflow: hidden;
+  color: #405c59;
+  font-size: 12px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-launch-contact div > span {
+  margin-top: 2px;
+  color: #829795;
+  font-size: 10px;
+}
+
+.run-launch-phone {
+  flex: 0 0 auto;
+  color: #9c5966;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .03em;
+}
+
+.run-launch-preview-actions {
+  border-top: 1px solid rgba(20, 145, 130, .12);
+}
+
+.run-launch-preview-actions .run-submit-button {
+  display: inline-flex;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 680;
+}
+
 .run-card-identity {
   display: flex;
   align-items: center;
@@ -4674,6 +4790,20 @@ textarea.iteration-input {
   .run-form-grid,
   .run-stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .run-card-header,
+  .run-launch-preview-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .run-launch-contact-list {
+    grid-template-columns: 1fr;
+  }
+
+  .run-launch-preview-actions .run-submit-button {
+    width: 100%;
   }
 }
 

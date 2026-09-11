@@ -65,6 +65,29 @@ type Run = {
 };
 
 
+type PendingRunContact = {
+  runContactId: string;
+  voterId: string;
+  fullName: string;
+  phoneEnding: string;
+  preferredLanguage: string | null;
+  geographyName: string | null;
+  attemptCount: number;
+};
+
+
+type RunLaunchPreview = {
+  run: Run;
+  items: PendingRunContact[];
+  total: number;
+  cycle: {
+    id: string;
+    number: number;
+    type: string;
+  } | null;
+};
+
+
 export default function IterationPage() {
 
   const params =
@@ -124,6 +147,24 @@ export default function IterationPage() {
     setLaunchingRunId
   ] =
     useState<string | null>(
+      null
+    );
+
+
+  const [
+    previewingRunId,
+    setPreviewingRunId
+  ] =
+    useState<string | null>(
+      null
+    );
+
+
+  const [
+    launchPreview,
+    setLaunchPreview
+  ] =
+    useState<RunLaunchPreview | null>(
       null
     );
 
@@ -361,85 +402,108 @@ export default function IterationPage() {
   }
 
 
-  async function launchSingleCall(
+  async function reviewPendingCalls(
     run: Run
   ) {
+    setPreviewingRunId(
+      run.id
+    );
+    setMessage(null);
 
-    const confirmed =
-      window.confirm(
-        `Launch exactly 1 call from "${run.run_name || `Run ${run.run_number}`}"?`
+    try {
+      const result =
+        await apiFetch(
+          `/api/runs/${run.id}/pending-contacts?limit=50`
+        );
+
+      const items = Array.isArray(result?.items)
+        ? result.items
+        : [];
+
+      if (items.length === 0) {
+        setMessage(
+          "No eligible pending demo voter is available for this Run."
+        );
+        setLaunchPreview(null);
+        return;
+      }
+
+      setLaunchPreview({
+        run,
+        items,
+        total: Number(result?.total || items.length),
+        cycle: result?.cycle || null
+      });
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to preview pending voters"
       );
+    } finally {
+      setPreviewingRunId(
+        null
+      );
+    }
+  }
 
+
+  async function launchPendingCalls() {
+    if (!launchPreview || launchPreview.items.length === 0) {
+      return;
+    }
+
+    const run = launchPreview.run;
+    const launchCount = launchPreview.items.length;
+    const confirmed = window.confirm(
+      `Submit ${launchCount} approved demo calls from "${run.run_name || `Run ${run.run_number}`}"? Only the voters shown in the preview will be eligible.`
+    );
 
     if (!confirmed) {
       return;
     }
 
-
-    setLaunchingRunId(
-      run.id
-    );
-
+    setLaunchingRunId(run.id);
     setMessage(null);
 
-
     try {
+      const result = await apiFetch(
+        `/api/runs/${run.id}/launch`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            limit: launchCount
+          })
+        }
+      );
 
-      const result =
-        await apiFetch(
-          `/api/runs/${run.id}/launch`,
-          {
-            method: "POST",
+      const submitted = Number(result?.submitted || 0);
+      const failed = Number(result?.failed || 0);
 
-            body:
-              JSON.stringify({
-                limit: 1
-              })
-          }
-        );
-
-
-      if (
-        result.submitted === 1
-      ) {
-
+      if (submitted > 0) {
         setMessage(
-          "1 voter call submitted successfully."
+          `${submitted} demo ${submitted === 1 ? "call was" : "calls were"} submitted successfully${failed > 0 ? `; ${failed} could not be submitted.` : "."}`
         );
-
-      } else if (
-        result.selected === 0
-      ) {
-
+      } else if (Number(result?.selected || 0) === 0) {
         setMessage(
-          "No eligible pending voter was available for this Run."
+          "No eligible pending demo voter was available when the launch was submitted."
         );
-
       } else {
-
         setMessage(
-          `Launch completed. Submitted: ${result.submitted || 0}, Failed: ${result.failed || 0}.`
+          `No calls were submitted. ${failed} submission ${failed === 1 ? "failure" : "failures"} recorded.`
         );
       }
 
-
+      setLaunchPreview(null);
       await loadRuns();
-
-
     } catch (error) {
-
       setMessage(
         error instanceof Error
           ? error.message
-          : "Unable to launch call"
+          : "Unable to launch pending demo calls"
       );
-
-
     } finally {
-
-      setLaunchingRunId(
-        null
-      );
+      setLaunchingRunId(null);
     }
   }
 
@@ -1119,36 +1183,112 @@ export default function IterationPage() {
                               </div>
 
 
-                              <button
-                                type="button"
+                              {canCreateRuns && (
+                                <button
+                                  type="button"
 
-                                onClick={
-                                  function () {
-
-                                    launchSingleCall(
-                                      run
-                                    );
+                                  onClick={
+                                    function () {
+                                      reviewPendingCalls(run);
+                                    }
                                   }
-                                }
 
-                                disabled={
-                                  launchingRunId ===
-                                  run.id
-                                }
+                                  disabled={
+                                    launchingRunId === run.id ||
+                                    previewingRunId === run.id
+                                  }
 
-                                className="iteration-analysis-button"
-                              >
-                                <PhoneCall size={15} />
+                                  className="iteration-analysis-button"
+                                >
+                                  <PhoneCall size={15} />
 
-                                {
-                                  launchingRunId ===
-                                  run.id
-                                    ? "Launching..."
-                                    : "Launch 1 Call"
-                                }
-                              </button>
+                                  {
+                                    launchingRunId === run.id
+                                      ? "Launching..."
+                                      : previewingRunId === run.id
+                                        ? "Loading voters..."
+                                        : "Review & Launch"
+                                  }
+                                </button>
+                              )}
 
                             </div>
+
+
+                            {launchPreview?.run.id === run.id && (
+                              <div className="run-launch-preview">
+
+                                <div className="run-launch-preview-header">
+                                  <div>
+                                    <strong>
+                                      Pending demo voters
+                                    </strong>
+
+                                    <span>
+                                      Review every recipient before submitting this batch.
+                                      {launchPreview.total > launchPreview.items.length
+                                        ? ` Showing the next ${launchPreview.items.length} of ${launchPreview.total}.`
+                                        : ` ${launchPreview.items.length} ${launchPreview.items.length === 1 ? "call" : "calls"} ready.`}
+                                    </span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    className="run-launch-preview-close"
+                                    onClick={function () {
+                                      setLaunchPreview(null);
+                                    }}
+                                    aria-label="Close voter preview"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+
+                                <div className="run-launch-contact-list">
+                                  {launchPreview.items.map(function (contact) {
+                                    return (
+                                      <div
+                                        key={contact.runContactId}
+                                        className="run-launch-contact"
+                                      >
+                                        <div>
+                                          <strong>{contact.fullName}</strong>
+                                          <span>
+                                            {contact.geographyName || "Assigned geography"}
+                                            {contact.preferredLanguage
+                                              ? ` · ${contact.preferredLanguage}`
+                                              : ""}
+                                          </span>
+                                        </div>
+
+                                        <span className="run-launch-phone">
+                                          •••• {contact.phoneEnding}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                <div className="run-launch-preview-actions">
+                                  <span>
+                                    Only approved demo contacts can pass the server-side launch check.
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    className="run-submit-button"
+                                    disabled={launchingRunId === run.id}
+                                    onClick={launchPendingCalls}
+                                  >
+                                    <PhoneCall size={15} />
+                                    {launchingRunId === run.id
+                                      ? "Submitting calls..."
+                                      : `Launch ${launchPreview.items.length === launchPreview.total ? "All " : "Next "}${launchPreview.items.length} Calls`}
+                                  </button>
+                                </div>
+
+                              </div>
+                            )}
 
 
                             <div className="run-stat-grid">
