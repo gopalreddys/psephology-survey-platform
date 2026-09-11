@@ -114,6 +114,22 @@ LIMIT 20;
 ```
 
 The call made before this feature was configured cannot generate a new webhook
-automatically. Recover it separately through Sarvam Analytics using its
-provider attempt/interaction ID, or place a new approved demo call after this
-deployment.
+automatically. Recover it through Sarvam Analytics using its provider attempt
+ID. The command loads the same protected environment used by the API service:
+
+```bash
+sudo bash -c '
+  set -a
+  source /etc/psephology-api.env
+  set +a
+  cd /opt/sarvam-voice-analytics
+  exec /usr/bin/node src/db/reconcile-sarvam-outbound-attempt.js \
+    271d8c05-4b27-4850-b3aa-8f06691736f7 \
+    2026-09-11T07:30:00Z \
+    2026-09-11T08:30:00Z
+'
+```
+
+The utility retrieves the authoritative Sarvam attempt and transcript and
+passes them through the same idempotent callback processor. It can be safely
+re-run with the same attempt ID.

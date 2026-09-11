@@ -27,6 +27,10 @@ await copy(
   "sarvam-outbound-webhook.routes.js",
   path.join(runtimeRoot, "src/routes/sarvam-outbound-webhook.routes.js")
 );
+await copy(
+  "reconcile-sarvam-outbound-attempt.js",
+  path.join(runtimeRoot, "src/db/reconcile-sarvam-outbound-attempt.js")
+);
 
 const clientPath = path.join(runtimeRoot, "src/clients/sarvam.js");
 let clientSource = await readFile(clientPath, "utf8");
