@@ -159,12 +159,16 @@ function analyticsBaseUrl(agentAppId) {
     `${encodeURIComponent(agentAppId)}`;
 }
 
-async function getAttemptsForAgent(agentAppId, filtered = true) {
+async function getAttemptsForAgent(
+  agentAppId,
+  filtered = true,
+  offset = 0
+) {
   const url = new URL(`${analyticsBaseUrl(agentAppId)}/attempts`);
   url.searchParams.set("start_datetime", startDatetime);
   url.searchParams.set("end_datetime", endDatetime);
   url.searchParams.set("limit", "1000");
-  url.searchParams.set("offset", "0");
+  url.searchParams.set("offset", String(offset));
   if (filtered) {
     url.searchParams.set(
       "filter_conditions",
@@ -215,15 +219,45 @@ for (const candidateAppId of agentAppIds) {
       throw error;
     }
   }
-  const items = attemptItems(attemptsResult);
+  let items = attemptItems(attemptsResult);
 
-  console.log("Sarvam Analytics search:", {
+  console.log("Sarvam Analytics filtered search:", {
     agentAppId: candidateAppId,
     total: Number(attemptsResult?.total ?? items.length),
     returned: items.length
   });
 
   attempt = items.find((item) => String(item.attempt_id) === attemptId) || null;
+
+  if (!attempt) {
+    let offset = 0;
+    const pageSize = 1000;
+    let total = 0;
+
+    do {
+      const unfilteredResult = await getAttemptsForAgent(
+        candidateAppId,
+        false,
+        offset
+      );
+      items = attemptItems(unfilteredResult);
+      total = Number(unfilteredResult?.total ?? items.length);
+
+      console.log("Sarvam Analytics unfiltered page:", {
+        agentAppId: candidateAppId,
+        offset,
+        total,
+        returned: items.length
+      });
+
+      attempt = items.find(
+        (item) => String(item.attempt_id) === attemptId
+      ) || null;
+
+      if (attempt || items.length < pageSize) break;
+      offset += items.length;
+    } while (offset < total);
+  }
 
   if (attempt) {
     agentAppId = candidateAppId;
