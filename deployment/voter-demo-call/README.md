@@ -134,3 +134,23 @@ Only active voters with active phone contacts and a blank qualification can be
 approved. Each change is recorded in `voter_demo_contact_audit`. Qualified
 voters remain ineligible even if accidentally flagged or if an administrator
 crafts the API request manually.
+
+## Restrict campaign Run calls during the demo
+
+Campaign Run calling has a separate launch path from the single-voter demo-call
+endpoint. Apply the same allow-list at cohort selection, launch eligibility and
+immediately before Sarvam submission:
+
+```bash
+cd /opt/sarvam-voice-analytics
+
+cp deployment/voter-demo-call/enforce-demo-only-run-calls.js src/db/
+node src/db/enforce-demo-only-run-calls.js /opt/sarvam-voice-analytics
+
+sudo systemctl restart psephology-api.service
+```
+
+The patch is idempotent and creates timestamped backups. It requires
+`is_demo_contact = true`, an active contact and a blank qualification. This
+three-layer check protects existing Runs created before the restriction as well
+as newly selected Run cohorts.

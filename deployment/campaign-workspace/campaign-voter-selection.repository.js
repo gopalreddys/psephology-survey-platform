@@ -73,6 +73,8 @@ export async function selectAssignedVoters(db, {
       WHERE previous_contact.run_id = $1
         AND voter.is_active = TRUE
         AND voter.contact_status = 'ACTIVE'
+        AND voter.is_demo_contact = TRUE
+        AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
         AND ($2::text IS NULL OR voter.source_name = $2)
         AND COALESCE(previous_contact.final_status, 'UNRESOLVED') NOT IN (
           'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL',
@@ -130,6 +132,8 @@ export async function selectAssignedVoters(db, {
       ON geography.geo_unit_id = voter.geo_unit_id
     WHERE voter.is_active = TRUE
       AND voter.contact_status = 'ACTIVE'
+      AND voter.is_demo_contact = TRUE
+      AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
       AND ($4::text IS NULL OR voter.source_name = $4)
       AND NOT EXISTS (
         SELECT 1
