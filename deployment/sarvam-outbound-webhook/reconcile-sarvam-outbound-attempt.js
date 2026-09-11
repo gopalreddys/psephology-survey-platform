@@ -57,15 +57,41 @@ function normalizeConnectivity(value) {
   );
 }
 
-async function resolveAgentAppId() {
+function collectAppIds(node, target) {
+  if (!node || typeof node !== "object") return;
+
+  for (const [key, value] of Object.entries(node)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z]/g, "");
+
+    if (
+      typeof value === "string" &&
+      ["appid", "providerappid", "agentid"].includes(normalizedKey) &&
+      /^[A-Za-z][A-Za-z0-9_-]{3,}$/.test(value.trim())
+    ) {
+      target.add(value.trim());
+    }
+
+    if (value && typeof value === "object") {
+      collectAppIds(value, target);
+    }
+  }
+}
+
+async function resolveAgentAppIds() {
   const db = await getDb();
   const result = await db.query(
     `
-      SELECT COALESCE(
-        iteration.voice_agent_snapshot ->> 'app_id',
-        agent.app_id,
-        $2::text
-      ) AS app_id
+      SELECT
+        execution.request_payload,
+        iteration.voice_agent_snapshot ->> 'app_id' AS iteration_app_id,
+        agent.app_id AS catalog_app_id,
+        ARRAY(
+          SELECT DISTINCT catalog.app_id
+          FROM sarvam_voice_agents catalog
+          WHERE catalog.app_id IS NOT NULL
+            AND length(trim(catalog.app_id)) > 0
+          ORDER BY catalog.app_id
+        ) AS synchronized_app_ids
       FROM call_executions execution
       LEFT JOIN campaign_runs run ON run.id = execution.run_id
       LEFT JOIN program_iterations iteration ON iteration.id = run.iteration_id
@@ -74,18 +100,32 @@ async function resolveAgentAppId() {
       ORDER BY execution.created_at DESC
       LIMIT 1
     `,
-    [attemptId, config.sarvam.agentId || null]
+    [attemptId]
   );
 
-  const appId = String(result.rows[0]?.app_id || "").trim();
+  const execution = result.rows[0];
 
-  if (!appId) {
-    throw new Error(
-      "No Sarvam agent app ID is recorded for this call execution"
-    );
+  if (!execution) {
+    throw new Error("No platform call execution matches this attempt ID");
   }
 
-  return appId;
+  const appIds = new Set();
+  collectAppIds(execution.request_payload, appIds);
+
+  for (const value of [
+    execution.iteration_app_id,
+    execution.catalog_app_id,
+    ...(execution.synchronized_app_ids || []),
+    config.sarvam.agentId
+  ]) {
+    if (String(value || "").trim()) appIds.add(String(value).trim());
+  }
+
+  if (!appIds.size) {
+    throw new Error("No Sarvam agent app ID is available for reconciliation");
+  }
+
+  return [...appIds];
 }
 
 async function sarvamGet(url) {
@@ -119,12 +159,25 @@ function analyticsBaseUrl(agentAppId) {
     `${encodeURIComponent(agentAppId)}`;
 }
 
-async function getAttemptsForAgent(agentAppId) {
+async function getAttemptsForAgent(agentAppId, filtered = true) {
   const url = new URL(`${analyticsBaseUrl(agentAppId)}/attempts`);
   url.searchParams.set("start_datetime", startDatetime);
   url.searchParams.set("end_datetime", endDatetime);
   url.searchParams.set("limit", "1000");
   url.searchParams.set("offset", "0");
+  if (filtered) {
+    url.searchParams.set(
+      "filter_conditions",
+      JSON.stringify([
+        {
+          id: "attempt-id",
+          field: "attempt_id",
+          operator: "equals",
+          value: attemptId
+        }
+      ])
+    );
+  }
   return sarvamGet(url);
 }
 
@@ -141,16 +194,46 @@ console.log("Fetching Sarvam attempt for reconciliation...", {
   endDatetime
 });
 
-const agentAppId = await resolveAgentAppId();
-console.log("Resolved Sarvam agent app:", agentAppId);
+const agentAppIds = await resolveAgentAppIds();
+console.log("Sarvam agent apps to search:", agentAppIds);
 
-const attemptsResult = await getAttemptsForAgent(agentAppId);
-const attempt = attemptItems(attemptsResult)
-  .find((item) => String(item.attempt_id) === attemptId);
+let agentAppId = null;
+let attempt = null;
+
+for (const candidateAppId of agentAppIds) {
+  let attemptsResult;
+
+  try {
+    attemptsResult = await getAttemptsForAgent(candidateAppId);
+  } catch (error) {
+    if (error.status === 422) {
+      attemptsResult = await getAttemptsForAgent(candidateAppId, false);
+    } else if (error.status === 404) {
+      console.log("Sarvam Analytics app not found:", candidateAppId);
+      continue;
+    } else {
+      throw error;
+    }
+  }
+  const items = attemptItems(attemptsResult);
+
+  console.log("Sarvam Analytics search:", {
+    agentAppId: candidateAppId,
+    total: Number(attemptsResult?.total ?? items.length),
+    returned: items.length
+  });
+
+  attempt = items.find((item) => String(item.attempt_id) === attemptId) || null;
+
+  if (attempt) {
+    agentAppId = candidateAppId;
+    break;
+  }
+}
 
 if (!attempt) {
   console.error(
-    "Attempt was not returned by Sarvam Analytics. Confirm the date window and the agent app used for this call."
+    "Attempt was not returned by Sarvam Analytics for any platform agent app. Review the per-app totals above before changing platform data."
   );
   process.exit(2);
 }
