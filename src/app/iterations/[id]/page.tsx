@@ -113,6 +113,14 @@ export default function IterationPage() {
       null
     );
 
+  const [
+    campaignId,
+    setCampaignId
+  ] =
+    useState<string | null>(
+      null
+    );
+
 
   const [
     runs,
@@ -234,6 +242,22 @@ export default function IterationPage() {
   }
 
 
+  async function loadNavigation() {
+
+    try {
+      const data = await apiFetch(
+        `/api/iterations/${iterationId}/navigation`
+      );
+
+      setCampaignId(
+        data?.campaignId || null
+      );
+    } catch {
+      setCampaignId(null);
+    }
+  }
+
+
   async function loadData() {
 
     setLoading(true);
@@ -242,7 +266,8 @@ export default function IterationPage() {
 
       await Promise.all([
         loadIteration(),
-        loadRuns()
+        loadRuns(),
+        loadNavigation()
       ]);
 
     } catch (error) {
@@ -654,23 +679,28 @@ export default function IterationPage() {
 
           onClick={
             function () {
-              if (canCreateRuns) {
-                if (window.history.length > 1) {
-                  router.back();
-                } else {
-                  router.push("/campaigns");
-                }
+              if (campaignId) {
+                router.push(`/campaigns/${campaignId}`);
                 return;
               }
 
-              router.push(`/programs/${iteration.study_id}`);
+              if (["SUPER_ADMIN", "ADMIN"].includes(user?.role.code || "")) {
+                router.push(`/programs/${iteration.study_id}`);
+                return;
+              }
+
+              router.push("/campaigns");
             }
           }
 
           className="iteration-detail-back"
         >
           <ArrowLeft size={15} />
-          {canCreateRuns ? "Back to Iterations" : "Back to Program"}
+          {campaignId
+            ? "Back to Campaign"
+            : ["SUPER_ADMIN", "ADMIN"].includes(user?.role.code || "")
+              ? "Back to Program"
+              : "Back to Campaigns"}
         </button>
 
 

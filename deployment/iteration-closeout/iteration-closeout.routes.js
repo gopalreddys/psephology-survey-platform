@@ -3,7 +3,8 @@ import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
 import {
   completeIteration,
-  getIterationCloseout
+  getIterationCloseout,
+  getIterationNavigation
 } from "../repositories/iteration-closeout.repository.js";
 
 const router = express.Router();
@@ -20,6 +21,24 @@ function sendError(res, error, fallback) {
     error: error.statusCode ? error.message : fallback
   });
 }
+
+router.get(
+  "/iterations/:iterationId/navigation",
+  requireAuth,
+  requireRole(viewRoles),
+  async function (req, res) {
+    try {
+      return res.json(
+        await getIterationNavigation(
+          req.params.iterationId,
+          req.platformUser
+        )
+      );
+    } catch (error) {
+      return sendError(res, error, "Unable to load iteration navigation");
+    }
+  }
+);
 
 router.get(
   "/iterations/:iterationId/closeout",

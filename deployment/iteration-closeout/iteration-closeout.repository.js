@@ -252,6 +252,15 @@ export async function getIterationCloseout(iterationId, actor) {
   return loadCloseout(db, iterationId);
 }
 
+export async function getIterationNavigation(iterationId, actor) {
+  const context = await assertIterationAccess(iterationId, actor);
+  return {
+    iterationId: context.id,
+    campaignId: context.campaign_id || null,
+    programId: context.study_id || null
+  };
+}
+
 export async function completeIteration(iterationId, actor) {
   if (actor.role_code !== "CAMPAIGN_MANAGER") {
     throw errorWithStatus(
