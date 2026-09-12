@@ -1,6 +1,13 @@
 import { getDb } from "../db/postgres.js";
 import { assertIterationAccess } from "./iteration-access.repository.js";
 
+const CLOSED_RUN_STATUSES = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "ARCHIVED"
+]);
+
 function accessError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -24,6 +31,18 @@ export async function assertRunAccess(runId, actor, options = {}) {
 
   if (options.mutate === true && actor.role_code !== "CAMPAIGNER") {
     throw accessError("Only assigned Campaigners can change or execute Runs", 403);
+  }
+
+  if (
+    options.mutate === true &&
+    CLOSED_RUN_STATUSES.has(
+      String(result.rows[0].run_status || "").toUpperCase()
+    )
+  ) {
+    throw accessError(
+      "This Run is complete and read-only; calls cannot be launched again",
+      409
+    );
   }
 
   return { ...result.rows[0], ...context };

@@ -1313,6 +1313,11 @@ export default function IterationPage() {
                           run.selected_contacts ??
                           0;
 
+                        const runIsClosed =
+                          isClosedRunStatus(
+                            run.status
+                          );
+
                         return (
 
                           <div
@@ -1390,8 +1395,15 @@ export default function IterationPage() {
                                   }
 
                                   disabled={
+                                    runIsClosed ||
                                     launchingRunId === run.id ||
                                     previewingRunId === run.id
+                                  }
+
+                                  title={
+                                    runIsClosed
+                                      ? "This Run is complete and cannot be launched again."
+                                      : "Review pending voters before launching calls."
                                   }
 
                                   className="iteration-analysis-button"
@@ -1411,7 +1423,7 @@ export default function IterationPage() {
                             </div>
 
 
-                            {launchPreview?.run.id === run.id && (
+                            {!runIsClosed && launchPreview?.run.id === run.id && (
                               <div className="run-launch-preview">
 
                                 <div className="run-launch-preview-header">
@@ -1780,6 +1792,17 @@ function formatLabel(
         return character.toUpperCase();
       }
     );
+}
+
+function isClosedRunStatus(status: string | null) {
+  return [
+    "COMPLETED",
+    "FAILED",
+    "CANCELLED",
+    "ARCHIVED"
+  ].includes(
+    String(status || "").toUpperCase()
+  );
 }
 
 function surveyStageLabel(value: string | null) {

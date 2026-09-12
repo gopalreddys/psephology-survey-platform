@@ -19,6 +19,17 @@ await copy(
   "run-launch-preview.routes.js",
   path.join(runtimeRoot, "src/routes/run-launch-preview.routes.js")
 );
+await mkdir(
+  path.join(runtimeRoot, "src/repositories"),
+  { recursive: true }
+);
+await copyFile(
+  path.resolve(
+    packageRoot,
+    "../campaign-workspace/run-access.repository.js"
+  ),
+  path.join(runtimeRoot, "src/repositories/run-access.repository.js")
+);
 
 const serverPath = path.join(runtimeRoot, "src/server.js");
 let source = await readFile(serverPath, "utf8");

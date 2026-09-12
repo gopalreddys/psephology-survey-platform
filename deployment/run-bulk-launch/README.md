@@ -8,6 +8,10 @@ The API independently re-checks campaign allocation and demo-voter eligibility.
 The existing launch service remains the authority for reserving and submitting
 eligible contacts.
 
+Completed, failed, cancelled and archived Runs are read-only. Their preview and
+launch endpoints return HTTP 409, while the UI keeps Review & Launch visibly
+disabled so a frozen completed cohort cannot be submitted again.
+
 ## Deploy the API addition
 
 ```bash
@@ -21,6 +25,7 @@ node deployment/run-bulk-launch/install-run-bulk-launch.js \
 
 cd /opt/sarvam-voice-analytics
 node --check src/repositories/run-launch-preview.repository.js
+node --check src/repositories/run-access.repository.js
 node --check src/routes/run-launch-preview.routes.js
 node --check src/server.js
 

@@ -4127,8 +4127,17 @@ textarea.iteration-input {
   background: rgba(255,255,255,.8);
 }
 
-.iteration-analysis-button:hover {
+.iteration-analysis-button:hover:not(:disabled) {
   background: #fff2f4;
+}
+
+.iteration-analysis-button:disabled {
+  cursor: not-allowed;
+  border-color: rgba(120,105,110,.14);
+  color: #aa9a9e;
+  background: #f7f3f4;
+  box-shadow: none;
+  opacity: .68;
 }
 
 .iteration-create-run-button,
