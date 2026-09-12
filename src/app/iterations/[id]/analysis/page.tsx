@@ -186,6 +186,14 @@ export default function AnalysisPage() {
     );
 
   const [
+    closeoutError,
+    setCloseoutError
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
     completing,
     setCompleting
   ] =
@@ -204,13 +212,14 @@ export default function AnalysisPage() {
 
     setLoading(true);
     setError(null);
+    setCloseoutError(null);
 
     try {
 
       const [
         coverageData,
         questionnaireData,
-        closeoutData
+        closeoutResult
       ] =
         await Promise.all([
 
@@ -224,6 +233,22 @@ export default function AnalysisPage() {
 
           apiFetch(
             `/api/iterations/${iterationId}/closeout`
+          ).then(
+            function (data) {
+              return {
+                data: data as IterationCloseout,
+                error: null
+              };
+            }
+          ).catch(
+            function (err) {
+              return {
+                data: null,
+                error: err instanceof Error
+                  ? err.message
+                  : "Unable to load iteration closeout"
+              };
+            }
           )
         ]);
 
@@ -235,9 +260,8 @@ export default function AnalysisPage() {
         questionnaireData
       );
 
-      setCloseout(
-        closeoutData
-      );
+      setCloseout(closeoutResult.data);
+      setCloseoutError(closeoutResult.error);
 
     } catch (err) {
 
@@ -438,6 +462,16 @@ export default function AnalysisPage() {
 
           <FeedbackMessage
             message={notice}
+            className="analysis-workbench-notice"
+          />
+
+        )}
+
+
+        {closeoutError && (
+
+          <FeedbackMessage
+            message={`Closeout status unavailable: ${closeoutError}`}
             className="analysis-workbench-notice"
           />
 

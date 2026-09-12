@@ -81,7 +81,9 @@ async function loadCloseout(client, iterationId) {
             WHERE execution.callback_received_at IS NOT NULL
           )::int AS callbacks_received
         FROM call_executions execution
-        WHERE execution.iteration_id = $1
+        JOIN campaign_runs execution_run
+          ON execution_run.id = execution.run_id
+        WHERE execution_run.iteration_id = $1
         GROUP BY execution.run_id
       ), transcript_stats AS (
         SELECT
