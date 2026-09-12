@@ -168,8 +168,11 @@
 .iterationRow > div:nth-child(2) span { color: #8b97a5; font-size: 12px; }
 .iterationRow > div:nth-child(3) { display: flex; align-items: center; gap: 14px; }
 .iterationRow small { display: inline-flex; align-items: center; gap: 5px; color: #617187; font-size: 12px; white-space: nowrap; }
+.iterationRow .iterationCampaigners { color: #168c7f; font-weight: 700; white-space: normal; }
 .iterationRow > svg { color: #8191a0; }
 .inlineAction { border: 1px solid #b9ded7; border-radius: 9px; background: #effbf8; color: #168c7f; padding: 8px 10px; font-size: 11px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.allocatedState { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: #eafaf6; padding: 7px 10px; color: #168c7f; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.lockedAllocationState { display: inline-flex; align-items: center; border-radius: 999px; background: #f2f4f6; padding: 7px 10px; color: #738194; font-size: 11px; font-weight: 800; white-space: nowrap; }
 .iterationAssignmentPanel { margin: 0 26px 24px; overflow: hidden; border: 1px solid #bfe6df; border-radius: 14px; background: #f7fcfb; }
 .iterationAssignmentPanel .listHeader { padding: 18px 20px; background: #effbf8; }
 .iterationAssignmentPanel .allocationBody { padding: 18px 20px 22px; }

@@ -305,6 +305,18 @@ export async function saveCampaignIterationAllocations(campaignId, iterationId, 
         409
       );
     }
+    const executionResult = await client.query(`
+      SELECT 1
+      FROM campaign_runs
+      WHERE iteration_id = $1
+      LIMIT 1
+    `, [iterationId]);
+    if (executionResult.rowCount) {
+      throw errorWithStatus(
+        "Work allocations cannot be changed after Run execution has started",
+        409
+      );
+    }
 
     const scopeResult = await client.query(`
       SELECT mandal.id, mandal.parent_id

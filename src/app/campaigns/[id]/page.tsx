@@ -177,7 +177,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setIterationAssignments(persisted);
       setSavedIterationAssignments(persisted);
       setAllocationSaved(true);
-      setAllocationNotice(`${saved.length} work area${saved.length === 1 ? "" : "s"} saved. Campaigners can now access only the geography allocated to them.`);
+      const confirmation = `${saved.length} work area${saved.length === 1 ? "" : "s"} saved. Campaigners can now access only the geography allocated to them.`;
+      setAllocationNotice(confirmation);
+      setActionNotice(confirmation);
+      setSelectedIterationId(null);
     } catch (reason) { setIterationError(reason instanceof Error ? reason.message : "Unable to save iteration allocations"); }
     finally { setSavingAssignments(false); }
   }
@@ -268,6 +271,52 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       notStarted: Math.max(iterations.length - completed - inProcess, 0)
     };
   }, [iterations]);
+  const allocationStateByIteration = useMemo(function () {
+    const states = new globalThis.Map<string, {
+      assignedAreas: number;
+      totalAreas: number;
+      complete: boolean;
+      campaignerNames: string[];
+    }>();
+
+    for (const iteration of iterations) {
+      const allocations = (campaign?.allocations || []).filter(function (allocation) {
+        return allocation.iteration_id === iteration.id;
+      });
+      const campaignerNames = Array.from(new Set(allocations.map(function (allocation) {
+        return allocation.campaigner_name;
+      }).filter(Boolean))).sort();
+
+      if (localAreas.length) {
+        const assignedAreaIds = new Set(allocations.map(function (allocation) {
+          return allocation.local_body_area_id;
+        }).filter(Boolean));
+        states.set(iteration.id, {
+          assignedAreas: assignedAreaIds.size,
+          totalAreas: localAreas.length,
+          complete: localAreas.length > 0 && assignedAreaIds.size >= localAreas.length,
+          campaignerNames
+        });
+        continue;
+      }
+
+      const assignedGeographies = new Set(allocations.map(function (allocation) {
+        return allocation.geo_unit_id;
+      }).filter(Boolean));
+      const assignedAreas = (campaign?.scope || []).filter(function (scope) {
+        return assignedGeographies.has(scope.id) || assignedGeographies.has(scope.district_id);
+      }).length;
+      const totalAreas = campaign?.scope.length || 0;
+      states.set(iteration.id, {
+        assignedAreas,
+        totalAreas,
+        complete: totalAreas > 0 && assignedAreas >= totalAreas,
+        campaignerNames
+      });
+    }
+
+    return states;
+  }, [campaign, iterations, localAreas]);
 
   return <AppShell><div className={styles.page}>
     <div className={styles.backRow}><Link href="/campaigns"><ArrowLeft size={16} />Campaigns</Link></div>
@@ -280,7 +329,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         <div className={styles.listHeader}><div><span>CAMPAIGN RESEARCH CYCLES</span><h2>Iterations and execution status</h2><p>Campaign Managers define the survey waves; Campaigners execute their assigned runs.</p></div>{canManageIterations && <button type="button" className={styles.primaryAction} onClick={function () { setShowIterationForm(true); }}><Plus size={15} />Create iteration</button>}</div>
         {iterationError && <FeedbackMessage message={iterationError} className={styles.message} />}
         {showIterationForm && canManageIterations && <div className={styles.iterationForm}><label>Iteration name<input value={iterationForm.name} onChange={function (event) { setIterationForm({ ...iterationForm, name: event.target.value }); }} placeholder="Base survey — September" /></label><label>Survey stage<select value={iterationForm.stage} onChange={function (event) { setIterationForm({ ...iterationForm, stage: event.target.value }); }}>{surveyStageOptions.map(function (option) { return <option key={option.value} value={option.value}>{option.label}</option>; })}</select></label><label>AI voice agent *<select value={iterationForm.voiceAgentId} onChange={function (event) { setIterationForm({ ...iterationForm, voiceAgentId: event.target.value }); }}><option value="">Select Sarvam Agent App</option>{voiceAgents.map(function (agent) { return <option key={agent.id} value={agent.id}>{formatAgentCategory(agent.usage_category)} · {agent.provider_name || agent.app_id} · v{agent.app_version}</option>; })}</select></label><label>Target sample<input type="number" min={1} value={iterationForm.targetSample} onChange={function (event) { setIterationForm({ ...iterationForm, targetSample: event.target.value }); }} /></label><label>Planned start<input type="date" value={iterationForm.startDate} onChange={function (event) { setIterationForm({ ...iterationForm, startDate: event.target.value }); }} /></label><label>Planned end<input type="date" value={iterationForm.endDate} onChange={function (event) { setIterationForm({ ...iterationForm, endDate: event.target.value }); }} /></label><div className={styles.iterationFormActions}><button type="button" className={styles.secondaryButton} onClick={function () { setShowIterationForm(false); }}>Cancel</button><button type="button" className={styles.primaryAction} disabled={savingIteration || !voiceAgents.length} onClick={createCampaignIteration}>{savingIteration ? "Creating…" : "Create iteration"}</button></div>{!voiceAgents.length && <FeedbackMessage message="No campaign-ready Sarvam Agent App is available. Ask an Admin to register and categorize the agents first." className={styles.message} />}</div>}
-        {iterations.length ? <div className={styles.iterationList}>{iterations.map(function (iteration) { const stage = surveyStageOptions.find(function (option) { return option.value === String(iteration.research_phase).toUpperCase(); }); const iterationClosed = ["COMPLETED", "LOCKED"].includes(String(iteration.status).toUpperCase()); return <Link key={iteration.id} href={`/iterations/${iteration.id}`} className={styles.iterationRow}><div className={styles.iterationNumber}>{iteration.iteration_number}</div><div><strong>{iteration.iteration_name}</strong><span>{stage?.label || iteration.research_phase} · {iteration.status}</span><small><Bot size={13} />{iteration.voice_agent_name || "Voice agent not assigned"}{iteration.voice_agent_category ? ` · ${formatAgentCategory(iteration.voice_agent_category as VoiceAgent["usage_category"])}` : ""}</small></div><div><small><Target size={13} />{Number(iteration.target_sample_size || 0).toLocaleString()} voters</small><small><PhoneCall size={13} />{Number(iteration.run_count || 0)} runs</small><small><CheckCircle2 size={13} />{Number(iteration.successful_voters || 0)} successful</small></div>{canManageIterations && !iterationClosed && <button type="button" className={styles.inlineAction} onClick={function (event) { event.preventDefault(); event.stopPropagation(); openIterationAllocations(iteration.id); }}>{selectedIterationId === iteration.id ? "Editing allocation" : "Allocate work"}</button>}<ChevronRight size={17} /></Link>; })}</div> : <div className={styles.empty}><ClipboardList size={24} /><strong>No campaign iterations yet</strong><span>{canManageIterations ? "Create the first survey wave and choose its Sarvam voice agent." : "Iterations will appear here once the Campaign Manager creates them."}</span></div>}
+        {iterations.length ? <div className={styles.iterationList}>{iterations.map(function (iteration) { const stage = surveyStageOptions.find(function (option) { return option.value === String(iteration.research_phase).toUpperCase(); }); const iterationClosed = ["COMPLETED", "LOCKED"].includes(String(iteration.status).toUpperCase()); const executionStarted = Number(iteration.run_count || 0) > 0; const allocationState = allocationStateByIteration.get(iteration.id); const campaignerNames = allocationState?.campaignerNames || []; return <Link key={iteration.id} href={`/iterations/${iteration.id}`} className={styles.iterationRow}><div className={styles.iterationNumber}>{iteration.iteration_number}</div><div><strong>{iteration.iteration_name}</strong><span>{stage?.label || iteration.research_phase} · {iteration.status}</span><small><Bot size={13} />{iteration.voice_agent_name || "Voice agent not assigned"}{iteration.voice_agent_category ? ` · ${formatAgentCategory(iteration.voice_agent_category as VoiceAgent["usage_category"])}` : ""}</small>{campaignerNames.length > 0 && <small className={styles.iterationCampaigners}><Users size={13} />{campaignerNames.length === 1 ? "Campaigner" : "Campaigners"}: {campaignerNames.join(", ")}</small>}</div><div><small><Target size={13} />{Number(iteration.target_sample_size || 0).toLocaleString()} voters</small><small><PhoneCall size={13} />{Number(iteration.run_count || 0)} runs</small><small><CheckCircle2 size={13} />{Number(iteration.successful_voters || 0)} successful</small></div>{allocationState?.complete ? <span className={styles.allocatedState}><CheckCircle2 size={14} />Allocated</span> : executionStarted ? <span className={styles.lockedAllocationState}>Allocation locked</span> : canManageIterations && !iterationClosed ? <button type="button" className={styles.inlineAction} onClick={function (event) { event.preventDefault(); event.stopPropagation(); openIterationAllocations(iteration.id); }}>{selectedIterationId === iteration.id ? "Editing allocation" : Number(allocationState?.assignedAreas || 0) > 0 ? "Continue allocation" : "Allocate work"}</button> : null}<ChevronRight size={17} /></Link>; })}</div> : <div className={styles.empty}><ClipboardList size={24} /><strong>No campaign iterations yet</strong><span>{canManageIterations ? "Create the first survey wave and choose its Sarvam voice agent." : "Iterations will appear here once the Campaign Manager creates them."}</span></div>}
         {canAllocateIteration && <section className={styles.iterationAssignmentPanel}><div className={styles.listHeader}><div><span>ITERATION WORK ALLOCATION</span><h2>Assign Campaigners</h2><p>{localAreas.length ? "Assign each verified division or ward for this iteration." : "Allocate Districts or Mandals for this iteration."} Runs will use only these assigned areas.</p>{allocationNotice && <FeedbackMessage message={allocationNotice} className={styles.successMessage} />}</div><button type="button" className={styles.primaryAction} disabled={savingAssignments || allocationSaved || !allocationDirty} onClick={saveIterationAllocations}>{savingAssignments ? "Saving…" : allocationSaved ? "Allocations saved" : "Save allocations"}</button></div>{localAreas.length ? <div className={styles.areaAllocation}>{localAreas.map(function (area) { const key = `A:${area.id}`; return <label key={area.id}><span><strong>{area.display_label || area.name}</strong><small>{area.code || area.area_type}</small></span><select value={iterationAssignments[key] || ""} onChange={function (event) { setAllocationSaved(false); setIterationAssignments({ ...iterationAssignments, [key]: event.target.value }); setAllocationNotice(null); }}><option value="">Assign Campaigner</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></label>; })}</div> : <div className={styles.allocationBody}><div className={styles.districtGroups}>{districts.map(function ([districtName, rows]) { const districtId = rows[0]?.district_id; const districtKey = `D:${districtId}`; const districtValue = iterationAssignments[districtKey] || ""; return <article key={districtName}><div className={styles.districtHead}><span><strong>{districtName}</strong><small>{rows.length} Mandals in iteration scope</small></span><select value={districtValue} onChange={function (event) { const value = event.target.value; setAllocationSaved(false); setIterationAssignments(function (current) { const next = { ...current, [districtKey]: value }; rows.forEach(function (row) { delete next[`M:${row.id}`]; }); return next; }); setAllocationNotice(null); }}><option value="">Assign individual Mandals</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></div><div className={styles.mandalAllocation}>{rows.map(function (row) { return <label key={row.id}><span><strong>{row.name}</strong><small>{row.code || "No code"}</small></span><select disabled={Boolean(districtValue)} value={iterationAssignments[`M:${row.id}`] || ""} onChange={function (event) { setAllocationSaved(false); setIterationAssignments({ ...iterationAssignments, [`M:${row.id}`]: event.target.value }); setAllocationNotice(null); }}><option value="">Assign Campaigner</option>{campaigners.map(function (campaigner) { return <option key={campaigner.id} value={campaigner.id}>{campaigner.full_name}</option>; })}</select></label>; })}</div></article>; })}</div></div>}<div className={styles.allocationSummary}><div className={styles.summaryHeader}><div><span>ALLOCATION SUMMARY</span><strong>{assignedWorkCount} assigned · {remainingWorkCount} remaining</strong></div><small>Unassigned geography remains available for allocation.</small></div><div className={styles.allocationTable}><div className={styles.allocationTableHeader}><span>Work area</span><span>District</span><span>Campaigner</span><span>Status</span></div>{allocationSummary.map(function (row) { return <div key={row.id} className={styles.allocationTableRow}><span><strong>{row.name}</strong><small>{row.code}</small></span><span>{row.district || "—"}</span><span>{row.campaigner || "—"}</span><em className={row.campaigner ? styles.assignedStatus : styles.remainingStatus}>{row.campaigner ? "Assigned" : "Remaining"}</em></div>; })}</div></div></section>}
       </section>
       <div className={styles.detailGrid}><section className={styles.listPanel}><div className={styles.listHeader}><div><span>ADMINISTRATIVE SCOPE</span><h2>District → Mandal</h2></div></div><div className={styles.scopeTree}>{districts.map(function ([district, rows]) { return <article key={district}><strong>{district}</strong><span>{rows.length} Mandals</span><div>{rows.map(function (row) { return <small key={row.id}>{row.name}</small>; })}</div></article>; })}</div></section>
