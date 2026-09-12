@@ -243,12 +243,13 @@ export async function updateCampaignIterationStatus(campaignId, iterationId, nex
 
 async function assertIterationBelongsToCampaign(client, campaignId, iterationId) {
   const result = await client.query(`
-    SELECT link.iteration_id
+    SELECT link.iteration_id, link.status
     FROM campaign_iteration_links link
     WHERE link.campaign_id = $1 AND link.iteration_id = $2
     FOR UPDATE
   `, [campaignId, iterationId]);
   if (!result.rowCount) throw errorWithStatus("Campaign iteration not found", 404);
+  return result.rows[0];
 }
 
 export async function listCampaignIterationAllocations(campaignId, iterationId, actor) {
@@ -293,7 +294,17 @@ export async function saveCampaignIterationAllocations(campaignId, iterationId, 
     if (["COMPLETED", "ARCHIVED"].includes(campaign.status)) {
       throw errorWithStatus("Completed or archived campaigns cannot receive new allocations", 409);
     }
-    await assertIterationBelongsToCampaign(client, campaignId, iterationId);
+    const iteration = await assertIterationBelongsToCampaign(
+      client,
+      campaignId,
+      iterationId
+    );
+    if (["COMPLETED", "LOCKED"].includes(iteration.status)) {
+      throw errorWithStatus(
+        "Work allocations cannot be changed after an iteration is completed",
+        409
+      );
+    }
 
     const scopeResult = await client.query(`
       SELECT mandal.id, mandal.parent_id
