@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  CalendarDays,
   CheckCircle2,
   ClipboardList,
   Flag,
@@ -49,6 +48,10 @@ type Campaign = {
   survey_stage?: string | null;
   status: string;
   campaign_manager_name?: string | null;
+  iteration_count?: number;
+  completed_iteration_count?: number;
+  run_count?: number;
+  successful_voters?: number;
   start_date: string | null;
   end_date: string | null;
 };
@@ -227,7 +230,7 @@ export default function ProgramDetailPage() {
                       <small>{campaign.target_type} · {campaign.target_name} · {campaign.survey_stage || "BASE"}</small>
                     </div>
                     <CampaignFact icon={UserRound} label="Campaign Manager" value={campaign.campaign_manager_name || "Not assigned"} />
-                    <CampaignFact icon={CalendarDays} label="Schedule" value={formatSchedule(campaign.start_date, campaign.end_date)} />
+                    <CampaignFact icon={CheckCircle2} label="Execution" value={`${Number(campaign.completed_iteration_count || 0)} / ${Number(campaign.iteration_count || 0)} iterations · ${Number(campaign.run_count || 0)} runs · ${Number(campaign.successful_voters || 0)} successful`} />
                     <span className={`program-campaign-status ${statusClass(campaign.status)}`}>{campaign.status}</span>
                   </Link>
                 );
@@ -262,18 +265,6 @@ function CampaignFact({ icon: Icon, label, value }: { icon: React.ElementType; l
       <span><small>{label}</small><strong>{value}</strong></span>
     </div>
   );
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
-}
-
-function formatSchedule(start: string | null, end: string | null) {
-  if (!start && !end) return "Not scheduled";
-  if (!end) return `From ${formatDate(start)}`;
-  if (!start) return `Until ${formatDate(end)}`;
-  return `${formatDate(start)} – ${formatDate(end)}`;
 }
 
 function statusClass(status: string) {

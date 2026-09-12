@@ -10,7 +10,10 @@ export async function selectAssignedVoters(db, {
   sourceName = null
 }) {
   const contextResult = await db.query(`
-    SELECT iteration.id, link.campaign_id
+    SELECT
+      iteration.id,
+      link.campaign_id,
+      COALESCE(link.status, iteration.status) AS iteration_status
     FROM program_iterations iteration
     JOIN campaign_iteration_links link
       ON link.iteration_id = iteration.id
@@ -24,6 +27,16 @@ export async function selectAssignedVoters(db, {
   if (!contextResult.rowCount) {
     const error = new Error("Iteration is not linked to an active campaign");
     error.statusCode = 403;
+    throw error;
+  }
+
+  if (
+    ["COMPLETED", "LOCKED"].includes(
+      String(contextResult.rows[0].iteration_status).toUpperCase()
+    )
+  ) {
+    const error = new Error("Runs cannot be created after an iteration is completed");
+    error.statusCode = 409;
     throw error;
   }
 

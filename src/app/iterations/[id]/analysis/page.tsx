@@ -14,8 +14,10 @@ import {
   FileQuestion,
   Gauge,
   Layers3,
+  LockKeyhole,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Target,
   Users
 } from "lucide-react";
@@ -27,6 +29,12 @@ import {
 
 import AppShell
   from "@/components/AppShell";
+
+import FeedbackMessage
+  from "@/components/FeedbackMessage";
+
+import { useCurrentUser }
+  from "@/hooks/useCurrentUser";
 
 import {
   apiFetch
@@ -80,6 +88,50 @@ type QuestionnaireAnalysis = {
 };
 
 
+type CloseoutRun = {
+  id: string;
+  run_number: number;
+  run_name: string | null;
+  status: string;
+  selected_contacts: number;
+  successful_contacts: number;
+  failed_contacts: number;
+  retry_eligible_contacts: number;
+  retry_exhausted_contacts: number;
+  pending_contacts: number;
+  call_attempts: number;
+  callbacks_received: number;
+  transcripts_captured: number;
+};
+
+
+type IterationCloseout = {
+  iteration: {
+    id: string;
+    iteration_number: number;
+    iteration_name: string;
+    campaign_id: string;
+    campaign_name: string;
+    status: string;
+  };
+  runs: CloseoutRun[];
+  summary: {
+    runCount: number;
+    completedRuns: number;
+    openRuns: number;
+    uniqueVoters: number;
+    successfulVoters: number;
+    unresolvedVoters: number;
+    retryEligibleVoters: number;
+    retryExhaustedVoters: number;
+    callbacksReceived: number;
+    transcriptsCaptured: number;
+  };
+  readyToComplete: boolean;
+  blockers: string[];
+};
+
+
 export default function AnalysisPage() {
 
   const params =
@@ -87,6 +139,9 @@ export default function AnalysisPage() {
 
   const router =
     useRouter();
+
+  const { user } =
+    useCurrentUser();
 
   const iterationId =
     params.id as string;
@@ -122,6 +177,28 @@ export default function AnalysisPage() {
       null
     );
 
+  const [
+    closeout,
+    setCloseout
+  ] =
+    useState<IterationCloseout | null>(
+      null
+    );
+
+  const [
+    completing,
+    setCompleting
+  ] =
+    useState(false);
+
+  const [
+    notice,
+    setNotice
+  ] =
+    useState<string | null>(
+      null
+    );
+
 
   async function loadAnalysis() {
 
@@ -132,7 +209,8 @@ export default function AnalysisPage() {
 
       const [
         coverageData,
-        questionnaireData
+        questionnaireData,
+        closeoutData
       ] =
         await Promise.all([
 
@@ -142,6 +220,10 @@ export default function AnalysisPage() {
 
           apiFetch(
             `/api/iterations/${iterationId}/questionnaire-analysis`
+          ),
+
+          apiFetch(
+            `/api/iterations/${iterationId}/closeout`
           )
         ]);
 
@@ -151,6 +233,10 @@ export default function AnalysisPage() {
 
       setQuestionnaire(
         questionnaireData
+      );
+
+      setCloseout(
+        closeoutData
       );
 
     } catch (err) {
@@ -164,6 +250,65 @@ export default function AnalysisPage() {
     } finally {
 
       setLoading(false);
+    }
+  }
+
+
+  async function completeIteration() {
+
+    if (
+      !closeout ||
+      !closeout.readyToComplete ||
+      String(closeout.iteration.status).toUpperCase() === "COMPLETED"
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Complete this iteration? Remaining unsuccessful voters after Run 3 will be recorded as retry-exhausted and the iteration will become read-only."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setCompleting(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await apiFetch(
+        `/api/iterations/${iterationId}/complete`,
+        {
+          method: "POST"
+        }
+      );
+
+      setCloseout(result);
+      setCoverage(
+        function (current) {
+          return current
+            ? {
+                ...current,
+                iteration: {
+                  ...current.iteration,
+                  status: "COMPLETED"
+                }
+              }
+            : current;
+        }
+      );
+      setNotice(
+        "Iteration completed successfully. Run outcomes, callbacks and transcript evidence are now consolidated for Campaign and Program review."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to complete iteration"
+      );
+    } finally {
+      setCompleting(false);
     }
   }
 
@@ -285,6 +430,16 @@ export default function AnalysisPage() {
           <div className="analysis-workbench-error">
             {error}
           </div>
+
+        )}
+
+
+        {notice && (
+
+          <FeedbackMessage
+            message={notice}
+            className="analysis-workbench-notice"
+          />
 
         )}
 
@@ -465,6 +620,178 @@ export default function AnalysisPage() {
               </div>
 
             </section>
+
+
+            {closeout && (
+
+              <section className="analysis-closeout-panel">
+
+                <div className="analysis-closeout-header">
+
+                  <div>
+
+                    <div className="analysis-workbench-eyebrow">
+                      ITERATION CLOSEOUT
+                    </div>
+
+                    <h2>
+                      Run evidence and completion readiness
+                    </h2>
+
+                    <p>
+                      Consolidated unique-voter outcomes across every Run,
+                      with callback and transcript controls.
+                    </p>
+
+                  </div>
+
+
+                  <div
+                    className={
+                      closeout.readyToComplete
+                        ? "analysis-closeout-state ready"
+                        : "analysis-closeout-state blocked"
+                    }
+                  >
+                    {closeout.readyToComplete
+                      ? <ShieldCheck size={17} />
+                      : <LockKeyhole size={17} />}
+
+                    <span>
+                      {String(closeout.iteration.status).toUpperCase() === "COMPLETED"
+                        ? "Completed"
+                        : closeout.readyToComplete
+                          ? "Ready to complete"
+                          : "Closeout blocked"}
+                    </span>
+                  </div>
+
+                </div>
+
+
+                <div className="analysis-closeout-summary">
+
+                  <CloseoutMetric
+                    label="Unique voters"
+                    value={closeout.summary.uniqueVoters}
+                  />
+
+                  <CloseoutMetric
+                    label="Successful"
+                    value={closeout.summary.successfulVoters}
+                  />
+
+                  <CloseoutMetric
+                    label="Unresolved"
+                    value={closeout.summary.unresolvedVoters}
+                  />
+
+                  <CloseoutMetric
+                    label="Callbacks"
+                    value={closeout.summary.callbacksReceived}
+                  />
+
+                  <CloseoutMetric
+                    label="Transcripts"
+                    value={closeout.summary.transcriptsCaptured}
+                  />
+
+                </div>
+
+
+                <div className="analysis-closeout-table-wrap">
+
+                  <table className="analysis-closeout-table">
+
+                    <thead>
+                      <tr>
+                        <th>Run</th>
+                        <th className="numeric">Selected</th>
+                        <th className="numeric">Successful</th>
+                        <th className="numeric">Retry eligible</th>
+                        <th className="numeric">Callbacks</th>
+                        <th className="numeric">Transcripts</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {closeout.runs.map(
+                        function (run) {
+                          return (
+                            <tr key={run.id}>
+                              <td>
+                                <strong>
+                                  {run.run_name || `Run ${run.run_number}`}
+                                </strong>
+                              </td>
+                              <td className="numeric">{run.selected_contacts}</td>
+                              <td className="numeric">{run.successful_contacts}</td>
+                              <td className="numeric">{run.retry_eligible_contacts}</td>
+                              <td className="numeric">
+                                {run.callbacks_received} / {run.call_attempts}
+                              </td>
+                              <td className="numeric">{run.transcripts_captured}</td>
+                              <td>
+                                <span className="analysis-closeout-run-status">
+                                  {formatLabel(run.status)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        }
+                      )}
+                    </tbody>
+
+                  </table>
+
+                </div>
+
+
+                <div className="analysis-closeout-footer">
+
+                  <div>
+                    {closeout.blockers.length > 0
+                      ? closeout.blockers.map(
+                          function (blocker) {
+                            return <span key={blocker}>{blocker}</span>;
+                          }
+                        )
+                      : (
+                        <span>
+                          All Runs and callbacks are resolved. The assigned Campaign Manager may complete this iteration.
+                        </span>
+                      )}
+                  </div>
+
+
+                  {user?.role.code === "CAMPAIGN_MANAGER" && (
+
+                    <button
+                      type="button"
+                      className="analysis-complete-button"
+                      disabled={
+                        completing ||
+                        !closeout.readyToComplete ||
+                        String(closeout.iteration.status).toUpperCase() === "COMPLETED"
+                      }
+                      onClick={completeIteration}
+                    >
+                      <ShieldCheck size={16} />
+                      {completing
+                        ? "Completing…"
+                        : String(closeout.iteration.status).toUpperCase() === "COMPLETED"
+                          ? "Iteration completed"
+                          : "Complete Iteration"}
+                    </button>
+
+                  )}
+
+                </div>
+
+              </section>
+
+            )}
 
 
             <section className="analysis-evidence-panel">
@@ -698,6 +1025,22 @@ export default function AnalysisPage() {
       </div>
 
     </AppShell>
+  );
+}
+
+
+function CloseoutMetric({
+  label,
+  value
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="analysis-closeout-metric">
+      <span>{label}</span>
+      <strong>{value.toLocaleString()}</strong>
+    </div>
   );
 }
 

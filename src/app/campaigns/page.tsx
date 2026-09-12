@@ -6,12 +6,10 @@ import {
   CheckCircle2,
   ClipboardList,
   FolderKanban,
-  MapPin,
   Megaphone,
   PlayCircle,
   Plus,
   Search,
-  Users,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
@@ -36,6 +34,10 @@ type Campaign = {
   eligible_voters: number;
   created_by_name: string | null;
   campaign_manager_name?: string | null;
+  iteration_count?: number;
+  completed_iteration_count?: number;
+  run_count?: number;
+  successful_voters?: number;
   start_date: string | null;
   end_date: string | null;
 };
@@ -172,9 +174,9 @@ export default function CampaignsPage() {
                               <p>{campaign.target_type} · {campaign.target_name}{campaign.campaign_manager_name ? ` · Manager: ${campaign.campaign_manager_name}` : " · Manager unassigned"}</p>
                             </div>
                             <div className={styles.campaignFacts}>
-                              <span><MapPin size={14} />{campaign.mandal_count} Mandals</span>
-                              <span><Users size={14} />{campaign.assignment_count} allocations</span>
-                              <span><ClipboardList size={14} />{Number(campaign.eligible_voters || 0).toLocaleString()} voters</span>
+                              <span><ClipboardList size={14} />{Number(campaign.iteration_count || 0)} iterations</span>
+                              <span><PlayCircle size={14} />{Number(campaign.run_count || 0)} runs</span>
+                              <span><CheckCircle2 size={14} />{Number(campaign.successful_voters || 0).toLocaleString()} successful</span>
                             </div>
                             <em>{campaign.survey_stage || "BASE"} · {campaign.status}</em>
                           </Link>

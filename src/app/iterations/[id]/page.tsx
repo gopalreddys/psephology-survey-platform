@@ -293,6 +293,17 @@ export default function IterationPage() {
 
   function openCreateRun() {
 
+    if (
+      ["COMPLETED", "LOCKED"].includes(
+        String(iteration?.status || "").toUpperCase()
+      )
+    ) {
+      setMessage(
+        "This iteration is completed and no longer accepts new Runs."
+      );
+      return;
+    }
+
     const nextRunNumber =
       runs.reduce(
         function (highest, run) {
@@ -705,7 +716,9 @@ export default function IterationPage() {
             </button>
 
 
-            {canCreateRuns && (
+            {canCreateRuns && !["COMPLETED", "LOCKED"].includes(
+              String(iteration.status).toUpperCase()
+            ) && (
               <button
                 type="button"
 

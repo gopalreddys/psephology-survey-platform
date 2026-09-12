@@ -74,7 +74,23 @@ export async function listCampaignIterations(campaignId, actor) {
       COALESCE(link.status, CASE WHEN iteration.status = 'DRAFT' THEN 'PLANNED' ELSE iteration.status END) AS status,
       iteration.created_at,
       iteration.updated_at,
-      0::int AS run_count
+      (
+        SELECT COUNT(*)::int
+        FROM campaign_runs run
+        WHERE run.iteration_id = iteration.id
+      ) AS run_count,
+      (
+        SELECT COUNT(DISTINCT contact.voter_id)::int
+        FROM campaign_runs run
+        JOIN campaign_run_contacts contact
+          ON contact.run_id = run.id
+        WHERE run.iteration_id = iteration.id
+          AND contact.final_status IN (
+            'SUCCESS_PULSE',
+            'SUCCESS_COMPLETE',
+            'SUCCESS_SUBSTANTIAL'
+          )
+      ) AS successful_voters
     FROM campaign_iteration_links link
     JOIN campaigns campaign ON campaign.id = link.campaign_id
     JOIN program_iterations iteration ON iteration.id = link.iteration_id

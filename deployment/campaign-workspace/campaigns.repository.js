@@ -38,6 +38,27 @@ export async function listCampaigns(actor) {
     ), allocation_counts AS (
       SELECT campaign_id, COUNT(*)::int AS assignment_count
       FROM campaign_work_allocations WHERE status <> 'REASSIGNED' GROUP BY campaign_id
+    ), operation_counts AS (
+      SELECT
+        link.campaign_id,
+        COUNT(DISTINCT link.iteration_id)::int AS iteration_count,
+        COUNT(DISTINCT link.iteration_id) FILTER (
+          WHERE link.status = 'COMPLETED'
+        )::int AS completed_iteration_count,
+        COUNT(DISTINCT run.id)::int AS run_count,
+        COUNT(DISTINCT contact.voter_id) FILTER (
+          WHERE contact.final_status IN (
+            'SUCCESS_PULSE',
+            'SUCCESS_COMPLETE',
+            'SUCCESS_SUBSTANTIAL'
+          )
+        )::int AS successful_voters
+      FROM campaign_iteration_links link
+      LEFT JOIN campaign_runs run
+        ON run.iteration_id = link.iteration_id
+      LEFT JOIN campaign_run_contacts contact
+        ON contact.run_id = run.id
+      GROUP BY link.campaign_id
     )
     SELECT campaign.id, campaign.campaign_code, campaign.campaign_name,
       campaign.program_id, program.study_code AS program_code,
@@ -48,7 +69,11 @@ export async function listCampaigns(actor) {
       campaign.campaign_manager_user_id,
       COALESCE(scope_count.mandal_count, 0) AS mandal_count,
       COALESCE(allocation_count.assignment_count, 0) AS assignment_count,
-      COALESCE(voter_count.eligible_voters, 0) AS eligible_voters
+      COALESCE(voter_count.eligible_voters, 0) AS eligible_voters,
+      COALESCE(operation_count.iteration_count, 0) AS iteration_count,
+      COALESCE(operation_count.completed_iteration_count, 0) AS completed_iteration_count,
+      COALESCE(operation_count.run_count, 0) AS run_count,
+      COALESCE(operation_count.successful_voters, 0) AS successful_voters
     FROM campaigns campaign
     LEFT JOIN survey_studies program ON program.id = campaign.program_id
     LEFT JOIN users owner ON owner.id = campaign.created_by_user_id
@@ -56,6 +81,7 @@ export async function listCampaigns(actor) {
     LEFT JOIN scope_counts scope_count ON scope_count.campaign_id = campaign.id
     LEFT JOIN allocation_counts allocation_count ON allocation_count.campaign_id = campaign.id
     LEFT JOIN voter_counts voter_count ON voter_count.campaign_id = campaign.id
+    LEFT JOIN operation_counts operation_count ON operation_count.campaign_id = campaign.id
     WHERE campaign.status <> 'ARCHIVED' AND ${visibility.sql}
     ORDER BY campaign.created_at DESC
   `, visibility.values);
