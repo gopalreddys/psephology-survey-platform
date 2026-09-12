@@ -142,6 +142,11 @@ closes the active cycle and Run only when no selected contact remains pending
 or submitted. The Run-level advisory lock prevents concurrent final callbacks
 from missing the roll-up.
 
+When the final callback closes Run 3, the same transaction also exhausts any
+remaining retry-eligible contacts and marks the linked Iteration completed.
+The completed Iteration becomes read-only without requiring a separate manual
+closeout action.
+
 Use the repair utility once for Runs whose callbacks were processed before
 this behavior was deployed. It is read-only without `--apply`:
 

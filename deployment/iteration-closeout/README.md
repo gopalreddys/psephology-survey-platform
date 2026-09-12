@@ -6,6 +6,11 @@ an Iteration. The API blocks completion while Runs or callbacks are still open,
 or while another retry Run is required. Remaining failures after Run 3 are
 recorded as retry-exhausted during closeout.
 
+Campaigner allocation may be changed between completed Runs. Allocation is
+locked while a Run or callback is active, and permanently locked after the
+three-Run cycle completes. Reassignment affects only subsequent Runs; historic
+Run ownership and evidence remain unchanged for auditability.
+
 ## Deploy
 
 ```bash

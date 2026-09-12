@@ -79,10 +79,44 @@ export async function selectAssignedVoters(db, {
     }
 
     const result = await db.query(`
+      WITH RECURSIVE allocated_roots AS (
+        SELECT allocation.geo_unit_id
+        FROM campaign_work_allocations allocation
+        WHERE allocation.campaign_id = $3
+          AND (allocation.iteration_id = $4 OR allocation.iteration_id IS NULL)
+          AND allocation.campaigner_user_id = $5
+          AND allocation.status <> 'REASSIGNED'
+          AND allocation.geo_unit_id IS NOT NULL
+
+        UNION
+
+        SELECT area_mapping.geo_unit_id
+        FROM campaign_work_allocations allocation
+        JOIN local_body_area_geo_mapping area_mapping
+          ON area_mapping.electoral_area_id = allocation.local_body_area_id
+         AND area_mapping.is_active = TRUE
+        WHERE allocation.campaign_id = $3
+          AND (allocation.iteration_id = $4 OR allocation.iteration_id IS NULL)
+          AND allocation.campaigner_user_id = $5
+          AND allocation.status <> 'REASSIGNED'
+          AND allocation.local_body_area_id IS NOT NULL
+      ), allocated_geography AS (
+        SELECT geo_unit_id FROM allocated_roots
+
+        UNION
+
+        SELECT child.id
+        FROM allocated_geography parent
+        JOIN geo_units child
+          ON child.parent_id = parent.geo_unit_id
+         AND child.is_active = TRUE
+      )
       SELECT voter.id
       FROM campaign_run_contacts previous_contact
       JOIN voter_master voter
         ON voter.id = previous_contact.voter_id
+      JOIN allocated_geography geography
+        ON geography.geo_unit_id = voter.geo_unit_id
       WHERE previous_contact.run_id = $1
         AND voter.is_active = TRUE
         AND voter.contact_status = 'ACTIVE'
@@ -96,7 +130,13 @@ export async function selectAssignedVoters(db, {
           'REFUSED_TERMINAL', 'DO_NOT_CALL', 'INVALID_NUMBER'
         )
       ORDER BY voter.id
-    `, [previousRunResult.rows[0].id, sourceName]);
+    `, [
+      previousRunResult.rows[0].id,
+      sourceName,
+      campaignId,
+      iterationId,
+      campaignerUserId
+    ]);
 
     if (!result.rowCount) {
       const error = new Error(`Run ${runNumber - 1} has no unresolved contacts; no new Run is required`);

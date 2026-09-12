@@ -91,8 +91,82 @@ try {
     );
   }
 
+  const iterationResult = await db.query(`
+    SELECT run.iteration_id
+    FROM campaign_runs run
+    WHERE EXISTS (
+      SELECT 1
+      FROM campaign_iteration_links link
+      WHERE link.iteration_id = run.iteration_id
+        AND link.status <> 'COMPLETED'
+    ) OR EXISTS (
+      SELECT 1
+      FROM program_iterations iteration
+      WHERE iteration.id = run.iteration_id
+        AND iteration.status <> 'COMPLETED'
+    )
+    GROUP BY run.iteration_id
+    HAVING COUNT(DISTINCT run.run_number) FILTER (
+      WHERE run.run_number BETWEEN 1 AND 3
+        AND run.status IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
+    ) = 3
+      AND COUNT(*) FILTER (
+        WHERE run.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
+      ) = 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM campaign_run_contacts pending_contact
+        JOIN campaign_runs pending_run ON pending_run.id = pending_contact.run_id
+        WHERE pending_run.iteration_id = run.iteration_id
+          AND pending_contact.attempt_status NOT IN ('COMPLETED', 'FAILED')
+      )
+  `);
+
+  for (const iteration of iterationResult.rows) {
+    await db.query(
+      `
+        UPDATE campaign_run_contacts contact
+        SET retry_eligible = FALSE,
+            retry_exhausted = TRUE,
+            final_status = CASE
+              WHEN COALESCE(contact.final_status, 'PENDING') = 'PENDING'
+                THEN 'RETRY_EXHAUSTED'
+              ELSE contact.final_status
+            END,
+            completion_reason = COALESCE(
+              contact.completion_reason,
+              'Three-Run retry policy completed'
+            )
+        FROM campaign_runs run
+        WHERE run.id = contact.run_id
+          AND run.iteration_id = $1
+          AND run.run_number = 3
+          AND contact.retry_eligible = TRUE
+          AND contact.retry_exhausted = FALSE
+      `,
+      [iteration.iteration_id]
+    );
+    await db.query(
+      `
+        UPDATE campaign_iteration_links
+        SET status = 'COMPLETED', updated_at = now()
+        WHERE iteration_id = $1
+      `,
+      [iteration.iteration_id]
+    );
+    await db.query(
+      `
+        UPDATE program_iterations
+        SET status = 'COMPLETED', updated_at = now()
+        WHERE id = $1
+      `,
+      [iteration.iteration_id]
+    );
+  }
+
   await db.query("COMMIT");
   console.log(`Finalized ${result.rowCount} resolved Run(s).`);
+  console.log(`Completed ${iterationResult.rowCount} three-Run Iteration(s).`);
 } catch (error) {
   try {
     await db.query("ROLLBACK");

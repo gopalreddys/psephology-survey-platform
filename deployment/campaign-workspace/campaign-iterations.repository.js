@@ -80,6 +80,23 @@ export async function listCampaignIterations(campaignId, actor) {
         WHERE run.iteration_id = iteration.id
       ) AS run_count,
       (
+        SELECT COUNT(*)::int
+        FROM campaign_runs run
+        WHERE run.iteration_id = iteration.id
+          AND run.status IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
+      ) AS completed_run_count,
+      NOT EXISTS (
+        SELECT 1
+        FROM campaign_runs run
+        WHERE run.iteration_id = iteration.id
+          AND run.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
+      ) AND NOT EXISTS (
+        SELECT 1
+        FROM campaign_runs run
+        WHERE run.iteration_id = iteration.id
+          AND run.run_number >= 3
+      ) AS allocation_editable,
+      (
         SELECT COUNT(DISTINCT contact.voter_id)::int
         FROM campaign_runs run
         JOIN campaign_run_contacts contact
@@ -306,14 +323,31 @@ export async function saveCampaignIterationAllocations(campaignId, iterationId, 
       );
     }
     const executionResult = await client.query(`
-      SELECT 1
+      SELECT
+        COALESCE(MAX(run_number), 0)::int AS latest_run_number,
+        BOOL_OR(
+          status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
+        ) AS has_open_run,
+        EXISTS (
+          SELECT 1
+          FROM campaign_run_contacts contact
+          JOIN campaign_runs contact_run ON contact_run.id = contact.run_id
+          WHERE contact_run.iteration_id = $1
+            AND contact.attempt_status NOT IN ('COMPLETED', 'FAILED')
+        ) AS has_pending_contacts
       FROM campaign_runs
       WHERE iteration_id = $1
-      LIMIT 1
     `, [iterationId]);
-    if (executionResult.rowCount) {
+    const executionState = executionResult.rows[0] || {};
+    if (executionState.has_open_run || executionState.has_pending_contacts) {
       throw errorWithStatus(
-        "Work allocations cannot be changed after Run execution has started",
+        "Work allocations cannot be changed while a Run is in progress. Complete the current Run before reassigning work",
+        409
+      );
+    }
+    if (Number(executionState.latest_run_number || 0) >= 3) {
+      throw errorWithStatus(
+        "Work allocations cannot be changed after the three-Run iteration cycle is completed",
         409
       );
     }
