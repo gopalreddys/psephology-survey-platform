@@ -110,6 +110,8 @@
 .agentAssignment small { color: #657b79; }
 .detailActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
 .detailActions .primaryAction, .detailActions .secondaryButton { min-height: 38px; padding: 9px 13px; font-size: 12px; }
+.detailActions .analysisAction { display: inline-flex; min-height: 38px; box-sizing: border-box; align-items: center; gap: 6px; border: 1px solid #b9ded7; border-radius: 12px; background: #effbf8; padding: 9px 13px; color: #168c7f; font-size: 12px; font-weight: 750; text-decoration: none; }
+.detailActions .analysisAction:hover { border-color: #79c8bb; background: #e5f8f3; }
 .detailActions .secondaryButton { border: 1px solid #d9e0e5; border-radius: 12px; background: #fff; color: #607187; box-shadow: none; font-weight: 750; cursor: pointer; }
 .detailActions .dangerButton { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; border: 1px solid #f0b8c1; border-radius: 12px; background: #fff5f6; color: #b54459; padding: 9px 13px; font-size: 12px; font-weight: 750; cursor: pointer; }
 .detailActions .primaryAction:disabled, .detailActions .secondaryButton:disabled { cursor: wait; opacity: .55; }
