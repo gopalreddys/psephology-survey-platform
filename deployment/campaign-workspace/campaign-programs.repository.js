@@ -45,7 +45,7 @@ export async function listCampaignPrograms(actor) {
     SELECT id, study_code, study_name, study_type, status, owner_user_id
     FROM ${table}
     WHERE ${visibility}
-      AND COALESCE(status, 'ACTIVE') NOT IN ('ARCHIVED', 'CANCELLED')
+      AND COALESCE(status, 'ACTIVE') NOT IN ('COMPLETED', 'ARCHIVED', 'CANCELLED')
     ORDER BY study_name, study_code
   `, values);
   return result.rows;
@@ -64,10 +64,10 @@ export async function assertCampaignProgramAccess(programId, actor, db) {
     FROM ${table}
     WHERE id = $1
       AND ${visibility}
-      AND COALESCE(status, 'ACTIVE') NOT IN ('ARCHIVED', 'CANCELLED')
+      AND COALESCE(status, 'ACTIVE') NOT IN ('COMPLETED', 'ARCHIVED', 'CANCELLED')
   `, values);
   if (!result.rowCount) {
-    const error = new Error("The selected research program is not assigned to this Campaign Manager or is unavailable");
+    const error = new Error("The selected research program is completed, not assigned to this Campaign Manager, or otherwise unavailable");
     error.statusCode = 400;
     throw error;
   }

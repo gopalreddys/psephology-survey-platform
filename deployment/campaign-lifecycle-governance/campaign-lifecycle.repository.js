@@ -20,6 +20,7 @@ async function loadCampaignState(db, campaignId) {
     `
       SELECT
         campaign.id,
+        campaign.program_id,
         campaign.campaign_name,
         campaign.status,
         campaign.campaign_manager_user_id,
@@ -278,6 +279,7 @@ export async function completeCampaign(campaignId, actor) {
     await recordLifecycleEvent(db, {
       entityType: "CAMPAIGN",
       entityId: campaignId,
+      parentEntityId: state.campaign.program_id,
       previousStatus: state.campaign.status,
       nextStatus: "COMPLETED",
       source: "CAMPAIGN_MANAGER",

@@ -110,6 +110,28 @@ type ProgramDashboard = {
     predictiveReady: boolean;
   };
   campaigns: ProgramCampaign[];
+  lifecycle: {
+    status: "NOT_STARTED" | "IN_PROGRESS" | "READY_FOR_REVIEW" | "PAUSED" | "COMPLETED" | "ARCHIVED";
+    recordedStatus: string;
+    readyToComplete: boolean;
+    blockers: string[];
+    campaignCount: number;
+    completedCampaignCount: number;
+    openRuns: number;
+    pendingVoters: number;
+    retryEligibleVoters: number;
+    attentionCampaigns: number;
+    history: Array<{
+      id: string;
+      entity_type: string;
+      previous_status: string | null;
+      next_status: string;
+      trigger_source: string;
+      created_at: string;
+      actor_name: string | null;
+      campaign_name: string | null;
+    }>;
+  };
   warnings: string[];
   generatedAt: string;
 };
@@ -121,6 +143,7 @@ export default function ProgramDetailPage() {
   const [dashboard, setDashboard] = useState<ProgramDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const canManagePrograms = Boolean(
     user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code)
@@ -156,6 +179,22 @@ export default function ProgramDetailPage() {
       window.clearTimeout(timer);
     };
   }, [canManagePrograms, loadDashboard, programId]);
+
+  async function completeProgram() {
+    if (!dashboard?.lifecycle.readyToComplete) return;
+    if (!window.confirm("Complete this Program? This confirms that every Campaign has been formally completed and reviewed.")) return;
+    setCompleting(true);
+    setMessage(null);
+    try {
+      await apiFetch(`/api/programs/${programId}/complete`, { method: "POST" });
+      await loadDashboard(true);
+      setMessage("Program completed successfully. The portfolio lifecycle is now closed and audited.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to complete Program");
+    } finally {
+      setCompleting(false);
+    }
+  }
 
   if (userLoading || (canManagePrograms && loading)) {
     return (
@@ -193,7 +232,8 @@ export default function ProgramDetailPage() {
     );
   }
 
-  const { program, summary, evidence, campaigns, warnings } = dashboard;
+  const { program, summary, evidence, campaigns, lifecycle, warnings } = dashboard;
+  const programClosed = ["COMPLETED", "ARCHIVED"].includes(String(program.status).toUpperCase());
 
   return (
     <AppShell>
@@ -221,12 +261,23 @@ export default function ProgramDetailPage() {
                 <RefreshCw size={15} className={refreshing ? styles.spinning : ""} />
                 {refreshing ? "Refreshing…" : "Refresh status"}
               </button>
-              <Link
+              {lifecycle.readyToComplete && (
+                <button
+                  type="button"
+                  className={styles.completeButton}
+                  disabled={completing}
+                  onClick={() => void completeProgram()}
+                >
+                  <CheckCircle2 size={15} />
+                  {completing ? "Completing…" : "Complete Program"}
+                </button>
+              )}
+              {!programClosed && <Link
                 href={`/campaigns/new?programId=${program.id}`}
                 className="program-detail-create-button"
               >
                 <Plus size={15} /> Create Campaign
-              </Link>
+              </Link>}
             </div>
             <div className="program-detail-operations-note">
               <ClipboardList size={16} />
@@ -238,6 +289,21 @@ export default function ProgramDetailPage() {
         {message && (
           <FeedbackMessage message={message} className="program-detail-message" />
         )}
+
+        <section className={styles.programLifecyclePanel}>
+          <div>
+            <div className="program-detail-eyebrow">PROGRAM LIFECYCLE</div>
+            <h2>{formatStatus(lifecycle.status)}</h2>
+            <p>{lifecycle.status === "READY_FOR_REVIEW" ? "Every Campaign is formally completed. An Admin can now close this Program." : lifecycle.status === "COMPLETED" ? "The Program portfolio has been formally completed and audited." : "Program readiness is governed by the formal completion of every Campaign."}</p>
+          </div>
+          <div className={styles.programLifecycleFacts}>
+            <span><strong>{lifecycle.completedCampaignCount}/{lifecycle.campaignCount}</strong> Campaigns complete</span>
+            <span><strong>{lifecycle.openRuns}</strong> Open Runs</span>
+            <span><strong>{lifecycle.attentionCampaigns}</strong> Need attention</span>
+          </div>
+          {lifecycle.blockers.length > 0 && <div className={styles.programLifecycleBlockers}><strong>Required before Program completion</strong>{lifecycle.blockers.map((blocker) => <span key={blocker}>{blocker}</span>)}</div>}
+          {lifecycle.history.length > 0 && <div className={styles.programLifecycleHistory}><strong>Recent governed activity</strong>{lifecycle.history.slice(0, 6).map((event) => <span key={event.id}><em>{event.entity_type.replaceAll("_", " ")}</em><b>{event.previous_status ? `${event.previous_status} → ` : ""}{event.next_status}</b>{event.campaign_name && <i>{event.campaign_name}</i>}<small>{event.actor_name || formatStatus(event.trigger_source)} · {new Date(event.created_at).toLocaleString()}</small></span>)}</div>}
+        </section>
 
         <section className={styles.primaryMetrics} aria-label="Program status summary">
           <DashboardMetric
@@ -274,7 +340,7 @@ export default function ProgramDetailPage() {
           <DashboardMetric
             icon={Flag}
             label="Program status"
-            value={program.status}
+            value={formatStatus(lifecycle.status)}
             detail={program.studyType}
           />
         </section>
@@ -541,4 +607,8 @@ function statusLabel(status: string) {
     .toLowerCase()
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatStatus(status: string) {
+  return statusLabel(status);
 }

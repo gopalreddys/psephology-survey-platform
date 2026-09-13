@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
 
 const ADMIN_ROLES = new Set(["SUPER_ADMIN", "ADMIN"]);
 const SUCCESS_STATUSES = [
@@ -378,6 +379,105 @@ function buildWarnings(campaigns) {
   return warnings;
 }
 
+function buildProgramLifecycle(program, campaigns) {
+  const completedCampaigns = campaigns.filter(
+    (campaign) =>
+      ["COMPLETE", "COMPLETED"].includes(
+        String(campaign.recordedStatus || "").toUpperCase()
+      )
+  ).length;
+  const openRuns = campaigns.reduce(
+    (total, campaign) => total + number(campaign.openRunCount),
+    0
+  );
+  const pendingVoters = campaigns.reduce(
+    (total, campaign) => total + number(campaign.pendingVoters),
+    0
+  );
+  const retryEligibleVoters = campaigns.reduce(
+    (total, campaign) => total + number(campaign.retryEligibleVoters),
+    0
+  );
+  const attentionCampaigns = campaigns.filter(
+    (campaign) => campaign.needsAttention
+  ).length;
+  const blockers = [];
+
+  if (!campaigns.length) blockers.push("Create at least one Campaign");
+  if (completedCampaigns < campaigns.length) {
+    blockers.push(`${campaigns.length - completedCampaigns} Campaign(s) are not formally completed`);
+  }
+  if (openRuns) blockers.push(`${openRuns} Run(s) are still open`);
+  if (pendingVoters) blockers.push(`${pendingVoters} voter outcome(s) are still pending`);
+  if (retryEligibleVoters) {
+    blockers.push(`${retryEligibleVoters} voter(s) remain retry eligible`);
+  }
+  if (attentionCampaigns) {
+    blockers.push(`${attentionCampaigns} Campaign(s) require operational attention`);
+  }
+
+  const recordedStatus = String(program.status || "DRAFT").toUpperCase();
+  const readyToComplete =
+    blockers.length === 0 &&
+    ["DRAFT", "ACTIVE", "PAUSED"].includes(recordedStatus);
+  let status = "NOT_STARTED";
+
+  if (recordedStatus === "COMPLETED") status = "COMPLETED";
+  else if (recordedStatus === "ARCHIVED") status = "ARCHIVED";
+  else if (recordedStatus === "PAUSED") status = "PAUSED";
+  else if (readyToComplete) status = "READY_FOR_REVIEW";
+  else if (campaigns.length) status = "IN_PROGRESS";
+
+  return {
+    status,
+    recordedStatus,
+    readyToComplete,
+    blockers,
+    campaignCount: campaigns.length,
+    completedCampaignCount: completedCampaigns,
+    openRuns,
+    pendingVoters,
+    retryEligibleVoters,
+    attentionCampaigns
+  };
+}
+
+async function loadProgramLifecycleHistory(db, programId) {
+  const result = await db.query(
+    `
+      SELECT
+        event.id,
+        event.entity_type,
+        event.previous_status,
+        event.next_status,
+        event.trigger_source,
+        event.created_at,
+        account.full_name AS actor_name,
+        COALESCE(event_campaign.campaign_name, parent_campaign.campaign_name)
+          AS campaign_name
+      FROM operational_lifecycle_events event
+      LEFT JOIN users account ON account.id = event.actor_user_id
+      LEFT JOIN campaigns event_campaign
+        ON event.entity_type = 'CAMPAIGN'
+       AND event_campaign.id = event.entity_id
+      LEFT JOIN campaigns parent_campaign
+        ON parent_campaign.id = event.parent_entity_id
+      WHERE (
+          event.entity_type = 'PROGRAM'
+          AND event.entity_id = $1
+        )
+        OR event.parent_entity_id = $1
+        OR event_campaign.program_id = $1
+        OR parent_campaign.program_id = $1
+      ORDER BY event.created_at DESC, event.entity_type, event.entity_id
+      LIMIT 50
+    `,
+    [programId]
+  );
+
+  return result.rows;
+}
+
 export async function getProgramDashboard(programId, actor) {
   if (!ADMIN_ROLES.has(actor.role_code)) {
     throw errorWithStatus(
@@ -387,9 +487,10 @@ export async function getProgramDashboard(programId, actor) {
   }
 
   const db = await getDb();
-  const [program, campaigns] = await Promise.all([
+  const [program, campaigns, lifecycleHistory] = await Promise.all([
     loadProgram(db, programId),
-    loadCampaigns(db, programId)
+    loadCampaigns(db, programId),
+    loadProgramLifecycleHistory(db, programId)
   ]);
   const total = (key) => campaigns.reduce(
     (sum, campaign) => sum + number(campaign[key]),
@@ -402,6 +503,7 @@ export async function getProgramDashboard(programId, actor) {
   const successfulVoters = total("successfulVoters");
   const completedIterations = total("completedIterationCount");
   const iterationCount = total("iterationCount");
+  const lifecycle = buildProgramLifecycle(program, campaigns);
 
   return {
     program: {
@@ -454,7 +556,76 @@ export async function getProgramDashboard(programId, actor) {
       predictiveReady: false
     },
     campaigns,
+    lifecycle: { ...lifecycle, history: lifecycleHistory },
     warnings: buildWarnings(campaigns),
     generatedAt: new Date().toISOString()
   };
+}
+
+export async function completeProgram(programId, actor) {
+  if (!ADMIN_ROLES.has(actor.role_code)) {
+    throw errorWithStatus(
+      "Only Admin and Super Admin users can complete a Program",
+      403
+    );
+  }
+
+  const pool = await getDb();
+  const db = await pool.connect();
+
+  try {
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [String(programId)]);
+    const program = await loadProgram(db, programId);
+    const campaigns = await loadCampaigns(db, programId);
+    const lifecycle = buildProgramLifecycle(program, campaigns);
+
+    if (String(program.status).toUpperCase() === "COMPLETED") {
+      await db.query("COMMIT");
+      return { programId, status: "COMPLETED", lifecycle: { ...lifecycle, status: "COMPLETED", readyToComplete: false } };
+    }
+
+    if (!lifecycle.readyToComplete) {
+      throw errorWithStatus(
+        `Program is not ready to complete: ${lifecycle.blockers.join("; ")}`,
+        409
+      );
+    }
+
+    const update = await db.query(
+      `
+        UPDATE survey_studies
+        SET status = 'COMPLETED', updated_at = now()
+        WHERE id = $1
+        RETURNING id, status, updated_at
+      `,
+      [programId]
+    );
+
+    await recordLifecycleEvent(db, {
+      entityType: "PROGRAM",
+      entityId: programId,
+      previousStatus: program.status,
+      nextStatus: "COMPLETED",
+      source: actor.role_code,
+      actorId: actor.id,
+      details: {
+        campaignCount: lifecycle.campaignCount,
+        completedCampaignCount: lifecycle.completedCampaignCount
+      }
+    });
+
+    await db.query("COMMIT");
+    return {
+      programId,
+      status: update.rows[0].status,
+      updatedAt: update.rows[0].updated_at,
+      lifecycle: { ...lifecycle, status: "COMPLETED", readyToComplete: false, blockers: [] }
+    };
+  } catch (error) {
+    await db.query("ROLLBACK");
+    throw error;
+  } finally {
+    db.release();
+  }
 }

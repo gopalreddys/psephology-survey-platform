@@ -159,7 +159,7 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
   try {
     await db.query("BEGIN");
     await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [String(id)]);
-    const currentResult = await db.query("SELECT id, status FROM campaigns WHERE id = $1", [id]);
+    const currentResult = await db.query("SELECT id, program_id, status FROM campaigns WHERE id = $1", [id]);
     if (!currentResult.rowCount) {
       const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
     }
@@ -193,6 +193,7 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
     await recordLifecycleEvent(db, {
       entityType: "CAMPAIGN",
       entityId: id,
+      parentEntityId: currentResult.rows[0].program_id,
       previousStatus: current,
       nextStatus: status,
       source: actor.role_code,
@@ -279,7 +280,11 @@ export async function listCampaignVoters(id, actor, { limit = 100, offset = 0 } 
     LIMIT $${limitParameter} OFFSET $${limitParameter + 1}
   `, values);
   return {
-    items: result.rows.map(function (row) { const { total_count, ...voter } = row; return voter; }),
+    items: result.rows.map(function (row) {
+      const voter = { ...row };
+      delete voter.total_count;
+      return voter;
+    }),
     total: Number(result.rows[0]?.total_count || 0), limit: safeLimit, offset: safeOffset
   };
 }
