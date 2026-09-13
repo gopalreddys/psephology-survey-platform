@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { getDb } from "../db/postgres.js";
+import { reconcileRunLifecycle } from "./run-lifecycle.repository.js";
 
 const TECHNICAL_VARIABLES = new Set([
   "agent_code",
@@ -75,86 +76,6 @@ function eventHash(payload) {
   return createHash("sha256")
     .update(JSON.stringify(payload))
     .digest("hex");
-}
-
-async function completeThreeRunIteration(db, iterationId) {
-  if (!iterationId) return false;
-
-  const stateResult = await db.query(
-    `
-      SELECT
-        COUNT(DISTINCT run.run_number) FILTER (
-          WHERE run.run_number BETWEEN 1 AND 3
-            AND run.status IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
-        )::int AS closed_policy_runs,
-        COUNT(*) FILTER (
-          WHERE run.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'ARCHIVED')
-        )::int AS open_runs,
-        EXISTS (
-          SELECT 1
-          FROM campaign_run_contacts contact
-          JOIN campaign_runs contact_run ON contact_run.id = contact.run_id
-          WHERE contact_run.iteration_id = $1
-            AND contact.attempt_status NOT IN ('COMPLETED', 'FAILED')
-        ) AS has_pending_contacts
-      FROM campaign_runs run
-      WHERE run.iteration_id = $1
-    `,
-    [iterationId]
-  );
-
-  const state = stateResult.rows[0] || {};
-  const cycleComplete =
-    Number(state.closed_policy_runs || 0) === 3 &&
-    Number(state.open_runs || 0) === 0 &&
-    state.has_pending_contacts !== true;
-
-  if (!cycleComplete) return false;
-
-  await db.query(
-    `
-      UPDATE campaign_run_contacts contact
-      SET retry_eligible = FALSE,
-          retry_exhausted = TRUE,
-          final_status = CASE
-            WHEN COALESCE(contact.final_status, 'PENDING') = 'PENDING'
-              THEN 'RETRY_EXHAUSTED'
-            ELSE contact.final_status
-          END,
-          completion_reason = COALESCE(
-            contact.completion_reason,
-            'Three-Run retry policy completed'
-          )
-      FROM campaign_runs run
-      WHERE run.id = contact.run_id
-        AND run.iteration_id = $1
-        AND run.run_number = 3
-        AND contact.retry_eligible = TRUE
-        AND contact.retry_exhausted = FALSE
-    `,
-    [iterationId]
-  );
-
-  await db.query(
-    `
-      UPDATE campaign_iteration_links
-      SET status = 'COMPLETED', updated_at = now()
-      WHERE iteration_id = $1
-        AND status <> 'COMPLETED'
-    `,
-    [iterationId]
-  );
-  await db.query(
-    `
-      UPDATE program_iterations
-      SET status = 'COMPLETED', updated_at = now()
-      WHERE id = $1
-        AND status <> 'COMPLETED'
-    `,
-    [iterationId]
-  );
-
-  return true;
 }
 
 export async function recordSarvamOutboundResult(payload) {
@@ -514,53 +435,9 @@ export async function recordSarvamOutboundResult(payload) {
       }
     }
 
-    const runStateResult = await db.query(
-      `
-        SELECT
-          COUNT(*)::int AS total_contacts,
-          COUNT(*) FILTER (
-            WHERE attempt_status NOT IN ('COMPLETED', 'FAILED')
-          )::int AS active_contacts
-        FROM campaign_run_contacts
-        WHERE run_id = $1
-      `,
-      [execution.run_id]
-    );
-
-    const runState = runStateResult.rows[0];
-    const runFinalized =
-      Number(runState?.total_contacts || 0) > 0 &&
-      Number(runState?.active_contacts || 0) === 0;
-
-    let iterationFinalized = false;
-
-    if (runFinalized) {
-      await db.query(
-        `
-          UPDATE campaign_run_cycles
-          SET status = 'COMPLETED'
-          WHERE id = $1
-            AND status IN ('READY', 'RUNNING')
-        `,
-        [execution.attempt_cycle_id]
-      );
-
-      await db.query(
-        `
-          UPDATE campaign_runs
-          SET status = 'COMPLETED',
-              updated_at = now()
-          WHERE id = $1
-            AND status IN ('READY', 'RUNNING')
-        `,
-        [execution.run_id]
-      );
-
-      iterationFinalized = await completeThreeRunIteration(
-        db,
-        execution.iteration_id
-      );
-    }
+    const lifecycle = await reconcileRunLifecycle(db, execution.run_id);
+    const runFinalized = lifecycle.runFinalized;
+    const iterationFinalized = lifecycle.iterationFinalized;
 
     await db.query(
       `

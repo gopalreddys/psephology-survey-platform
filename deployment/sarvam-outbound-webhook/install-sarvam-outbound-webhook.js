@@ -35,6 +35,13 @@ await copy(
   "finalize-resolved-runs.js",
   path.join(runtimeRoot, "src/db/finalize-resolved-runs.js")
 );
+await copyFile(
+  path.resolve(
+    packageRoot,
+    "../run-lifecycle-automation/run-lifecycle.repository.js"
+  ),
+  path.join(runtimeRoot, "src/repositories/run-lifecycle.repository.js")
+);
 
 const clientPath = path.join(runtimeRoot, "src/clients/sarvam.js");
 let clientSource = await readFile(clientPath, "utf8");

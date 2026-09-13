@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useState
 } from "react";
@@ -14,6 +15,7 @@ import {
   MapPinned,
   PhoneCall,
   Plus,
+  RefreshCw,
   RotateCcw,
   Target,
   Users,
@@ -104,6 +106,10 @@ export default function IterationPage() {
   const canCreateRuns =
     user?.role.code === "CAMPAIGNER";
 
+  const canReconcileRuns =
+    user?.role.code === "CAMPAIGNER" ||
+    user?.role.code === "CAMPAIGN_MANAGER";
+
 
   const [
     iteration,
@@ -169,6 +175,15 @@ export default function IterationPage() {
 
 
   const [
+    reconcilingRunId,
+    setReconcilingRunId
+  ] =
+    useState<string | null>(
+      null
+    );
+
+
+  const [
     launchPreview,
     setLaunchPreview
   ] =
@@ -199,7 +214,7 @@ export default function IterationPage() {
     });
 
 
-  async function loadIteration() {
+  const loadIteration = useCallback(async function loadIteration() {
 
     const result =
       await apiFetch(
@@ -224,10 +239,10 @@ export default function IterationPage() {
         };
       }
     );
-  }
+  }, [iterationId]);
 
 
-  async function loadRuns() {
+  const loadRuns = useCallback(async function loadRuns() {
 
     const data =
       await apiFetch(
@@ -239,10 +254,10 @@ export default function IterationPage() {
         ? data
         : data.runs || data.items || data.data?.runs || data.data?.items || []
     );
-  }
+  }, [iterationId]);
 
 
-  async function loadNavigation() {
+  const loadNavigation = useCallback(async function loadNavigation() {
 
     try {
       const data = await apiFetch(
@@ -255,10 +270,10 @@ export default function IterationPage() {
     } catch {
       setCampaignId(null);
     }
-  }
+  }, [iterationId]);
 
 
-  async function loadData() {
+  const loadData = useCallback(async function loadData() {
 
     setLoading(true);
 
@@ -282,20 +297,82 @@ export default function IterationPage() {
 
       setLoading(false);
     }
-  }
+  }, [loadIteration, loadNavigation, loadRuns]);
 
 
   useEffect(
     function () {
 
-      if (iterationId) {
-        loadData();
-      }
+      if (!iterationId) return;
+
+      const timer = window.setTimeout(
+        function () {
+          void loadData();
+        },
+        0
+      );
+
+      return function () {
+        window.clearTimeout(timer);
+      };
 
     },
     [
-      iterationId
+      iterationId,
+      loadData
     ]
+  );
+
+
+  const openRunIds =
+    runs
+      .filter(function (run) {
+        return !isClosedRunStatus(run.status);
+      })
+      .map(function (run) {
+        return run.id;
+      })
+      .join(",");
+
+
+  useEffect(
+    function () {
+      if (!iterationId || !openRunIds) return;
+
+      const interval = window.setInterval(
+        function () {
+          Promise.all([
+            apiFetch(`/api/iterations/${iterationId}`),
+            apiFetch(`/api/iterations/${iterationId}/runs`)
+          ])
+            .then(function ([iterationResult, runsResult]) {
+              const iterationData =
+                iterationResult?.iteration ||
+                iterationResult?.data?.iteration ||
+                iterationResult;
+              const runData = Array.isArray(runsResult)
+                ? runsResult
+                : runsResult.runs ||
+                  runsResult.items ||
+                  runsResult.data?.runs ||
+                  runsResult.data?.items ||
+                  [];
+
+              setIteration(iterationData);
+              setRuns(runData);
+            })
+            .catch(function () {
+              // Preserve the last confirmed state; an explicit refresh exposes errors.
+            });
+        },
+        15000
+      );
+
+      return function () {
+        window.clearInterval(interval);
+      };
+    },
+    [iterationId, openRunIds]
   );
 
 
@@ -598,6 +675,46 @@ export default function IterationPage() {
       );
     } finally {
       setLaunchingRunId(null);
+    }
+  }
+
+
+  async function reconcileRun(run: Run) {
+    setReconcilingRunId(run.id);
+    setMessage(null);
+
+    try {
+      const result = await apiFetch(
+        `/api/runs/${run.id}/reconcile`,
+        { method: "POST" }
+      );
+
+      if (result.iterationFinalized || result.iterationResolved) {
+        setMessage(
+          "Run status reconciled and the three-Run Iteration is complete."
+        );
+      } else if (result.runFinalized || result.runResolved) {
+        setMessage(
+          "Run status reconciled successfully. Retry-eligible voters can move to the next Run."
+        );
+      } else {
+        setMessage(
+          `Reconciliation is waiting for ${result.pendingContacts} pending contact ${result.pendingContacts === 1 ? "outcome" : "outcomes"} and ${result.activeExecutions} active call ${result.activeExecutions === 1 ? "execution" : "executions"}.`
+        );
+      }
+
+      await Promise.all([
+        loadIteration(),
+        loadRuns()
+      ]);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to reconcile Run status"
+      );
+    } finally {
+      setReconcilingRunId(null);
     }
   }
 
@@ -1384,8 +1501,31 @@ export default function IterationPage() {
                               </div>
 
 
-                              {canCreateRuns && (
-                                <button
+                              {(canCreateRuns || canReconcileRuns) && (
+                                <div className="run-lifecycle-actions">
+                                  {canReconcileRuns && !runIsClosed && (
+                                    <button
+                                      type="button"
+                                      className="iteration-analysis-button"
+                                      disabled={
+                                        reconcilingRunId === run.id ||
+                                        launchingRunId === run.id ||
+                                        previewingRunId === run.id
+                                      }
+                                      onClick={function () {
+                                        reconcileRun(run);
+                                      }}
+                                      title="Derive this Run status from stored contact and callback outcomes."
+                                    >
+                                      <RefreshCw size={15} />
+                                      {reconcilingRunId === run.id
+                                        ? "Reconciling..."
+                                        : "Sync status"}
+                                    </button>
+                                  )}
+
+                                  {canCreateRuns && (
+                                    <button
                                   type="button"
 
                                   onClick={
@@ -1417,7 +1557,9 @@ export default function IterationPage() {
                                         ? "Loading voters..."
                                         : "Review & Launch"
                                   }
-                                </button>
+                                    </button>
+                                  )}
+                                </div>
                               )}
 
                             </div>

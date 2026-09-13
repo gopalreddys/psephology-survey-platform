@@ -4140,6 +4140,14 @@ textarea.iteration-input {
   opacity: .68;
 }
 
+.run-lifecycle-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .iteration-create-run-button,
 .run-submit-button {
   color: white;
