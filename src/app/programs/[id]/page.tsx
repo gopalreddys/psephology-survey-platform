@@ -110,7 +110,7 @@ type ProgramDashboard = {
     predictiveReady: boolean;
   };
   campaigns: ProgramCampaign[];
-  lifecycle: {
+  lifecycle?: {
     status: "NOT_STARTED" | "IN_PROGRESS" | "READY_FOR_REVIEW" | "PAUSED" | "COMPLETED" | "ARCHIVED";
     recordedStatus: string;
     readyToComplete: boolean;
@@ -181,7 +181,7 @@ export default function ProgramDetailPage() {
   }, [canManagePrograms, loadDashboard, programId]);
 
   async function completeProgram() {
-    if (!dashboard?.lifecycle.readyToComplete) return;
+    if (!dashboard?.lifecycle?.readyToComplete) return;
     if (!window.confirm("Complete this Program? This confirms that every Campaign has been formally completed and reviewed.")) return;
     setCompleting(true);
     setMessage(null);
@@ -232,7 +232,22 @@ export default function ProgramDetailPage() {
     );
   }
 
-  const { program, summary, evidence, campaigns, lifecycle, warnings } = dashboard;
+  const { program, summary, evidence, campaigns, warnings } = dashboard;
+  const lifecycle = dashboard.lifecycle ?? {
+    status: String(program.status || "DRAFT").toUpperCase() === "COMPLETED"
+      ? "COMPLETED" as const
+      : "IN_PROGRESS" as const,
+    recordedStatus: program.status,
+    readyToComplete: false,
+    blockers: ["Program lifecycle status is waiting for the API deployment"],
+    campaignCount: summary.campaignCount,
+    completedCampaignCount: summary.completedCampaignCount,
+    openRuns: summary.openRunCount,
+    pendingVoters: summary.pendingVoters,
+    retryEligibleVoters: summary.retryEligibleVoters,
+    attentionCampaigns: summary.attentionCampaignCount,
+    history: []
+  };
   const programClosed = ["COMPLETED", "ARCHIVED"].includes(String(program.status).toUpperCase());
 
   return (
