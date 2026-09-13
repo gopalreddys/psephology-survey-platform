@@ -217,7 +217,21 @@ export async function getCampaignLifecycle(campaignId, actor) {
         ON event.entity_type = 'ITERATION'
        AND lifecycle_iteration.id = event.entity_id
       WHERE event.entity_id = $1 OR event.parent_entity_id = $1
-      ORDER BY event.created_at DESC, event.entity_type, event.entity_id
+      ORDER BY
+        event.created_at DESC,
+        CASE event.entity_type
+          WHEN 'CAMPAIGN' THEN 1
+          WHEN 'ITERATION' THEN 2
+          WHEN 'RUN' THEN 3
+          ELSE 4
+        END,
+        COALESCE(
+          run_iteration.iteration_number,
+          lifecycle_iteration.iteration_number,
+          0
+        ),
+        COALESCE(lifecycle_run.run_number, 0),
+        event.entity_id
       LIMIT 50
     `,
     [campaignId]
