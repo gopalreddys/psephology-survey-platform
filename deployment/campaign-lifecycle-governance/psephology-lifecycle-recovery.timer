@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Psephology lifecycle recovery every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=psephology-lifecycle-recovery.service
+
+[Install]
+WantedBy=timers.target

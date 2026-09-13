@@ -25,6 +25,28 @@ await copy(
   "reconcile-open-runs.js",
   path.join(runtimeRoot, "src/db/reconcile-open-runs.js")
 );
+await copyFile(
+  path.resolve(
+    packageRoot,
+    "../campaign-lifecycle-governance/lifecycle-audit.repository.js"
+  ),
+  path.join(runtimeRoot, "src/repositories/lifecycle-audit.repository.js")
+);
+await mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
+await copyFile(
+  path.resolve(
+    packageRoot,
+    "../campaign-lifecycle-governance/021_operational_lifecycle_audit.sql"
+  ),
+  path.join(runtimeRoot, "sql/021_operational_lifecycle_audit.sql")
+);
+await copyFile(
+  path.resolve(
+    packageRoot,
+    "../campaign-lifecycle-governance/migrate-campaign-lifecycle.js"
+  ),
+  path.join(runtimeRoot, "src/db/migrate-campaign-lifecycle.js")
+);
 await mkdir(path.join(runtimeRoot, "src/repositories"), { recursive: true });
 await copyFile(
   path.resolve(packageRoot, "../campaign-workspace/run-access.repository.js"),
@@ -62,3 +84,4 @@ if (!source.includes(marker)) {
 }
 
 console.log(`Enabled automated Run lifecycle reconciliation in ${runtimeRoot}`);
+console.log("Run src/db/migrate-campaign-lifecycle.js before starting the API.");

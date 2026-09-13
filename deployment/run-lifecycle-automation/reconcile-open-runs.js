@@ -47,7 +47,9 @@ try {
   for (const run of result.rows) {
     await db.query("BEGIN");
     try {
-      reconciled.push(await reconcileRunLifecycle(db, run.id));
+      reconciled.push(await reconcileRunLifecycle(db, run.id, {
+        source: "MANUAL_RECONCILIATION"
+      }));
       await db.query("COMMIT");
     } catch (error) {
       await db.query("ROLLBACK");

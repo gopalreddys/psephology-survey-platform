@@ -1,0 +1,10 @@
+[Unit]
+Description=Psephology stale callback and lifecycle recovery
+After=network-online.target psephology-api.service
+
+[Service]
+Type=oneshot
+User=ec2-user
+WorkingDirectory=/opt/sarvam-voice-analytics
+EnvironmentFile=-/etc/psephology-api.env
+ExecStart=/usr/bin/node /opt/sarvam-voice-analytics/src/db/recover-stale-callbacks.js --apply

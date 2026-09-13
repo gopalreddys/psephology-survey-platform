@@ -19,6 +19,7 @@ type Campaign = { id: string; campaign_code: string; campaign_name: string; prog
 type Campaigner = { id: string; full_name: string; email?: string; role_code: string; status?: string };
 type VoiceAgent = { id: string; provider_name: string | null; app_id: string; app_version: number; usage_category: "URBAN_MALE" | "URBAN_FEMALE" | "RURAL_MALE" | "RURAL_FEMALE" };
 type AllocationSummaryRow = { id: string; name: string; code: string; district?: string; campaigner: string | null };
+type CampaignLifecycle = { lifecycleStatus: "NOT_STARTED" | "IN_PROGRESS" | "READY_FOR_REVIEW" | "PAUSED" | "COMPLETED" | "ARCHIVED"; readyToComplete: boolean; blockers: string[]; summary: { iterations: number; completed_iterations: number; policy_complete_iterations: number; runs: number; closed_runs: number; open_runs: number; pending_contacts: number; retry_eligible_contacts: number; active_executions: number }; history: Array<{ id: string; entity_type: string; previous_status: string | null; next_status: string; trigger_source: string; actor_name: string | null; created_at: string }> };
 
 function normalizedAssignments(value: Record<string, string>) {
   return JSON.stringify(Object.keys(value).filter(function (key) { return Boolean(value[key]); }).sort().map(function (key) { return [key, value[key]]; }));
@@ -50,6 +51,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const [savingIteration, setSavingIteration] = useState(false);
   const [iterationForm, setIterationForm] = useState({ name: "", stage: "BASE", targetSample: "", voiceAgentId: "", startDate: "", endDate: "" });
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [lifecycle, setLifecycle] = useState<CampaignLifecycle | null>(null);
   useEffect(function () {
     let cancelled = false;
     async function load() {
@@ -67,6 +69,12 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           }
         }
         if (user?.role.code !== "CAMPAIGNER") {
+          try {
+            const lifecycleResult = await apiFetch(`/api/campaigns/${id}/lifecycle`);
+            if (!cancelled) setLifecycle(lifecycleResult);
+          } catch (reason) {
+            if (!cancelled) setIterationError(reason instanceof Error ? reason.message : "Campaign lifecycle is not available yet");
+          }
           try {
             const campaignerResult = await apiFetch(`/api/campaigns/${id}/campaigners`);
             if (!cancelled) setCampaigners(Array.isArray(campaignerResult) ? campaignerResult : campaignerResult.items || []);
@@ -136,6 +144,19 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       setManagerNotice(`${updated.campaign_manager_name} is now the Campaign Manager for this campaign. They can create iterations and manage campaigner allocations.`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to assign Campaign Manager"); }
     finally { setSavingManager(false); }
+  }
+
+  async function completeCampaign() {
+    if (!campaign || !window.confirm("Complete this Campaign? This confirms that every Iteration and Run has been reviewed.")) return;
+    setUpdatingStatus(true); setError(null); setActionNotice(null);
+    try {
+      const result = await apiFetch(`/api/campaigns/${id}/complete`, { method: "POST" });
+      setLifecycle(result);
+      setCampaign(function (current) { return current ? { ...current, status: "COMPLETED" } : current; });
+      setActionNotice("Campaign completed successfully. Its lifecycle evidence is now locked for executive review.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to complete Campaign");
+    } finally { setUpdatingStatus(false); }
   }
 
   async function openIterationAllocations(iterationId: string) {
@@ -253,6 +274,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
   const assignedWorkCount = allocationSummary.filter(function (row) { return Boolean(row.campaigner); }).length;
   const remainingWorkCount = allocationSummary.length - assignedWorkCount;
   const canDelete = Boolean(campaign && user && campaign.status === "DRAFT" && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code));
+  const canCompleteCampaign = Boolean(user?.role.code === "CAMPAIGN_MANAGER" && campaign?.campaign_manager_user_id === user.id && lifecycle?.readyToComplete);
   const statusAction = campaign?.status === "DRAFT" ? { label: "Review & Activate", status: "ACTIVE" as const } : campaign?.status === "ACTIVE" ? { label: "Pause campaign", status: "PAUSED" as const } : campaign?.status === "PAUSED" ? { label: "Resume campaign", status: "ACTIVE" as const } : null;
   const iterationProgress = useMemo(function () {
     const completed = iterations.filter(function (iteration) {
@@ -323,8 +345,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     <div className={styles.backRow}><Link href="/campaigns"><ArrowLeft size={16} />Campaigns</Link></div>
     {error ? <FeedbackMessage message={error} className={styles.message} /> : !campaign ? <div className={styles.empty}>Loading campaign…</div> : <>
       {actionNotice && <FeedbackMessage message={actionNotice} className={styles.successMessage} />}
-      <section className={styles.detailHero}><div className={styles.campaignIcon}><Megaphone size={18} /></div><div><span>{campaign.campaign_code} · {campaign.target_domain === "LOCAL_BODY" ? "LOCAL BODY" : "LEGISLATIVE"}</span><h1>{campaign.campaign_name}</h1><p>{campaign.target_type} · {campaign.target_name}{campaign.target_code ? ` · ${campaign.target_code}` : ""} · {campaign.survey_stage || "BASE"} survey</p></div><div className={styles.detailActions}><em>{campaign.status}</em>{canViewAnalysis && <Link href={`/campaigns/${id}/analysis`} className={styles.analysisAction}><BarChart3 size={14} />View Campaign Analysis</Link>}{canReview && statusAction && <button type="button" className={styles.primaryAction} disabled={updatingStatus || (statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id)} onClick={function () { changeStatus(statusAction.status); }}>{updatingStatus ? "Updating…" : statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id ? "Assign manager first" : statusAction.label}</button>}{canReview && campaign.status === "ACTIVE" && <button type="button" className={styles.secondaryButton} disabled={updatingStatus} onClick={function () { changeStatus("COMPLETED"); }}>Mark completed</button>}{canDelete && <button type="button" className={styles.dangerButton} disabled={updatingStatus} onClick={removeCampaign}><Trash2 size={14} />Delete draft</button>}</div></section>
+      <section className={styles.detailHero}><div className={styles.campaignIcon}><Megaphone size={18} /></div><div><span>{campaign.campaign_code} · {campaign.target_domain === "LOCAL_BODY" ? "LOCAL BODY" : "LEGISLATIVE"}</span><h1>{campaign.campaign_name}</h1><p>{campaign.target_type} · {campaign.target_name}{campaign.target_code ? ` · ${campaign.target_code}` : ""} · {campaign.survey_stage || "BASE"} survey</p></div><div className={styles.detailActions}><em>{campaign.status}</em>{canViewAnalysis && <Link href={`/campaigns/${id}/analysis`} className={styles.analysisAction}><BarChart3 size={14} />View Campaign Analysis</Link>}{canReview && statusAction && <button type="button" className={styles.primaryAction} disabled={updatingStatus || (statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id)} onClick={function () { changeStatus(statusAction.status); }}>{updatingStatus ? "Updating…" : statusAction.status === "ACTIVE" && !campaign.campaign_manager_user_id ? "Assign manager first" : statusAction.label}</button>}{canCompleteCampaign && <button type="button" className={styles.primaryAction} disabled={updatingStatus} onClick={completeCampaign}>{updatingStatus ? "Completing…" : "Complete Campaign"}</button>}{canDelete && <button type="button" className={styles.dangerButton} disabled={updatingStatus} onClick={removeCampaign}><Trash2 size={14} />Delete draft</button>}</div></section>
       {canAssignManager && <section className={styles.managerPanel}><div><span>CAMPAIGN OWNERSHIP</span><h2>Assign Campaign Manager</h2><p>The manager receives this campaign and owns its iteration planning.</p>{managerNotice && <FeedbackMessage message={managerNotice} className={styles.successMessage} />}</div><div className={styles.managerControls}><select value={managerId} onChange={function (event) { setManagerId(event.target.value); setManagerNotice(null); }}><option value="">Select Campaign Manager</option>{managers.map(function (manager) { return <option key={manager.id} value={manager.id}>{manager.full_name}</option>; })}</select><button type="button" className={styles.primaryAction} disabled={!managerDirty || savingManager} onClick={assignManager}>{savingManager ? "Assigning…" : managerDirty ? "Assign manager" : "Manager assigned"}</button></div></section>}
+      {lifecycle && <section className={styles.lifecyclePanel}><div><span>CAMPAIGN LIFECYCLE</span><h2>{formatLifecycleStatus(lifecycle.lifecycleStatus)}</h2><p>{lifecycle.lifecycleStatus === "READY_FOR_REVIEW" ? "All operational work is resolved. The assigned Campaign Manager can complete this Campaign." : lifecycle.lifecycleStatus === "COMPLETED" ? "The Campaign Manager has completed this Campaign." : "Completion readiness is calculated from Iterations, Runs, contacts and provider callbacks."}</p></div><div className={styles.lifecycleFacts}><span><strong>{lifecycle.summary.completed_iterations}/{lifecycle.summary.iterations}</strong> Iterations complete</span><span><strong>{lifecycle.summary.closed_runs}/{lifecycle.summary.runs}</strong> Runs closed</span><span><strong>{lifecycle.summary.active_executions}</strong> Active calls</span></div>{lifecycle.blockers.length > 0 && <div className={styles.lifecycleBlockers}><strong>Required before completion</strong>{lifecycle.blockers.map(function (blocker) { return <span key={blocker}>{blocker}</span>; })}</div>}{lifecycle.history.length > 0 && <div className={styles.lifecycleHistory}><strong>Recent lifecycle activity</strong>{lifecycle.history.slice(0, 6).map(function (event) { return <span key={event.id}><em>{event.entity_type}</em><b>{event.previous_status ? `${event.previous_status} → ` : ""}{event.next_status}</b><small>{event.actor_name || formatLifecycleStatus(event.trigger_source as CampaignLifecycle["lifecycleStatus"])} · {new Date(event.created_at).toLocaleString()}</small></span>; })}</div>}</section>}
       <section className={styles.metrics}><DetailMetric icon={ClipboardList} label="Iterations created" value={iterationProgress.total} /><DetailMetric icon={CheckCircle2} label="Completed" value={iterationProgress.completed} /><DetailMetric icon={PhoneCall} label="In process" value={iterationProgress.inProcess} /><DetailMetric icon={Target} label="Not started" value={iterationProgress.notStarted} /><DetailMetric icon={Users} label="Work allocations" value={campaign.allocations.length} /></section>
       <section className={styles.iterationPanel}>
         <div className={styles.listHeader}><div><span>CAMPAIGN RESEARCH CYCLES</span><h2>Iterations and execution status</h2><p>Campaign Managers define the survey waves; Campaigners execute their assigned runs.</p></div>{canManageIterations && <button type="button" className={styles.primaryAction} onClick={function () { setShowIterationForm(true); }}><Plus size={15} />Create iteration</button>}</div>
@@ -343,5 +366,9 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 function DetailMetric({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | number }) { return <div className={styles.metric}><span><Icon size={17} /></span><div><small>{label}</small><strong>{typeof value === "number" ? value.toLocaleString() : value}</strong></div></div>; }
 
 function formatAgentCategory(value: VoiceAgent["usage_category"]) {
+  return value.split("_").map(function (word) { return word.charAt(0) + word.slice(1).toLowerCase(); }).join(" ");
+}
+
+function formatLifecycleStatus(value: CampaignLifecycle["lifecycleStatus"]) {
   return value.split("_").map(function (word) { return word.charAt(0) + word.slice(1).toLowerCase(); }).join(" ");
 }

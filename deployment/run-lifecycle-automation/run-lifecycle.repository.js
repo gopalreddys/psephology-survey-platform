@@ -1,5 +1,6 @@
 import { getDb } from "../db/postgres.js";
 import { assertRunAccess } from "./run-access.repository.js";
+import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
 
 const CLOSED_RUN_STATUSES = [
   "COMPLETED",
@@ -21,6 +22,9 @@ async function lifecycleState(db, runId) {
         run.iteration_id,
         run.run_number,
         run.status AS run_status,
+        iteration.status AS iteration_status,
+        link.status AS iteration_link_status,
+        link.campaign_id,
         COUNT(DISTINCT contact.id)::int AS total_contacts,
         COUNT(DISTINCT contact.id) FILTER (
           WHERE COALESCE(contact.attempt_status, 'PENDING')
@@ -31,12 +35,17 @@ async function lifecycleState(db, runId) {
             NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
         )::int AS active_executions
       FROM campaign_runs run
+      LEFT JOIN program_iterations iteration
+        ON iteration.id = run.iteration_id
+      LEFT JOIN campaign_iteration_links link
+        ON link.iteration_id = run.iteration_id
       LEFT JOIN campaign_run_contacts contact
         ON contact.run_id = run.id
       LEFT JOIN call_executions execution
         ON execution.run_id = run.id
       WHERE run.id = $1
-      GROUP BY run.id, run.iteration_id, run.run_number, run.status
+      GROUP BY run.id, run.iteration_id, run.run_number, run.status,
+        iteration.status, link.status, link.campaign_id
     `,
     [runId]
   );
@@ -136,7 +145,7 @@ async function exhaustFinalRetryCohort(db, iterationId) {
   return result.rowCount;
 }
 
-export async function reconcileRunLifecycle(db, runId) {
+export async function reconcileRunLifecycle(db, runId, options = {}) {
   await db.query(
     "SELECT pg_advisory_xact_lock(hashtext($1))",
     [String(runId)]
@@ -176,6 +185,23 @@ export async function reconcileRunLifecycle(db, runId) {
         [runId]
       );
       runFinalized = updateResult.rowCount > 0;
+
+      if (runFinalized) {
+        await recordLifecycleEvent(db, {
+          entityType: "RUN",
+          entityId: runId,
+          parentEntityId: before.campaign_id,
+          previousStatus: before.run_status,
+          nextStatus: "COMPLETED",
+          source: options.source || "SYSTEM",
+          actorId: options.actorId,
+          details: {
+            iterationId: before.iteration_id,
+            runNumber: Number(before.run_number),
+            totalContacts: Number(before.total_contacts || 0)
+          }
+        });
+      }
     }
   }
 
@@ -220,6 +246,22 @@ export async function reconcileRunLifecycle(db, runId) {
     );
     iterationFinalized =
       linkUpdate.rowCount > 0 || iterationUpdate.rowCount > 0;
+
+    if (iterationFinalized) {
+      await recordLifecycleEvent(db, {
+        entityType: "ITERATION",
+        entityId: before.iteration_id,
+        parentEntityId: before.campaign_id,
+        previousStatus: before.iteration_link_status || before.iteration_status,
+        nextStatus: "COMPLETED",
+        source: options.source || "SYSTEM",
+        actorId: options.actorId,
+        details: {
+          closedPolicyRuns: Number(iteration.closed_policy_runs || 0),
+          retryExhaustedContacts
+        }
+      });
+    }
   }
 
   const after = await lifecycleState(db, runId);
@@ -246,7 +288,10 @@ export async function reconcileRunLifecycleById(runId, actor) {
 
   try {
     await db.query("BEGIN");
-    const result = await reconcileRunLifecycle(db, runId);
+    const result = await reconcileRunLifecycle(db, runId, {
+      source: "MANUAL_RECONCILIATION",
+      actorId: actor.id
+    });
     await db.query("COMMIT");
     return result;
   } catch (error) {

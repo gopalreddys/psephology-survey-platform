@@ -25,6 +25,7 @@ node deployment/run-lifecycle-automation/install-run-lifecycle.js \
   /opt/sarvam-voice-analytics
 
 cd /opt/sarvam-voice-analytics
+node src/db/migrate-campaign-lifecycle.js
 node --check src/repositories/run-lifecycle.repository.js
 node --check src/repositories/sarvam-outbound-webhook.repository.js
 node --check src/routes/run-lifecycle.routes.js

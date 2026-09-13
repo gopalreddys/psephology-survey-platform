@@ -435,7 +435,9 @@ export async function recordSarvamOutboundResult(payload) {
       }
     }
 
-    const lifecycle = await reconcileRunLifecycle(db, execution.run_id);
+    const lifecycle = await reconcileRunLifecycle(db, execution.run_id, {
+      source: "SARVAM_WEBHOOK"
+    });
     const runFinalized = lifecycle.runFinalized;
     const iterationFinalized = lifecycle.iterationFinalized;
 
