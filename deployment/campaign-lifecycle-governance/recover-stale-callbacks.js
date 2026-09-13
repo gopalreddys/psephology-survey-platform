@@ -22,6 +22,7 @@ try {
   }
 
   console.log(await recoverStaleCallbacks({ thresholdMinutes }));
+  process.exit(0);
 } catch (error) {
   console.error("Stale callback recovery failed:", error);
   process.exitCode = 1;
