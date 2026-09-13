@@ -1,20 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  Activity,
+  AlertTriangle,
   ArrowLeft,
+  BarChart3,
   CheckCircle2,
   ClipboardList,
+  Database,
+  FileText,
   Flag,
   Languages,
   MapPinned,
   Megaphone,
   PauseCircle,
+  PhoneCall,
   PlayCircle,
   Plus,
+  RefreshCw,
   Target,
   UserRound,
+  Users
 } from "lucide-react";
 import { useParams } from "next/navigation";
 
@@ -22,111 +30,139 @@ import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
+import styles from "./dashboard.module.css";
 
-type Program = {
+type ProgramCampaign = {
   id: string;
-  study_code: string;
-  study_name: string;
-  purpose: string | null;
-  study_type: string;
-  scope_mode: string | null;
-  election_type: string | null;
-  jurisdiction_name: string | null;
-  jurisdiction_code: string | null;
-  target_sample_size: number | null;
-  primary_language: string | null;
-  status: string;
+  code: string;
+  name: string;
+  targetType: string;
+  targetName: string;
+  surveyStage: string;
+  recordedStatus: string;
+  operationalStatus: string;
+  campaignManagerId: string | null;
+  campaignManagerName: string | null;
+  iterationCount: number;
+  completedIterationCount: number;
+  runCount: number;
+  closedRunCount: number;
+  openRunCount: number;
+  selectedVoters: number;
+  successfulVoters: number;
+  retryEligibleVoters: number;
+  pendingVoters: number;
+  successfulYieldPct: number;
+  callAttempts: number;
+  callbacksReceived: number;
+  connectedResponses: number;
+  transcriptsCaptured: number;
+  responsesCaptured: number;
+  comparisonReady: boolean;
+  needsAttention: boolean;
+  attentionReasons: string[];
 };
 
-type Campaign = {
-  id: string;
-  program_id?: string | null;
-  campaign_code: string;
-  campaign_name: string;
-  target_type: string;
-  target_name: string;
-  survey_stage?: string | null;
-  status: string;
-  campaign_manager_name?: string | null;
-  iteration_count?: number;
-  completed_iteration_count?: number;
-  run_count?: number;
-  successful_voters?: number;
-  start_date: string | null;
-  end_date: string | null;
+type ProgramDashboard = {
+  program: {
+    id: string;
+    code: string;
+    name: string;
+    purpose: string | null;
+    studyType: string;
+    scopeMode: string | null;
+    electionType: string | null;
+    jurisdictionName: string | null;
+    jurisdictionCode: string | null;
+    targetSampleSize: number;
+    primaryLanguage: string | null;
+    status: string;
+  };
+  summary: {
+    campaignCount: number;
+    notStartedCampaignCount: number;
+    inProgressCampaignCount: number;
+    pausedCampaignCount: number;
+    readyForReviewCampaignCount: number;
+    completedCampaignCount: number;
+    attentionCampaignCount: number;
+    iterationCount: number;
+    completedIterationCount: number;
+    iterationCompletionPct: number;
+    runCount: number;
+    closedRunCount: number;
+    openRunCount: number;
+    selectedVoters: number;
+    successfulVoters: number;
+    successfulYieldPct: number;
+    retryEligibleVoters: number;
+    pendingVoters: number;
+  };
+  evidence: {
+    callAttempts: number;
+    callbacksReceived: number;
+    connectedResponses: number;
+    demoResponses: number;
+    transcriptsCaptured: number;
+    responsesCaptured: number;
+    comparisonReadyCampaignCount: number;
+    representative: boolean;
+    predictiveReady: boolean;
+  };
+  campaigns: ProgramCampaign[];
+  warnings: string[];
+  generatedAt: string;
 };
-
-const RUNNING_STATUSES = new Set(["ACTIVE"]);
-const COMPLETED_STATUSES = new Set(["COMPLETED", "COMPLETE"]);
 
 export default function ProgramDetailPage() {
   const params = useParams();
   const programId = params.id as string;
   const { user, loading: userLoading } = useCurrentUser();
-  const [program, setProgram] = useState<Program | null>(null);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [dashboard, setDashboard] = useState<ProgramDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
   const canManagePrograms = Boolean(
     user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code)
   );
 
+  const loadDashboard = useCallback(async function (refresh = false) {
+    if (!programId) return;
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setMessage(null);
+
+    try {
+      const data = await apiFetch(`/api/programs/${programId}/dashboard`);
+      setDashboard(data);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to load Program executive dashboard"
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [programId]);
+
   useEffect(function () {
     if (!canManagePrograms || !programId) return;
-    let cancelled = false;
-
-    Promise.all([
-      apiFetch(`/api/programs/${programId}`),
-      apiFetch("/api/campaigns"),
-    ])
-      .then(function ([programData, campaignData]) {
-        if (cancelled) return;
-        const allCampaigns = Array.isArray(campaignData)
-          ? campaignData
-          : campaignData.items || [];
-        setProgram(programData);
-        setCampaigns(
-          allCampaigns.filter(function (campaign: Campaign) {
-            return campaign.program_id === programId;
-          })
-        );
-      })
-      .catch(function (error) {
-        if (!cancelled) {
-          setMessage(
-            error instanceof Error ? error.message : "Unable to load Program campaigns"
-          );
-        }
-      })
-      .finally(function () {
-        if (!cancelled) setLoading(false);
-      });
-
+    const timer = window.setTimeout(function () {
+      void loadDashboard();
+    }, 0);
     return function () {
-      cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [canManagePrograms, programId]);
-
-  const summary = useMemo(function () {
-    return {
-      running: campaigns.filter(function (campaign) {
-        return RUNNING_STATUSES.has(String(campaign.status).toUpperCase());
-      }).length,
-      completed: campaigns.filter(function (campaign) {
-        return COMPLETED_STATUSES.has(String(campaign.status).toUpperCase());
-      }).length,
-      paused: campaigns.filter(function (campaign) {
-        return String(campaign.status).toUpperCase() === "PAUSED";
-      }).length,
-      draft: campaigns.filter(function (campaign) {
-        return String(campaign.status).toUpperCase() === "DRAFT";
-      }).length,
-    };
-  }, [campaigns]);
+  }, [canManagePrograms, loadDashboard, programId]);
 
   if (userLoading || (canManagePrograms && loading)) {
-    return <AppShell><div className="program-detail-loading">Loading Program portfolio…</div></AppShell>;
+    return (
+      <AppShell>
+        <div className="program-detail-loading">Preparing Program oversight…</div>
+      </AppShell>
+    );
   }
 
   if (user && !canManagePrograms) {
@@ -134,75 +170,171 @@ export default function ProgramDetailPage() {
       <AppShell>
         <div className="program-detail-page">
           <FeedbackMessage
-            message="Programs are governed by Admin and Super Admin users. Campaign Managers work from their assigned Campaigns."
-            className="program-detail-message"
+            tone="error"
+            message="Program oversight is available only to Admin and Super Admin users. Campaign Managers work from their assigned Campaigns."
           />
         </div>
       </AppShell>
     );
   }
 
-  if (!program) {
+  if (!dashboard) {
     return (
       <AppShell>
         <div className="program-detail-page">
-          <Link href="/programs" className="program-detail-back"><ArrowLeft size={15} /> Back to Programs</Link>
-          <div className="program-detail-error">{message || "Program not found."}</div>
+          <Link href="/programs" className="program-detail-back">
+            <ArrowLeft size={15} /> Back to Programs
+          </Link>
+          <div className="program-detail-error">
+            {message || "Program dashboard is unavailable."}
+          </div>
         </div>
       </AppShell>
     );
   }
 
+  const { program, summary, evidence, campaigns, warnings } = dashboard;
+
   return (
     <AppShell>
       <div className="program-detail-page">
-        <Link href="/programs" className="program-detail-back"><ArrowLeft size={15} /> Back to Programs</Link>
+        <Link href="/programs" className="program-detail-back">
+          <ArrowLeft size={15} /> Back to Programs
+        </Link>
 
         <section className="program-detail-header">
           <div>
-            <div className="program-detail-eyebrow">RESEARCH PROGRAM</div>
-            <h1>{program.study_name}</h1>
-            <div className="program-detail-code">{program.study_code}</div>
+            <div className="program-detail-eyebrow">PROGRAM OVERSIGHT</div>
+            <h1>{program.name}</h1>
+            <div className="program-detail-code">
+              {program.code} · {program.jurisdictionName || "Scope not defined"}
+            </div>
           </div>
           <div className="program-detail-actions">
+            <div className={styles.actionRow}>
+              <button
+                type="button"
+                className={styles.refreshButton}
+                disabled={refreshing}
+                onClick={() => void loadDashboard(true)}
+              >
+                <RefreshCw size={15} className={refreshing ? styles.spinning : ""} />
+                {refreshing ? "Refreshing…" : "Refresh status"}
+              </button>
+              <Link
+                href={`/campaigns/new?programId=${program.id}`}
+                className="program-detail-create-button"
+              >
+                <Plus size={15} /> Create Campaign
+              </Link>
+            </div>
             <div className="program-detail-operations-note">
               <ClipboardList size={16} />
-              Admins define Campaigns; Campaign Managers create their Iterations.
+              Oversight only: Campaign Managers govern Iterations; Campaigners execute Runs.
             </div>
-            <Link href={`/campaigns/new?programId=${program.id}`} className="program-detail-create-button">
-              <Plus size={15} /> Create Campaign
-            </Link>
           </div>
         </section>
 
-        {message && <FeedbackMessage message={message} className="program-detail-message" />}
+        {message && (
+          <FeedbackMessage message={message} className="program-detail-message" />
+        )}
 
-        <section className="program-detail-metrics">
-          <ProgramMetric icon={MapPinned} label="Constituency" value={program.jurisdiction_name || "-"} />
-          <ProgramMetric icon={Target} label="Target Sample" value={program.target_sample_size?.toLocaleString() || "-"} />
-          <ProgramMetric icon={Languages} label="Language" value={program.primary_language || "-"} />
-          <ProgramMetric icon={Megaphone} label="Campaigns" value={String(campaigns.length)} />
-          <ProgramMetric icon={PlayCircle} label="Running" value={String(summary.running)} />
-          <ProgramMetric icon={PauseCircle} label="Paused" value={String(summary.paused)} />
-          <ProgramMetric icon={CheckCircle2} label="Completed" value={String(summary.completed)} />
-          <ProgramMetric icon={Flag} label="Program Status" value={program.status} />
+        <section className={styles.primaryMetrics} aria-label="Program status summary">
+          <DashboardMetric
+            icon={Megaphone}
+            label="Campaigns"
+            value={summary.campaignCount}
+            detail={`${summary.inProgressCampaignCount} in progress`}
+          />
+          <DashboardMetric
+            icon={CheckCircle2}
+            label="Iterations completed"
+            value={`${summary.completedIterationCount}/${summary.iterationCount}`}
+            detail={`${summary.iterationCompletionPct}% complete`}
+          />
+          <DashboardMetric
+            icon={PhoneCall}
+            label="Runs"
+            value={summary.runCount}
+            detail={`${summary.closedRunCount} closed · ${summary.openRunCount} open`}
+          />
+          <DashboardMetric
+            icon={Target}
+            label="Successful surveys"
+            value={summary.successfulVoters}
+            detail={`${summary.successfulYieldPct}% of ${summary.selectedVoters} selected`}
+          />
+          <DashboardMetric
+            icon={AlertTriangle}
+            label="Needs attention"
+            value={summary.attentionCampaignCount}
+            detail={`${summary.pendingVoters} pending · ${summary.retryEligibleVoters} retry eligible`}
+            attention={summary.attentionCampaignCount > 0}
+          />
+          <DashboardMetric
+            icon={Flag}
+            label="Program status"
+            value={program.status}
+            detail={program.studyType}
+          />
         </section>
 
-        <section className="program-purpose-card">
-          <div className="program-purpose-icon"><ClipboardList size={19} /></div>
-          <div>
-            <div className="program-detail-eyebrow">RESEARCH PURPOSE</div>
-            <h2>Program Objective</h2>
-            <p>{program.purpose || "No purpose defined."}</p>
+        <section className={styles.lifecyclePanel}>
+          <div className={styles.sectionHeading}>
+            <div>
+              <div className="program-detail-eyebrow">CAMPAIGN LIFECYCLE</div>
+              <h2>Portfolio execution status</h2>
+              <p>Operational status is calculated from governed Campaign, Iteration and Run records.</p>
+            </div>
+          </div>
+          <div className={styles.lifecycleGrid}>
+            <LifecycleItem icon={ClipboardList} label="Not started" value={summary.notStartedCampaignCount} />
+            <LifecycleItem icon={PlayCircle} label="In progress" value={summary.inProgressCampaignCount} />
+            <LifecycleItem icon={PauseCircle} label="Paused" value={summary.pausedCampaignCount} />
+            <LifecycleItem icon={Activity} label="Ready for review" value={summary.readyForReviewCampaignCount} />
+            <LifecycleItem icon={CheckCircle2} label="Completed" value={summary.completedCampaignCount} />
           </div>
         </section>
+
+        <div className={styles.twoColumnGrid}>
+          <section className="program-purpose-card">
+            <div className="program-purpose-icon"><ClipboardList size={19} /></div>
+            <div>
+              <div className="program-detail-eyebrow">RESEARCH PURPOSE</div>
+              <h2>Program objective</h2>
+              <p>{program.purpose || "No purpose defined."}</p>
+              <div className={styles.programContext}>
+                <span><MapPinned size={14} /> {program.jurisdictionName || "Scope pending"}</span>
+                <span><Target size={14} /> Target {program.targetSampleSize || "–"}</span>
+                <span><Languages size={14} /> {program.primaryLanguage || "Language pending"}</span>
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.evidencePanel}>
+            <div className="program-detail-eyebrow">EVIDENCE CAPTURE</div>
+            <h2>Research data readiness</h2>
+            <div className={styles.evidenceGrid}>
+              <EvidenceFact icon={PhoneCall} label="Call attempts" value={evidence.callAttempts} />
+              <EvidenceFact icon={Activity} label="Callbacks stored" value={evidence.callbacksReceived} />
+              <EvidenceFact icon={Users} label="Connected responses" value={evidence.connectedResponses} />
+              <EvidenceFact icon={FileText} label="Transcripts" value={evidence.transcriptsCaptured} />
+              <EvidenceFact icon={Database} label="Structured responses" value={evidence.responsesCaptured} />
+              <EvidenceFact icon={BarChart3} label="Campaigns comparable" value={evidence.comparisonReadyCampaignCount} />
+            </div>
+            <div className={styles.researchBoundary}>
+              <AlertTriangle size={15} />
+              Program evidence remains directional; representative and predictive reporting is locked until methodology controls are configured.
+            </div>
+          </section>
+        </div>
 
         <section className="program-campaign-panel">
           <div className="program-campaign-header">
             <div>
               <div className="program-detail-eyebrow">CAMPAIGN PORTFOLIO</div>
               <h2>Campaigns under this Program</h2>
-              <p>Review ownership, operational state and geography before opening a Campaign.</p>
+              <p>Review ownership, execution progress and evidence readiness, then drill down for operational detail.</p>
             </div>
             <div className="program-campaign-count">
               {campaigns.length} {campaigns.length === 1 ? "Campaign" : "Campaigns"}
@@ -214,63 +346,199 @@ export default function ProgramDetailPage() {
               <Megaphone size={25} />
               <strong>No Campaigns created</strong>
               <span>Create the first Campaign within this Program’s approved parameters.</span>
-              <Link href={`/campaigns/new?programId=${program.id}`} className="program-detail-create-button">
+              <Link
+                href={`/campaigns/new?programId=${program.id}`}
+                className="program-detail-create-button"
+              >
                 <Plus size={15} /> Create Campaign
               </Link>
             </div>
           ) : (
-            <div className="program-campaign-list">
-              {campaigns.map(function (campaign) {
-                return (
-                  <Link href={`/campaigns/${campaign.id}`} className="program-campaign-row" key={campaign.id}>
-                    <div className="program-campaign-icon"><Megaphone size={18} /></div>
-                    <div className="program-campaign-main">
-                      <span>{campaign.campaign_code}</span>
-                      <strong>{campaign.campaign_name}</strong>
-                      <small>{campaign.target_type} · {campaign.target_name} · {campaign.survey_stage || "BASE"}</small>
+            <div className={styles.campaignList}>
+              {campaigns.map((campaign) => (
+                <article className={styles.campaignCard} key={campaign.id}>
+                  <div className={styles.campaignTopRow}>
+                    <div className={styles.campaignIdentity}>
+                      <div className="program-campaign-icon"><Megaphone size={18} /></div>
+                      <div>
+                        <span>{campaign.code}</span>
+                        <Link href={`/campaigns/${campaign.id}`}>{campaign.name}</Link>
+                        <small>{campaign.targetType} · {campaign.targetName} · {campaign.surveyStage}</small>
+                      </div>
                     </div>
-                    <CampaignFact icon={UserRound} label="Campaign Manager" value={campaign.campaign_manager_name || "Not assigned"} />
-                    <CampaignFact icon={CheckCircle2} label="Execution" value={`${Number(campaign.completed_iteration_count || 0)} / ${Number(campaign.iteration_count || 0)} iterations · ${Number(campaign.run_count || 0)} runs · ${Number(campaign.successful_voters || 0)} successful`} />
-                    <span className={`program-campaign-status ${statusClass(campaign.status)}`}>{campaign.status}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
+                    <StatusBadge status={campaign.operationalStatus} />
+                  </div>
 
-          {summary.draft > 0 && (
-            <div className="program-campaign-footnote">
-              {summary.draft} Draft {summary.draft === 1 ? "Campaign requires" : "Campaigns require"} manager assignment and readiness review.
+                  <div className={styles.campaignFacts}>
+                    <CampaignFact
+                      icon={UserRound}
+                      label="Campaign Manager"
+                      value={campaign.campaignManagerName || "Not assigned"}
+                    />
+                    <CampaignFact
+                      icon={CheckCircle2}
+                      label="Iterations"
+                      value={`${campaign.completedIterationCount}/${campaign.iterationCount} completed`}
+                    />
+                    <CampaignFact
+                      icon={PhoneCall}
+                      label="Runs"
+                      value={`${campaign.closedRunCount}/${campaign.runCount} closed`}
+                    />
+                    <CampaignFact
+                      icon={Target}
+                      label="Survey yield"
+                      value={`${campaign.successfulVoters}/${campaign.selectedVoters} · ${campaign.successfulYieldPct}%`}
+                    />
+                  </div>
+
+                  <div className={styles.progressTrack}>
+                    <span style={{ width: `${Math.min(campaign.successfulYieldPct, 100)}%` }} />
+                  </div>
+
+                  <div className={styles.campaignFooter}>
+                    <div className={styles.captureSummary}>
+                      {campaign.callbacksReceived}/{campaign.callAttempts} callbacks · {campaign.transcriptsCaptured} transcripts · {campaign.responsesCaptured} response records
+                    </div>
+                    <div className={styles.campaignLinks}>
+                      {campaign.comparisonReady && (
+                        <Link href={`/campaigns/${campaign.id}/analysis`}>
+                          <BarChart3 size={14} /> Compare Iterations
+                        </Link>
+                      )}
+                      <Link href={`/campaigns/${campaign.id}`}>
+                        Open Campaign <ArrowLeft size={14} className={styles.forwardArrow} />
+                      </Link>
+                    </div>
+                  </div>
+
+                  {campaign.needsAttention && (
+                    <div className={styles.attentionNote}>
+                      <AlertTriangle size={14} />
+                      <span>{campaign.attentionReasons.join(" ")}</span>
+                    </div>
+                  )}
+                </article>
+              ))}
             </div>
           )}
+        </section>
+
+        <section className={styles.governancePanel}>
+          <div className={styles.sectionHeading}>
+            <div>
+              <div className="program-detail-eyebrow">GOVERNANCE CHECKS</div>
+              <h2>Research and operational safeguards</h2>
+            </div>
+            <span>Generated {new Date(dashboard.generatedAt).toLocaleString()}</span>
+          </div>
+          <div className={styles.warningList}>
+            {warnings.map((warning) => (
+              <div key={warning}><AlertTriangle size={15} /><span>{warning}</span></div>
+            ))}
+          </div>
         </section>
       </div>
     </AppShell>
   );
 }
 
-function ProgramMetric({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function DashboardMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  attention = false
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  detail: string;
+  attention?: boolean;
+}) {
   return (
-    <div className="program-detail-metric">
-      <div className="program-detail-metric-icon"><Icon size={18} /></div>
-      <div><div className="program-detail-metric-label">{label}</div><div className="program-detail-metric-value">{value}</div></div>
+    <div className={`${styles.metricCard} ${attention ? styles.metricAttention : ""}`}>
+      <div className={styles.metricIcon}><Icon size={19} /></div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{detail}</small>
+      </div>
     </div>
   );
 }
 
-function CampaignFact({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function LifecycleItem({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+}) {
   return (
-    <div className="program-campaign-fact">
+    <div className={styles.lifecycleItem}>
+      <Icon size={17} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function EvidenceFact({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className={styles.evidenceFact}>
+      <Icon size={16} />
+      <span><small>{label}</small><strong>{value}</strong></span>
+    </div>
+  );
+}
+
+function CampaignFact({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={styles.campaignFact}>
       <Icon size={15} />
       <span><small>{label}</small><strong>{value}</strong></span>
     </div>
   );
 }
 
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`${styles.statusBadge} ${styles[`status${statusClass(status)}`]}`}>
+      {statusLabel(status)}
+    </span>
+  );
+}
+
 function statusClass(status: string) {
-  const normalized = String(status).toLowerCase();
-  if (["active", "running"].includes(normalized)) return "is-running";
-  if (["completed", "complete"].includes(normalized)) return "is-completed";
-  if (normalized === "paused") return "is-paused";
-  return "is-draft";
+  return String(status || "")
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+}
+
+function statusLabel(status: string) {
+  return String(status || "")
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
