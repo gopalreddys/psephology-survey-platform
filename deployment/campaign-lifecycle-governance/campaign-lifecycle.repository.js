@@ -188,11 +188,36 @@ export async function getCampaignLifecycle(campaignId, actor) {
         event.trigger_source,
         event.details,
         event.created_at,
-        account.full_name AS actor_name
+        account.full_name AS actor_name,
+        lifecycle_run.run_number,
+        COALESCE(
+          run_iteration.iteration_number,
+          lifecycle_iteration.iteration_number
+        ) AS iteration_number,
+        COALESCE(
+          run_iteration.iteration_name,
+          lifecycle_iteration.iteration_name
+        ) AS iteration_name
       FROM operational_lifecycle_events event
       LEFT JOIN users account ON account.id = event.actor_user_id
+      LEFT JOIN call_executions lifecycle_execution
+        ON event.entity_type = 'CALL_EXECUTION'
+       AND lifecycle_execution.id = event.entity_id
+      LEFT JOIN campaign_runs lifecycle_run
+        ON (
+          event.entity_type = 'RUN'
+          AND lifecycle_run.id = event.entity_id
+        ) OR (
+          event.entity_type = 'CALL_EXECUTION'
+          AND lifecycle_run.id = lifecycle_execution.run_id
+        )
+      LEFT JOIN program_iterations run_iteration
+        ON run_iteration.id = lifecycle_run.iteration_id
+      LEFT JOIN program_iterations lifecycle_iteration
+        ON event.entity_type = 'ITERATION'
+       AND lifecycle_iteration.id = event.entity_id
       WHERE event.entity_id = $1 OR event.parent_entity_id = $1
-      ORDER BY event.created_at DESC
+      ORDER BY event.created_at DESC, event.entity_type, event.entity_id
       LIMIT 50
     `,
     [campaignId]
