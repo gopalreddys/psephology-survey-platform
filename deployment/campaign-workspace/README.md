@@ -91,7 +91,12 @@ PATCH /api/campaigns/:id/manager
 
 All endpoints require authentication. Creating campaigns is restricted to Super Admin and Admin roles. A campaign must reference an Admin-created research program; the API rejects campaigns without `program_id`. Admins assign Draft campaigns to Campaign Managers after creation.
 
-Campaign visibility is enforced from `req.platformUser`: Admin roles see all campaigns, Campaign Managers see only campaigns assigned to them, and Campaigners see only campaigns with an active iteration allocation for them. Campaigner detail and voter endpoints are limited to assigned work geography.
+Campaign visibility is enforced from `req.platformUser`: Super Admin sees all
+Campaigns; an unassigned Campaign is visible only to its creating Admin and
+Super Admin; assigned Campaigns are reviewable by Admins and their assigned
+Campaign Manager; Campaigners see only Campaigns with an active iteration
+allocation for them. Campaigner detail and voter endpoints are limited to
+assigned work geography.
 
 Only Admin or Super Admin users can delete a campaign, and deletion is allowed only while the campaign is still `DRAFT`. Active, paused and completed campaigns are retained for audit history.
 
@@ -255,7 +260,9 @@ The create-user form applies the same UI restriction: Admins can create Admin, C
 Campaign ownership is deliberately staged:
 
 1. `SUPER_ADMIN` or `ADMIN` creates the research program and campaign geography.
-2. `SUPER_ADMIN` or `ADMIN` assigns the Draft campaign to one active `CAMPAIGN_MANAGER` with `PATCH /api/campaigns/:id/manager`.
+2. The creating `ADMIN`, or any `SUPER_ADMIN`, assigns the private Draft
+   Campaign to one active `CAMPAIGN_MANAGER` with
+   `PATCH /api/campaigns/:id/manager`.
 3. The assigned Campaign Manager creates the campaign iterations.
 4. The assigned Campaign Manager allocates Districts/Mandals or local electoral areas for each iteration with `PUT /api/campaigns/:campaignId/iterations/:iterationId/allocations`.
 5. Campaigners see only iterations where they have an active iteration allocation and create the Runs for those areas.

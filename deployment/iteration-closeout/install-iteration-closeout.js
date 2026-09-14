@@ -36,6 +36,16 @@ await copyFile(
     "src/repositories/campaign-voter-selection.repository.js"
   )
 );
+await copyFile(
+  path.resolve(
+    packageRoot,
+    "../campaign-draft-privacy/campaign-visibility.repository.js"
+  ),
+  path.join(
+    runtimeRoot,
+    "src/repositories/campaign-visibility.repository.js"
+  )
+);
 
 for (const repositoryName of [
   "campaign-iterations.repository.js",

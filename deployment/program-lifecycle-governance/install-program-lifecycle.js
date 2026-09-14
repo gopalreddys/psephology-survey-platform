@@ -29,6 +29,10 @@ await copy(
   path.join(runtimeRoot, "src/repositories/lifecycle-audit.repository.js")
 );
 await copy(
+  path.resolve(packageRoot, "../campaign-draft-privacy/campaign-visibility.repository.js"),
+  path.join(runtimeRoot, "src/repositories/campaign-visibility.repository.js")
+);
+await copy(
   path.join(campaignWorkspaceRoot, "campaign-programs.repository.js"),
   path.join(runtimeRoot, "src/repositories/campaign-programs.repository.js")
 );

@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { canReviewCampaign } from "./campaign-visibility.repository.js";
 import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
 
 const ADMIN_ROLES = new Set(["SUPER_ADMIN", "ADMIN"]);
@@ -251,6 +252,7 @@ async function loadCampaigns(db, programId) {
         campaign.status,
         campaign.start_date,
         campaign.end_date,
+        campaign.created_by_user_id,
         campaign.campaign_manager_user_id,
         manager.full_name AS campaign_manager_name,
         COALESCE(iteration.iteration_count, 0)::int AS iteration_count,
@@ -309,6 +311,7 @@ async function loadCampaigns(db, programId) {
       operationalStatus: operationalStatus(row),
       startDate: row.start_date,
       endDate: row.end_date,
+      createdByUserId: row.created_by_user_id,
       campaignManagerId: row.campaign_manager_user_id,
       campaignManagerName: row.campaign_manager_name,
       iterationCount: number(row.iteration_count),
@@ -379,7 +382,7 @@ function buildWarnings(campaigns) {
   return warnings;
 }
 
-function buildProgramLifecycle(program, campaigns) {
+function buildProgramLifecycle(program, campaigns, options = {}) {
   const completedCampaigns = campaigns.filter(
     (campaign) =>
       ["COMPLETE", "COMPLETED"].includes(
@@ -415,6 +418,9 @@ function buildProgramLifecycle(program, campaigns) {
   if (attentionCampaigns) {
     blockers.push(`${attentionCampaigns} Campaign(s) require operational attention`);
   }
+  if (options.hasPrivateCampaigns) {
+    blockers.push("Private unassigned Campaign work must be assigned by its owning Admin");
+  }
 
   const recordedStatus = String(program.status || "DRAFT").toUpperCase();
   const readyToComplete =
@@ -442,7 +448,7 @@ function buildProgramLifecycle(program, campaigns) {
   };
 }
 
-async function loadProgramLifecycleHistory(db, programId) {
+async function loadProgramLifecycleHistory(db, programId, visibleCampaignIds) {
   const result = await db.query(
     `
       SELECT
@@ -466,13 +472,12 @@ async function loadProgramLifecycleHistory(db, programId) {
           event.entity_type = 'PROGRAM'
           AND event.entity_id = $1
         )
-        OR event.parent_entity_id = $1
-        OR event_campaign.program_id = $1
-        OR parent_campaign.program_id = $1
+        OR event_campaign.id = ANY($2::uuid[])
+        OR parent_campaign.id = ANY($2::uuid[])
       ORDER BY event.created_at DESC, event.entity_type, event.entity_id
       LIMIT 50
     `,
-    [programId]
+    [programId, visibleCampaignIds]
   );
 
   return result.rows;
@@ -487,11 +492,18 @@ export async function getProgramDashboard(programId, actor) {
   }
 
   const db = await getDb();
-  const [program, campaigns, lifecycleHistory] = await Promise.all([
+  const [program, allCampaigns] = await Promise.all([
     loadProgram(db, programId),
-    loadCampaigns(db, programId),
-    loadProgramLifecycleHistory(db, programId)
+    loadCampaigns(db, programId)
   ]);
+  const campaigns = allCampaigns.filter((campaign) =>
+    canReviewCampaign(campaign, actor)
+  );
+  const lifecycleHistory = await loadProgramLifecycleHistory(
+    db,
+    programId,
+    campaigns.map((campaign) => campaign.id)
+  );
   const total = (key) => campaigns.reduce(
     (sum, campaign) => sum + number(campaign[key]),
     0
@@ -503,7 +515,9 @@ export async function getProgramDashboard(programId, actor) {
   const successfulVoters = total("successfulVoters");
   const completedIterations = total("completedIterationCount");
   const iterationCount = total("iterationCount");
-  const lifecycle = buildProgramLifecycle(program, campaigns);
+  const lifecycle = buildProgramLifecycle(program, campaigns, {
+    hasPrivateCampaigns: campaigns.length < allCampaigns.length
+  });
 
   return {
     program: {

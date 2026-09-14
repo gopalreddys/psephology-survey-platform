@@ -17,6 +17,10 @@ await copy(
   "program-dashboard.repository.js",
   path.join(runtimeRoot, "src/repositories/program-dashboard.repository.js")
 );
+await copyFile(
+  path.resolve(packageRoot, "../campaign-draft-privacy/campaign-visibility.repository.js"),
+  path.join(runtimeRoot, "src/repositories/campaign-visibility.repository.js")
+);
 await copy(
   "program-dashboard.routes.js",
   path.join(runtimeRoot, "src/routes/program-dashboard.routes.js")

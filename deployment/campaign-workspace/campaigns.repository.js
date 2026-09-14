@@ -1,22 +1,21 @@
 import { getDb } from "../db/postgres.js";
 import { assertCampaignProgramAccess } from "./campaign-programs.repository.js";
+import {
+  campaignReviewVisibilitySql,
+  canReviewCampaign
+} from "./campaign-visibility.repository.js";
 import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
 
 function visibilitySql(actor, parameterNumber) {
-  if (["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) return { sql: "TRUE", values: [] };
-  if (actor.role_code === "CAMPAIGN_MANAGER") {
-    return {
-      sql: `(campaign.campaign_manager_user_id = $${parameterNumber}
-        OR (campaign.campaign_manager_user_id IS NULL AND campaign.created_by_user_id = $${parameterNumber}))`,
-      values: [actor.id]
-    };
+  if (actor.role_code === "CAMPAIGNER") {
+    return { sql: `EXISTS (
+      SELECT 1 FROM campaign_work_allocations visible
+      WHERE visible.campaign_id = campaign.id
+        AND visible.campaigner_user_id = $${parameterNumber}
+        AND visible.status <> 'REASSIGNED'
+    )`, values: [actor.id] };
   }
-  return { sql: `EXISTS (
-    SELECT 1 FROM campaign_work_allocations visible
-    WHERE visible.campaign_id = campaign.id
-      AND visible.campaigner_user_id = $${parameterNumber}
-      AND visible.status <> 'REASSIGNED'
-  )`, values: [actor.id] };
+  return campaignReviewVisibilitySql(actor, "campaign", parameterNumber);
 }
 
 export async function listCampaigns(actor) {
@@ -159,8 +158,17 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
   try {
     await db.query("BEGIN");
     await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [String(id)]);
-    const currentResult = await db.query("SELECT id, program_id, status FROM campaigns WHERE id = $1", [id]);
+    const currentResult = await db.query(
+      `SELECT id, program_id, status, created_by_user_id,
+        campaign_manager_user_id
+       FROM campaigns
+       WHERE id = $1`,
+      [id]
+    );
     if (!currentResult.rowCount) {
+      const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
+    }
+    if (!canReviewCampaign(currentResult.rows[0], actor)) {
       const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
     }
     const current = currentResult.rows[0].status;
@@ -211,7 +219,12 @@ export async function updateCampaignStatus(id, nextStatus, actor) {
 
 export async function deleteCampaign(id, actor) {
   const db = await getDb();
-  const result = await db.query("SELECT id, status, created_by_user_id FROM campaigns WHERE id = $1", [id]);
+  const result = await db.query(
+    `SELECT id, status, created_by_user_id, campaign_manager_user_id
+     FROM campaigns
+     WHERE id = $1`,
+    [id]
+  );
   if (!result.rowCount) {
     const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
   }
@@ -219,6 +232,9 @@ export async function deleteCampaign(id, actor) {
   const canDelete = ["SUPER_ADMIN", "ADMIN"].includes(actor.role_code);
   if (!canDelete) {
     const error = new Error("Only Admin or Super Admin users can delete campaigns"); error.statusCode = 403; throw error;
+  }
+  if (!canReviewCampaign(campaign, actor)) {
+    const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
   }
   if (campaign.status !== "DRAFT") {
     const error = new Error("Only unstarted Draft campaigns can be deleted"); error.statusCode = 400; throw error;
@@ -382,6 +398,16 @@ export async function assignCampaignManager(campaignId, managerUserId, actor) {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [String(campaignId)]);
+    const currentResult = await client.query(`
+      SELECT id, status, created_by_user_id, campaign_manager_user_id
+      FROM campaigns
+      WHERE id = $1
+      FOR UPDATE
+    `, [campaignId]);
+    if (!currentResult.rowCount || !canReviewCampaign(currentResult.rows[0], actor)) {
+      const error = new Error("Campaign not found"); error.statusCode = 404; throw error;
+    }
     const managerResult = await client.query(`
       SELECT account.id, account.full_name
       FROM users account

@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { canReviewCampaign } from "./campaign-visibility.repository.js";
 
 function accessError(message, statusCode) {
   const error = new Error(message);
@@ -19,7 +20,7 @@ export async function getIterationAccessContext(iterationId, actor) {
       iteration.study_id,
       iteration.status AS iteration_status,
       link.campaign_id,
-      campaign.created_by_user_id AS campaign_owner_user_id,
+      campaign.created_by_user_id,
       campaign.campaign_manager_user_id,
       campaign.status AS campaign_status,
       EXISTS (
@@ -53,9 +54,13 @@ export async function getIterationAccessContext(iterationId, actor) {
  */
 export async function assertIterationAccess(iterationId, actor, options = {}) {
   const context = await getIterationAccessContext(iterationId, actor);
-  const isAdmin = ["SUPER_ADMIN", "ADMIN"].includes(actor.role_code);
 
-  if (isAdmin) return context;
+  if (actor.role_code === "SUPER_ADMIN") return context;
+
+  if (actor.role_code === "ADMIN") {
+    if (!context.campaign_id || canReviewCampaign(context, actor)) return context;
+    throw accessError("Iteration not found", 404);
+  }
 
   if (!context.campaign_id) {
     throw accessError("Iteration is not linked to an operational campaign", 403);

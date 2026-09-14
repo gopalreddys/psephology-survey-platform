@@ -1,5 +1,6 @@
 import { getDb } from "../db/postgres.js";
 import { getVoiceAgentForSelection, voiceAgentSnapshot } from "./voice-agents.repository.js";
+import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js";
 
 const STAGES = new Set(["BASE", "CAMPAIGN", "TURNOUT"]);
 const STATUSES = new Set(["PLANNED", "ACTIVE", "PAUSED", "COMPLETED", "LOCKED"]);
@@ -11,29 +12,21 @@ function errorWithStatus(message, statusCode) {
 }
 
 function campaignVisibility(actor, parameterNumber, iterationSpecific = false) {
-  if (["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
-    return { sql: "TRUE", values: [] };
-  }
-
-  if (actor.role_code === "CAMPAIGN_MANAGER") {
+  if (actor.role_code === "CAMPAIGNER") {
     return {
-      sql: `(campaign.campaign_manager_user_id = $${parameterNumber}
-        OR (campaign.campaign_manager_user_id IS NULL AND campaign.created_by_user_id = $${parameterNumber}))`,
+      sql: `EXISTS (
+        SELECT 1
+        FROM campaign_work_allocations permitted
+        WHERE permitted.campaign_id = campaign.id
+          ${iterationSpecific ? "AND (permitted.iteration_id = link.iteration_id OR permitted.iteration_id IS NULL)" : ""}
+          AND permitted.campaigner_user_id = $${parameterNumber}
+          AND permitted.status <> 'REASSIGNED'
+      )`,
       values: [actor.id]
     };
   }
 
-  return {
-    sql: `EXISTS (
-      SELECT 1
-      FROM campaign_work_allocations permitted
-      WHERE permitted.campaign_id = campaign.id
-        ${iterationSpecific ? "AND (permitted.iteration_id = link.iteration_id OR permitted.iteration_id IS NULL)" : ""}
-        AND permitted.campaigner_user_id = $${parameterNumber}
-        AND permitted.status <> 'REASSIGNED'
-    )`,
-    values: [actor.id]
-  };
+  return campaignReviewVisibilitySql(actor, "campaign", parameterNumber);
 }
 
 async function getCampaignContext(client, campaignId, actor, lock = false) {

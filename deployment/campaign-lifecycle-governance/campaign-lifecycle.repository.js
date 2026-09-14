@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { canReviewCampaign } from "./campaign-visibility.repository.js";
 import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
 
 const CLOSED_RUN_STATUSES = ["COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"];
@@ -23,6 +24,7 @@ async function loadCampaignState(db, campaignId) {
         campaign.program_id,
         campaign.campaign_name,
         campaign.status,
+        campaign.created_by_user_id,
         campaign.campaign_manager_user_id,
         manager.full_name AS campaign_manager_name
       FROM campaigns campaign
@@ -165,12 +167,8 @@ async function loadCampaignState(db, campaignId) {
 }
 
 function assertVisibility(state, actor) {
-  if (["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) return;
-  if (
-    actor.role_code === "CAMPAIGN_MANAGER" &&
-    state.campaign.campaign_manager_user_id === actor.id
-  ) return;
-  throw forbidden("You do not have access to this Campaign lifecycle");
+  if (canReviewCampaign(state.campaign, actor)) return;
+  throw notFound();
 }
 
 export async function getCampaignLifecycle(campaignId, actor) {

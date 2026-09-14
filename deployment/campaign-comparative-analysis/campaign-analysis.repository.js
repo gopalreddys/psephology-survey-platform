@@ -1,4 +1,5 @@
 import { getDb } from "../db/postgres.js";
+import { canReviewCampaign } from "./campaign-visibility.repository.js";
 
 const ANALYSIS_ROLES = new Set([
   "SUPER_ADMIN",
@@ -91,6 +92,7 @@ async function loadCampaign(db, campaignId, actor) {
         campaign.target_code,
         campaign.survey_stage,
         campaign.status,
+        campaign.created_by_user_id,
         campaign.campaign_manager_user_id,
         manager.full_name AS campaign_manager_name,
         program.study_code AS program_code,
@@ -111,13 +113,10 @@ async function loadCampaign(db, campaignId, actor) {
   }
 
   const campaign = result.rows[0];
-  if (
-    actor.role_code === "CAMPAIGN_MANAGER" &&
-    campaign.campaign_manager_user_id !== actor.id
-  ) {
+  if (!canReviewCampaign(campaign, actor)) {
     throw errorWithStatus(
-      "Campaign Managers can compare only campaigns assigned to them",
-      403
+      "Campaign not found",
+      404
     );
   }
 

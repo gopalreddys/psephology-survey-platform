@@ -17,6 +17,10 @@ await copy(
   "campaign-analysis.repository.js",
   path.join(runtimeRoot, "src/repositories/campaign-analysis.repository.js")
 );
+await copyFile(
+  path.resolve(packageRoot, "../campaign-draft-privacy/campaign-visibility.repository.js"),
+  path.join(runtimeRoot, "src/repositories/campaign-visibility.repository.js")
+);
 await copy(
   "campaign-analysis.routes.js",
   path.join(runtimeRoot, "src/routes/campaign-analysis.routes.js")

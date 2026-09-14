@@ -57,6 +57,10 @@ await copy(
   path.resolve(packageRoot, "../campaign-workspace/campaigns.repository.js"),
   path.join(runtimeRoot, "src/repositories/campaigns.repository.js")
 );
+await copy(
+  path.resolve(packageRoot, "../campaign-draft-privacy/campaign-visibility.repository.js"),
+  path.join(runtimeRoot, "src/repositories/campaign-visibility.repository.js")
+);
 
 const serverPath = path.join(runtimeRoot, "src/server.js");
 let source = await readFile(serverPath, "utf8");
