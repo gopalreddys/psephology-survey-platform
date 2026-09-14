@@ -171,11 +171,7 @@ function assertVisibility(state, actor) {
   throw notFound();
 }
 
-export async function getCampaignLifecycle(campaignId, actor) {
-  const db = await getDb();
-  const state = await loadCampaignState(db, campaignId);
-  assertVisibility(state, actor);
-
+async function loadCampaignHistory(db, campaignId) {
   const history = await db.query(
     `
       SELECT
@@ -236,7 +232,18 @@ export async function getCampaignLifecycle(campaignId, actor) {
     [campaignId]
   );
 
-  return { ...state, history: history.rows };
+  return history.rows;
+}
+
+export async function getCampaignLifecycle(campaignId, actor) {
+  const db = await getDb();
+  const state = await loadCampaignState(db, campaignId);
+  assertVisibility(state, actor);
+
+  return {
+    ...state,
+    history: await loadCampaignHistory(db, campaignId)
+  };
 }
 
 export async function completeCampaign(campaignId, actor) {
@@ -254,8 +261,14 @@ export async function completeCampaign(campaignId, actor) {
     assertVisibility(state, actor);
 
     if (state.campaign.status === "COMPLETED") {
+      const history = await loadCampaignHistory(db, campaignId);
       await db.query("COMMIT");
-      return { ...state, lifecycleStatus: "COMPLETED", readyToComplete: false };
+      return {
+        ...state,
+        lifecycleStatus: "COMPLETED",
+        readyToComplete: false,
+        history
+      };
     }
 
     if (!state.readyToComplete) {
@@ -285,13 +298,15 @@ export async function completeCampaign(campaignId, actor) {
       details: state.summary
     });
 
+    const history = await loadCampaignHistory(db, campaignId);
     await db.query("COMMIT");
     return {
       ...state,
       campaign: { ...state.campaign, ...update.rows[0] },
       lifecycleStatus: "COMPLETED",
       readyToComplete: false,
-      blockers: []
+      blockers: [],
+      history
     };
   } catch (error) {
     await db.query("ROLLBACK");
