@@ -185,7 +185,7 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
     const iterationNumber = Number(numberResult.rows[0].next_number);
     const defaultObjective = {
       BASE: "Establish the voter thought baseline.",
-      CAMPAIGN: "Measure campaign movement and persuasion.",
+      CAMPAIGN: "Measure campaign-stage awareness, concerns, and candidate and party perceptions without influencing respondents.",
       TURNOUT: "Measure readiness and turnout intent."
     }[stage];
 
