@@ -31,8 +31,11 @@ export function evaluateCampaignBaseline({
       String(iteration.status || "").toUpperCase()
     );
   });
-  const configuredIterations = iterations.filter(function (iteration) {
-    return iteration.voice_agent_id && iteration.questionnaire_id;
+  const voiceAgentIterations = iterations.filter(function (iteration) {
+    return Boolean(iteration.voice_agent_id);
+  });
+  const questionnaireIterations = iterations.filter(function (iteration) {
+    return Boolean(iteration.questionnaire_id);
   });
   const closedRuns = runs.filter(function (run) {
     return CLOSED_RUN_STATUSES.has(String(run.status || "").toUpperCase());
@@ -81,9 +84,17 @@ export function evaluateCampaignBaseline({
       `${completedIterations.length}/${iterations.length} Iteration(s) are closed.`
     ),
     check(
-      "iterations-configured",
-      iterations.length > 0 && configuredIterations.length === iterations.length,
-      `${configuredIterations.length}/${iterations.length} Iteration(s) have a voice agent and questionnaire.`
+      "voice-agents-assigned",
+      iterations.length > 0 && voiceAgentIterations.length === iterations.length,
+      `${voiceAgentIterations.length}/${iterations.length} Iteration(s) have a recorded voice agent.`
+    ),
+    check(
+      "questionnaire-identity-retained",
+      iterations.length > 0 && questionnaireIterations.length === iterations.length,
+      questionnaireIterations.length === iterations.length
+        ? `${questionnaireIterations.length}/${iterations.length} Iteration(s) have a recorded questionnaire identity.`
+        : `${questionnaireIterations.length}/${iterations.length} Iteration(s) have a recorded questionnaire identity; missing identity limits instrument-level comparison and predictive claims.`,
+      { warning: true }
     ),
     check(
       "three-run-policy",
@@ -113,7 +124,9 @@ export function evaluateCampaignBaseline({
     check(
       "callbacks-recorded",
       executions > 0 && callbacks === executions,
-      `${callbacks}/${executions} execution callback(s) were recorded; terminal executions without callbacks remain visible as recovered history.`,
+      callbacks === executions
+        ? `${callbacks}/${executions} execution callback(s) were recorded.`
+        : `${callbacks}/${executions} execution callback(s) were recorded; terminal executions without callbacks remain visible as recovered history.`,
       { warning: activeExecutions === 0 }
     ),
     check(
@@ -130,10 +143,15 @@ export function evaluateCampaignBaseline({
     )
   ];
 
+  const hasFailure = checks.some(function (item) { return item.status === "FAIL"; });
+  const hasWarning = checks.some(function (item) { return item.status === "WARN"; });
+
   return {
-    status: checks.every(function (item) { return item.status !== "FAIL"; })
-      ? "PASS"
-      : "FAIL",
+    status: hasFailure
+      ? "FAIL"
+      : hasWarning
+        ? "PASS_WITH_WARNINGS"
+        : "PASS",
     checks,
     summary: {
       iterations: iterations.length,

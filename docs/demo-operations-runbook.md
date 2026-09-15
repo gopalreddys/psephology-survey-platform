@@ -29,6 +29,11 @@ response payloads or secret values. Copy the report to the approved operational
 evidence location and remove the temporary copy according to the environment's
 retention policy.
 
+`PASS_WITH_WARNINGS` is an acceptable release capture only when each warning is
+listed with the snapshot. Historical Iterations without questionnaire identity
+may be demonstrated as directional conversation evidence; do not describe their
+comparisons as instrument-matched or statistically predictive.
+
 ## Demonstration path
 
 1. Sign in as Super Admin and open **Programs**.

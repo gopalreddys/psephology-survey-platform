@@ -7,7 +7,9 @@ completed Campaign. Pass `--campaign-id` to select an exact Campaign.
 The audit verifies:
 
 - Campaign ownership and completion;
-- completed, configured Iterations;
+- completed Iterations with recorded voice-agent identity;
+- recorded questionnaire identity, with an explicit warning when historical
+  Iterations lack it;
 - exactly three closed Runs per Iteration;
 - fully resolved, demo-only Run contacts;
 - completed executions and recorded callbacks;
@@ -39,9 +41,15 @@ node deployment/demo-release-baseline/capture-demo-release-baseline.js \
   --output=/tmp/psephology-demo-baseline.json
 ```
 
-The process exits with `0` when every check passes, `2` when the report was
-created with one or more failed checks, and `1` when the report could not be
+The process exits with `0` for `PASS` or `PASS_WITH_WARNINGS`, `2` when the
+report contains one or more failed checks, and `1` when the report could not be
 created. Output files are created with mode `0600`.
+
+Missing historical questionnaire identity must not be backfilled by guessing.
+The retained transcripts and final agent variables still support a directional
+demo, but instrument-level comparisons and predictive claims require a proven
+questionnaire/version snapshot for each Iteration. Record the warning alongside
+the snapshot and resolve the creation workflow before future live research.
 
 The JSON report is operational evidence, not a database backup. Create and
 record an encrypted RDS snapshot separately using an authorized AWS account.

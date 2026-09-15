@@ -246,7 +246,7 @@ try {
     console.log(`Sanitized baseline report written to ${outputPath}`);
   }
 
-  if (report.status !== "PASS") process.exitCode = 2;
+  if (report.status === "FAIL") process.exitCode = 2;
 } catch (error) {
   console.error("Unable to capture demo release baseline:", error.message);
   process.exitCode = 1;

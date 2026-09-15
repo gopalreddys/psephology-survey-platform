@@ -46,7 +46,7 @@ const goodInput = {
 
 const passing = evaluateCampaignBaseline(goodInput);
 assert.equal(passing.status, "PASS");
-assert.equal(passing.checks.length, 13);
+assert.equal(passing.checks.length, 14);
 assert.equal(
   passing.checks.every(function (item) { return item.status === "PASS"; }),
   true
@@ -90,7 +90,7 @@ assert.deepEqual(
     "campaign-completed",
     "campaign-manager-assigned",
     "iterations-completed",
-    "iterations-configured",
+    "voice-agents-assigned",
     "three-run-policy",
     "contacts-resolved",
     "demo-only-cohort",
@@ -100,6 +100,12 @@ assert.deepEqual(
     "lifecycle-audited"
   ]
 );
+assert.equal(
+  failing.checks.find(function (item) {
+    return item.id === "questionnaire-identity-retained";
+  }).status,
+  "PASS"
+);
 
 const recoveredWithoutCallback = evaluateCampaignBaseline({
   ...goodInput,
@@ -108,10 +114,32 @@ const recoveredWithoutCallback = evaluateCampaignBaseline({
     callbacks_received: 23
   }
 });
-assert.equal(recoveredWithoutCallback.status, "PASS");
+assert.equal(recoveredWithoutCallback.status, "PASS_WITH_WARNINGS");
 assert.equal(
   recoveredWithoutCallback.checks.find(function (item) {
     return item.id === "callbacks-recorded";
+  }).status,
+  "WARN"
+);
+
+const historicalQuestionnaireGap = evaluateCampaignBaseline({
+  ...goodInput,
+  iterations: iterations.map(function (iteration, index) {
+    return index === 0
+      ? iteration
+      : { ...iteration, questionnaire_id: null };
+  })
+});
+assert.equal(historicalQuestionnaireGap.status, "PASS_WITH_WARNINGS");
+assert.equal(
+  historicalQuestionnaireGap.checks.find(function (item) {
+    return item.id === "voice-agents-assigned";
+  }).status,
+  "PASS"
+);
+assert.equal(
+  historicalQuestionnaireGap.checks.find(function (item) {
+    return item.id === "questionnaire-identity-retained";
   }).status,
   "WARN"
 );
