@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Psephology Survey Platform
 
-## Getting Started
+An operational research platform for studying voter thought processes through
+Programs, Campaigns, Iterations and controlled outbound voice Runs.
 
-First, run the development server:
+## Research lifecycle
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```text
+Program → Campaign → Iteration → Run → Evidence → Analysis
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Super Admins and Admins define Programs and Campaign scope.
+- An Admin assigns every operational Campaign to a Campaign Manager.
+- The Campaign Manager creates Iterations, selects a Sarvam voice agent and
+  allocates work.
+- Assigned Campaigners create and execute up to three governed Runs.
+- Sarvam callbacks persist call outcomes, duration, transcripts and response
+  variables in AWS PostgreSQL.
+- Iteration, Campaign and Program dashboards aggregate the retained evidence.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Safety boundaries
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- The current deployment is in controlled demo mode. Run selection and final
+  provider submission accept only voters explicitly marked
+  `is_demo_contact = TRUE`.
+- Completed Runs, Iterations and Campaigns are read-only.
+- Campaign and Iteration access is enforced by the API as well as the UI.
+- `/health` checks process liveness; `/ready` verifies database connectivity.
+- RDS-managed credential rotation is recovered without restarting the API.
 
-## Learn More
+## Applications
 
-To learn more about Next.js, take a look at the following resources:
+- `src/` contains the Next.js user interface.
+- The Express API is deployed separately at
+  `/opt/sarvam-voice-analytics` on the application host.
+- `deployment/` contains versioned, idempotent packages that install API and
+  database changes into that runtime.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Local UI checks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+## Operations
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [Demo operations runbook](docs/demo-operations-runbook.md)
+- [Production readiness](docs/production-readiness.md)
+- [Release baseline auditor](deployment/demo-release-baseline/README.md)
+- [Database credential resilience](deployment/database-resilience/README.md)
+- [Campaign lifecycle recovery](deployment/campaign-lifecycle-governance/README.md)
+- [Sarvam callback integration](deployment/sarvam-outbound-webhook/README.md)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deployment packages must be dry-run or syntax-checked as documented before the
+API is restarted. Never place credentials, callback tokens, voter phone numbers
+or transcript content in Git, terminal screenshots or release manifests.
