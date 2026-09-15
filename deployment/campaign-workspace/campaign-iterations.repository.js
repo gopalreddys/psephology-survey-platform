@@ -60,6 +60,10 @@ export async function listCampaignIterations(campaignId, actor) {
       iteration.planned_start_date,
       iteration.planned_end_date,
       iteration.voice_agent_id,
+      iteration.questionnaire_id,
+      questionnaire.questionnaire_code,
+      questionnaire.questionnaire_name,
+      questionnaire.version_number AS questionnaire_version,
       voice_agent.provider_name AS voice_agent_name,
       voice_agent.usage_category AS voice_agent_category,
       voice_agent.app_id AS voice_agent_app_id,
@@ -105,14 +109,33 @@ export async function listCampaignIterations(campaignId, actor) {
     JOIN campaigns campaign ON campaign.id = link.campaign_id
     JOIN program_iterations iteration ON iteration.id = link.iteration_id
     LEFT JOIN sarvam_voice_agents voice_agent ON voice_agent.id = iteration.voice_agent_id
+    LEFT JOIN questionnaires questionnaire ON questionnaire.id = iteration.questionnaire_id
     WHERE link.campaign_id = $1 AND ${visibility.sql}
     ORDER BY iteration.iteration_number
   `, [campaignId, ...visibility.values]);
   return result.rows;
 }
 
+export async function listIterationQuestionnaires(campaignId, actor) {
+  if (actor.role_code !== "CAMPAIGN_MANAGER") {
+    throw errorWithStatus("Only the assigned Campaign Manager can select an iteration questionnaire", 403);
+  }
+  const db = await getDb();
+  const campaign = await getCampaignContext(db, campaignId, actor);
+  if (campaign.campaign_manager_user_id !== actor.id) {
+    throw errorWithStatus("Campaign Manager can select questionnaires only for assigned campaigns", 403);
+  }
+  const result = await db.query(`
+    SELECT id, questionnaire_code, questionnaire_name, version_number, status
+    FROM questionnaires
+    WHERE UPPER(COALESCE(status::text, '')) NOT IN ('ARCHIVED', 'RETIRED', 'INACTIVE')
+    ORDER BY questionnaire_name, version_number DESC
+  `);
+  return result.rows;
+}
+
 export async function createCampaignIteration({ campaignId, iterationName, researchPhase, objective,
-  sampleDesignType, targetSampleSize, plannedStartDate, plannedEndDate, voiceAgentId, createdBy }) {
+  sampleDesignType, targetSampleSize, plannedStartDate, plannedEndDate, voiceAgentId, questionnaireId, createdBy }) {
   const stage = String(researchPhase || "").trim().toUpperCase();
   if (!STAGES.has(stage)) throw errorWithStatus("Unsupported survey stage", 400);
   if (!String(iterationName || "").trim()) throw errorWithStatus("Iteration name is required", 400);
@@ -121,6 +144,9 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
   }
   if (!String(voiceAgentId || "").trim()) {
     throw errorWithStatus("Select a Sarvam voice agent for this iteration", 400);
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(questionnaireId || "").trim())) {
+    throw errorWithStatus("Select a valid questionnaire for this iteration", 400);
   }
 
   const db = await getDb();
@@ -137,6 +163,19 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       throw errorWithStatus("Iterations cannot be added to a completed or archived campaign", 409);
     }
     const voiceAgent = await getVoiceAgentForSelection(client, String(voiceAgentId).trim());
+    const questionnaireResult = await client.query(`
+      SELECT id, questionnaire_code, questionnaire_name, version_number, status
+      FROM questionnaires
+      WHERE id = $1::uuid
+      FOR SHARE
+    `, [String(questionnaireId).trim()]);
+    if (!questionnaireResult.rowCount) {
+      throw errorWithStatus("Selected questionnaire was not found", 400);
+    }
+    const questionnaire = questionnaireResult.rows[0];
+    if (["ARCHIVED", "RETIRED", "INACTIVE"].includes(String(questionnaire.status || "").toUpperCase())) {
+      throw errorWithStatus("Selected questionnaire is not available for new iterations", 400);
+    }
 
     const numberResult = await client.query(`
       SELECT COALESCE(MAX(iteration_number), 0) + 1 AS next_number
@@ -154,9 +193,9 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       INSERT INTO program_iterations (
         study_id, iteration_number, iteration_name, research_phase, objective,
         sample_design_type, target_sample_size, planned_start_date, planned_end_date,
-        questionnaire_id, agent_config, calling_profile, status, created_by,
+        questionnaire_id, questionnaire_snapshot, agent_config, calling_profile, status, created_by,
         voice_agent_id, voice_agent_snapshot
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,'{}'::jsonb,'{}'::jsonb,'DRAFT',$10,$11,$12::jsonb)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'{}'::jsonb,'{}'::jsonb,'DRAFT',$12,$13,$14::jsonb)
       RETURNING *
     `, [
       campaign.program_id,
@@ -168,6 +207,10 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       Number(targetSampleSize),
       plannedStartDate || null,
       plannedEndDate || null,
+      questionnaire.id,
+      JSON.stringify({ id: questionnaire.id, code: questionnaire.questionnaire_code,
+        name: questionnaire.questionnaire_name, version: questionnaire.version_number,
+        status_at_selection: questionnaire.status }),
       createdBy,
       voiceAgent.id,
       JSON.stringify(voiceAgentSnapshot(voiceAgent))

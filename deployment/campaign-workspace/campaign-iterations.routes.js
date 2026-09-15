@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
 import {
   createCampaignIteration,
+  listIterationQuestionnaires,
   listCampaignIterationAllocations,
   listCampaignIterations,
   saveCampaignIterationAllocations,
@@ -28,6 +29,14 @@ router.get("/campaigns/:id/iterations", requireAuth, requireRole(viewRoles), asy
   }
 });
 
+router.get("/campaigns/:id/iteration-questionnaires", requireAuth, requireRole(["CAMPAIGN_MANAGER"]), async function (req, res) {
+  try {
+    return res.json(await listIterationQuestionnaires(req.params.id, req.platformUser));
+  } catch (error) {
+    return sendError(res, error, "Unable to load iteration questionnaires");
+  }
+});
+
 router.post("/campaigns/:id/iterations", requireAuth, requireRole(["CAMPAIGN_MANAGER"]), async function (req, res) {
   try {
     const body = req.body || {};
@@ -41,6 +50,7 @@ router.post("/campaigns/:id/iterations", requireAuth, requireRole(["CAMPAIGN_MAN
       plannedStartDate: body.plannedStartDate,
       plannedEndDate: body.plannedEndDate,
       voiceAgentId: body.voiceAgentId,
+      questionnaireId: body.questionnaireId,
       createdBy: req.platformUser.id
     });
     return res.status(201).json(result);
