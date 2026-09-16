@@ -2,6 +2,8 @@
 
 Adds the role-scoped API behind the Calls sidebar page.
 
+The workspace is intentionally hierarchical: users select an Iteration, then a Run, and only then inspect the Run's individual call attempts. Aggregate counts are calculated independently of result pagination.
+
 - Super Admin: all call attempts.
 - Admin: assigned campaigns plus drafts created by that Admin.
 - Campaign Manager: campaigns assigned to that manager.

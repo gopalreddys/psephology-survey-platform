@@ -9,6 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repository = readFileSync(path.join(here, "call-operations.repository.js"), "utf8");
 assert.match(repository, /campaigner_user_id/);
 assert.match(repository, /interaction_transcript/);
+assert.match(repository, /hierarchyPromise/);
+assert.match(repository, /GROUP BY campaign\.id[\s\S]*iteration\.id[\s\S]*run\.id/);
 assert.match(repository, /RIGHT\(COALESCE\(voter\.phone_number/);
 assert.doesNotMatch(repository, /voter\.phone_number AS phone/);
 

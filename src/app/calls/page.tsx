@@ -36,7 +36,17 @@ type CallDetail = Omit<CallItem, "response_variables"> & {
   response_variables: Record<string, unknown> | null;
   analytical_snapshot: Record<string, unknown> | null;
 };
-type CallResponse = { items: CallItem[]; total: number; limit: number; offset: number; summary: Summary; campaigns: Campaign[] };
+type HierarchyRow = {
+  campaign_id: string; campaign_code: string; campaign_name: string;
+  iteration_id: string; iteration_number: number; iteration_name: string;
+  run_id: string; run_number: number; run_name: string; run_status: string;
+  total_attempts: number; connected: number; failed: number; awaiting_callback: number;
+  transcripts_captured: number; average_duration_seconds: string | number | null; latest_attempt_at: string;
+};
+type CallResponse = {
+  items: CallItem[]; total: number; limit: number; offset: number; summary: Summary;
+  hierarchy: HierarchyRow[]; campaigns: Campaign[];
+};
 
 function number(value: unknown) { return Number(value || 0); }
 function dateTime(value: string | null) {
@@ -71,15 +81,42 @@ export default function CallsPage() {
   const [selected, setSelected] = useState<CallDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filters, setFilters] = useState({ status: "ALL", campaignId: "", search: "", from: "", to: "" });
+  const [selectedIterationId, setSelectedIterationId] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState("");
+
+  function queryFor(iterationId = "", runId = "") {
+    const query = new URLSearchParams();
+    Object.entries(filters).forEach(function ([key, value]) { if (value && value !== "ALL") query.set(key, value); });
+    if (iterationId) query.set("iterationId", iterationId);
+    if (runId) query.set("runId", runId);
+    query.set("limit", "100");
+    return query;
+  }
 
   async function loadCalls() {
     setLoading(true); setMessage(null);
     try {
-      const query = new URLSearchParams();
-      Object.entries(filters).forEach(function ([key, value]) { if (value && value !== "ALL") query.set(key, value); });
-      query.set("limit", "100");
-      setData(await apiFetch(`/api/call-operations?${query.toString()}`));
+      const scope = await apiFetch(`/api/call-operations?${queryFor().toString()}`) as CallResponse;
+      const iterationId = scope.hierarchy.some(function (row) { return row.iteration_id === selectedIterationId; })
+        ? selectedIterationId : scope.hierarchy[0]?.iteration_id || "";
+      const runId = scope.hierarchy.some(function (row) { return row.iteration_id === iterationId && row.run_id === selectedRunId; })
+        ? selectedRunId : scope.hierarchy.find(function (row) { return row.iteration_id === iterationId; })?.run_id || "";
+      setSelectedIterationId(iterationId); setSelectedRunId(runId);
+      if (!runId) return setData(scope);
+      const selectedData = await apiFetch(`/api/call-operations?${queryFor(iterationId, runId).toString()}`) as CallResponse;
+      setData({ ...selectedData, hierarchy: scope.hierarchy, campaigns: scope.campaigns });
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to load call operations"); }
+    finally { setLoading(false); }
+  }
+
+  async function loadRun(iterationId: string, runId: string) {
+    setSelectedIterationId(iterationId); setSelectedRunId(runId); setLoading(true); setMessage(null);
+    try {
+      const selectedData = await apiFetch(`/api/call-operations?${queryFor(iterationId, runId).toString()}`) as CallResponse;
+      setData(function (current) {
+        return { ...selectedData, hierarchy: current?.hierarchy || selectedData.hierarchy, campaigns: current?.campaigns || selectedData.campaigns };
+      });
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to load Run calls"); }
     finally { setLoading(false); }
   }
 
@@ -93,6 +130,18 @@ export default function CallsPage() {
   }
 
   const summary = data?.summary;
+  const iterations = Array.from(new Map((data?.hierarchy || []).map(function (row) {
+    const existing = (data?.hierarchy || []).filter(function (item) { return item.iteration_id === row.iteration_id; });
+    return [row.iteration_id, {
+      id: row.iteration_id, number: row.iteration_number, name: row.iteration_name,
+      campaignName: row.campaign_name, campaignId: row.campaign_id,
+      runs: existing.length,
+      total: existing.reduce(function (sum, item) { return sum + number(item.total_attempts); }, 0),
+      connected: existing.reduce(function (sum, item) { return sum + number(item.connected); }, 0),
+      failed: existing.reduce(function (sum, item) { return sum + number(item.failed); }, 0)
+    }];
+  })).values());
+  const runs = (data?.hierarchy || []).filter(function (row) { return row.iteration_id === selectedIterationId; });
   return <AppShell><main className={styles.page}>
     <section className={styles.hero}><div><span>VOICE OPERATIONS</span><h1>Calls</h1><p>Track every authorized call attempt from provider submission through callback, transcript and final voter outcome.</p></div><button type="button" onClick={loadCalls} disabled={loading}><RefreshCw size={16} className={loading ? styles.spin : ""} />Refresh</button></section>
     {message && <FeedbackMessage message={message} className={styles.message} />}
@@ -104,7 +153,7 @@ export default function CallsPage() {
       <Metric icon={FileText} label="Transcripts" value={number(summary?.transcripts_captured)} detail={`Average ${duration(summary?.average_duration_seconds ?? null)}`} />
     </section>
     <section className={styles.workspace}>
-      <div className={styles.workspaceHead}><div><span>CALL ATTEMPTS</span><h2>Operational history</h2><p>Results are restricted to campaigns available to your role.</p></div><strong>{data?.total || 0} attempts</strong></div>
+      <div className={styles.workspaceHead}><div><span>ITERATION → RUN → CALL</span><h2>Call analysis</h2><p>Select an Iteration, then a Run, to review its recipients and evidence.</p></div><strong>{iterations.length} iterations</strong></div>
       <div className={styles.filters}>
         <label className={styles.search}><Search size={15} /><input value={filters.search} onChange={function (event) { setFilters({ ...filters, search: event.target.value }); }} placeholder="Voter, campaign, attempt ID or last 4 digits" /></label>
         <label>Status<select value={filters.status} onChange={function (event) { setFilters({ ...filters, status: event.target.value }); }}><option value="ALL">All statuses</option><option value="CONNECTED">Connected</option><option value="FAILED">Failed</option><option value="AWAITING_CALLBACK">Awaiting callback</option><option value="COMPLETED">Completed execution</option></select></label>
@@ -113,7 +162,14 @@ export default function CallsPage() {
         <label>To<input type="date" value={filters.to} onChange={function (event) { setFilters({ ...filters, to: event.target.value }); }} /></label>
         <button type="button" onClick={loadCalls} disabled={loading}>{loading ? <LoaderCircle size={15} className={styles.spin} /> : <Search size={15} />}Apply</button>
       </div>
-      {loading && !data ? <div className={styles.empty}><LoaderCircle size={22} className={styles.spin} />Loading call operations…</div> : !data?.items.length ? <div className={styles.empty}><Phone size={24} /><strong>No call attempts match these filters</strong><span>Launch an authorized Run or adjust the filters.</span></div> : <div className={styles.tableWrap}><table><thead><tr><th>Recipient</th><th>Campaign context</th><th>Status</th><th>Timing</th><th>Evidence</th><th>Outcome</th></tr></thead><tbody>{data.items.map(function (item) { const status = operationalStatus(item); return <tr key={item.execution_id} onClick={function () { openDetail(item.execution_id); }}><td><strong>{item.voter_name || "Unknown voter"}</strong><span>•••• {item.phone_ending || "—"}{item.is_demo_contact ? " · Demo" : ""}</span></td><td><strong>{item.campaign_name}</strong><span>Iteration {item.iteration_number} · Run {item.run_number} · Attempt {item.attempt_number}</span></td><td><em data-status={status}>{status}</em><span>{item.connectivity_status || item.execution_status}</span></td><td><strong>{duration(item.duration_seconds)}</strong><span>{dateTime(item.created_at)}</span></td><td><strong>{item.transcript_turns} turns</strong><span>{item.response_variables} response variables</span></td><td><strong>{item.final_status || item.attempt_status || "PENDING"}</strong><span>{item.completion_reason || item.failure_reason || (item.retry_eligible ? "Retry eligible" : "—")}</span></td></tr>; })}</tbody></table></div>}
+      {loading && !data ? <div className={styles.empty}><LoaderCircle size={22} className={styles.spin} />Loading call operations…</div> : !iterations.length ? <div className={styles.empty}><Phone size={24} /><strong>No call attempts match these filters</strong><span>Launch an authorized Run or adjust the filters.</span></div> : <div className={styles.hierarchy}>
+        <aside className={styles.iterations}><div className={styles.sectionLabel}>1 · Select Iteration</div>{iterations.map(function (iteration) { return <button type="button" key={iteration.id} data-active={iteration.id === selectedIterationId} onClick={function () { const firstRun = (data?.hierarchy || []).find(function (row) { return row.iteration_id === iteration.id; }); if (firstRun) loadRun(iteration.id, firstRun.run_id); }}><div><span>Iteration {iteration.number}</span><strong>{iteration.name}</strong><small>{iteration.campaignName}</small></div><div className={styles.iterationStats}><em>{iteration.runs} Runs</em><em>{iteration.connected}/{iteration.total} connected</em>{iteration.failed > 0 && <em>{iteration.failed} failed</em>}</div></button>; })}</aside>
+        <div className={styles.runWorkspace}><div className={styles.sectionLabel}>2 · Select Run</div><div className={styles.runs}>{runs.map(function (run) { return <button type="button" key={run.run_id} data-active={run.run_id === selectedRunId} onClick={function () { loadRun(run.iteration_id, run.run_id); }}><div><span>Run {run.run_number}</span><strong>{run.run_name}</strong><small>{run.run_status} · {dateTime(run.latest_attempt_at)}</small></div><div className={styles.runStats}><em>{run.total_attempts} attempts</em><em>{run.connected} connected</em><em>{run.failed} failed</em><em>{run.transcripts_captured} transcripts</em></div></button>; })}</div>
+          <div className={styles.callLevel}><div className={styles.callLevelHead}><div><span>3 · Call attempts</span><strong>{runs.find(function (run) { return run.run_id === selectedRunId; })?.run_name || "Select a Run"}</strong></div><em>{data?.total || 0} attempts</em></div>
+          {loading ? <div className={styles.empty}><LoaderCircle size={21} className={styles.spin} />Loading Run calls…</div> : !data?.items.length ? <div className={styles.empty}><Phone size={22} /><strong>No attempts in this Run match the filters</strong></div> : <div className={styles.tableWrap}><table><thead><tr><th>Recipient</th><th>Attempt</th><th>Status</th><th>Timing</th><th>Evidence</th><th>Outcome</th></tr></thead><tbody>{data.items.map(function (item) { const status = operationalStatus(item); return <tr key={item.execution_id} onClick={function () { openDetail(item.execution_id); }}><td><strong>{item.voter_name || "Unknown voter"}</strong><span>•••• {item.phone_ending || "—"}{item.is_demo_contact ? " · Demo" : ""}</span></td><td><strong>Attempt {item.attempt_number}</strong><span>{item.voice_agent_name || "Agent not recorded"}</span></td><td><em data-status={status}>{status}</em><span>{item.connectivity_status || item.execution_status}</span></td><td><strong>{duration(item.duration_seconds)}</strong><span>{dateTime(item.created_at)}</span></td><td><strong>{item.transcript_turns} turns</strong><span>{item.response_variables} response variables</span></td><td><strong>{item.final_status || item.attempt_status || "PENDING"}</strong><span>{item.completion_reason || item.failure_reason || (item.retry_eligible ? "Retry eligible" : "—")}</span></td></tr>; })}</tbody></table></div>}
+          </div>
+        </div>
+      </div>}
     </section>
     {(selected || detailLoading) && <div className={styles.backdrop} role="presentation" onMouseDown={function (event) { if (event.target === event.currentTarget && !detailLoading) setSelected(null); }}><section className={styles.drawer} role="dialog" aria-modal="true" aria-label="Call details">{detailLoading && !selected ? <div className={styles.empty}><LoaderCircle className={styles.spin} />Loading call details…</div> : selected && <><header><div><span>CALL ATTEMPT</span><h2>{selected.voter_name || "Unknown voter"}</h2><p>•••• {selected.phone_ending} · Attempt {selected.attempt_number} · {selected.voice_agent_name || "Voice agent not recorded"}</p></div><button type="button" onClick={function () { setSelected(null); }}><X size={18} /></button></header><div className={styles.detailBody}>
         <div className={styles.detailGrid}><Detail label="Operational status" value={operationalStatus(selected)} /><Detail label="Provider attempt" value={selected.provider_attempt_id || "Not assigned"} /><Detail label="Submitted" value={dateTime(selected.submitted_at || selected.created_at)} /><Detail label="Callback received" value={dateTime(selected.callback_received_at)} /><Detail label="Duration" value={duration(selected.duration_seconds)} /><Detail label="Final outcome" value={selected.final_status || selected.completion_reason || "Pending"} /></div>

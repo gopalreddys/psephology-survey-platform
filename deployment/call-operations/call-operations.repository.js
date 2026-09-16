@@ -22,7 +22,7 @@ function visibility(actor, parameterNumber) {
   };
 }
 
-function normalizedFilters(actor, input = {}) {
+function normalizedFilters(actor, input = {}, includeSelection = true) {
   const values = [];
   const access = visibility(actor, values.length + 1);
   values.push(...access.values);
@@ -33,6 +33,8 @@ function normalizedFilters(actor, input = {}) {
   const search = String(input.search || "").trim();
   const from = String(input.from || "").trim();
   const to = String(input.to || "").trim();
+  const iterationId = String(input.iterationId || "").trim();
+  const runId = String(input.runId || "").trim();
   if (campaignId) clauses.push(`campaign.id = ${add(campaignId)}::uuid`);
   if (search) {
     const parameter = add(search);
@@ -46,6 +48,8 @@ function normalizedFilters(actor, input = {}) {
   }
   if (from) clauses.push(`execution.created_at >= ${add(from)}::date`);
   if (to) clauses.push(`execution.created_at < (${add(to)}::date + INTERVAL '1 day')`);
+  if (includeSelection && iterationId) clauses.push(`iteration.id = ${add(iterationId)}::uuid`);
+  if (includeSelection && runId) clauses.push(`run.id = ${add(runId)}::uuid`);
   if (status === "CONNECTED") clauses.push("LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'");
   else if (status === "FAILED") clauses.push("UPPER(execution.status) = 'FAILED'");
   else if (status === "AWAITING_CALLBACK") clauses.push("execution.callback_received_at IS NULL AND UPPER(execution.status) IN ('PENDING','SUBMITTED','RUNNING')");
@@ -82,6 +86,7 @@ function safeNumber(value, fallback, maximum) {
 export async function listCallOperations(actor, input = {}) {
   const db = await getDb();
   const filtered = normalizedFilters(actor, input);
+  const hierarchyFilters = normalizedFilters(actor, input, false);
   const limit = safeNumber(input.limit, 50, 200);
   const offset = Math.max(Number(input.offset) || 0, 0);
   const listValues = [...filtered.values, limit, offset];
@@ -135,6 +140,29 @@ export async function listCallOperations(actor, input = {}) {
     WHERE ${filtered.where}
   `, filtered.values);
 
+  const hierarchyPromise = db.query(`
+    SELECT campaign.id AS campaign_id, campaign.campaign_code, campaign.campaign_name,
+      iteration.id AS iteration_id, iteration.iteration_number, iteration.iteration_name,
+      run.id AS run_id, run.run_number, run.run_name, run.status AS run_status,
+      COUNT(*)::int AS total_attempts,
+      COUNT(*) FILTER (WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected')::int AS connected,
+      COUNT(*) FILTER (WHERE UPPER(execution.status) = 'FAILED')::int AS failed,
+      COUNT(*) FILTER (WHERE execution.callback_received_at IS NULL
+        AND UPPER(execution.status) IN ('PENDING','SUBMITTED','RUNNING'))::int AS awaiting_callback,
+      COUNT(*) FILTER (WHERE CASE WHEN jsonb_typeof(call_record.interaction_transcript) = 'array'
+        THEN jsonb_array_length(call_record.interaction_transcript) > 0 ELSE FALSE END)::int AS transcripts_captured,
+      ROUND(AVG(call_record.duration_seconds) FILTER (
+        WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+      )::numeric, 1) AS average_duration_seconds,
+      MAX(execution.created_at) AS latest_attempt_at
+    ${joins}
+    WHERE ${hierarchyFilters.where}
+    GROUP BY campaign.id, campaign.campaign_code, campaign.campaign_name,
+      iteration.id, iteration.iteration_number, iteration.iteration_name,
+      run.id, run.run_number, run.run_name, run.status
+    ORDER BY MAX(execution.created_at) DESC, iteration.iteration_number, run.run_number
+  `, hierarchyFilters.values);
+
   const campaignVisibility = visibility(actor, 1);
   const campaignsPromise = db.query(`
     SELECT DISTINCT campaign.id, campaign.campaign_code, campaign.campaign_name
@@ -143,12 +171,15 @@ export async function listCallOperations(actor, input = {}) {
     ORDER BY campaign.campaign_name
   `, campaignVisibility.values);
 
-  const [rows, summary, campaigns] = await Promise.all([rowsPromise, summaryPromise, campaignsPromise]);
+  const [rows, summary, hierarchy, campaigns] = await Promise.all([
+    rowsPromise, summaryPromise, hierarchyPromise, campaignsPromise
+  ]);
   return {
     items: rows.rows.map(function (row) { const { total_count, ...item } = row; return item; }),
     total: Number(rows.rows[0]?.total_count || 0),
     limit, offset,
     summary: summary.rows[0],
+    hierarchy: hierarchy.rows,
     campaigns: campaigns.rows
   };
 }
