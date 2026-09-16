@@ -144,6 +144,7 @@ const menuItems: MenuItem[] = [
   {
     label: "Calls",
     icon: Phone,
+    href: "/calls",
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
