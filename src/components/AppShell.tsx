@@ -167,6 +167,7 @@ const menuItems: MenuItem[] = [
   {
     label: "Pipeline",
     icon: Settings,
+    href: "/pipeline",
     roles: [
       "SUPER_ADMIN"
     ]
