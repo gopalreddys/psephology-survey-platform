@@ -1,510 +1,167 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Activity,
-  ArrowRight,
-  BarChart3,
-  CheckCircle2,
-  ClipboardList,
-  Database,
-  MapPinned,
-  PhoneCall,
-  Sparkles,
-  Users,
+  AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList,
+  Clock3, FileText, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
+  ShieldCheck, Users
 } from "lucide-react";
-
 import AppShell from "@/components/AppShell";
+import FeedbackMessage from "@/components/FeedbackMessage";
+import { useCurrentUser, type PlatformRole } from "@/hooks/useCurrentUser";
+import { apiFetch } from "@/lib/api";
+import styles from "./dashboard.module.css";
 
+type Summary = {
+  campaignsVisible: number; campaignsCompleted: number; campaignsWithoutManager: number;
+  iterationsVisible: number; iterationsCompleted: number;
+  runsReady: number; runsRunning: number; runsClosed: number;
+  pendingContacts: number; retryEligibleContacts: number;
+  callAttempts: number; awaitingCallbacks: number; staleCallbacks: number;
+  connectedCalls: number; missingTranscripts: number; missingResponses: number;
+};
+type Action = {
+  kind: string; priority: number; title: string; detail: string;
+  href: string; campaignName: string | null;
+};
+type Iteration = {
+  id: string; number: number; name: string; status: string;
+  runCount: number; readyRunCount: number; runningRunCount: number;
+};
+type Campaign = {
+  id: string; name: string; code: string; status: string;
+  managerAssigned: boolean; iterationCount: number;
+  completedIterationCount: number; activeRunCount: number;
+  iterations: Iteration[];
+};
+type Dashboard = {
+  role: PlatformRole; summary: Summary; actions: Action[];
+  campaigns: Campaign[]; generatedAt: string;
+};
+type Metric = {
+  label: string; value: string; detail: string; icon: typeof BarChart3;
+};
+
+function count(value: number) { return Number(value || 0).toLocaleString(); }
+
+function titleFor(role: PlatformRole) {
+  switch (role) {
+    case "SUPER_ADMIN": return "Platform overview";
+    case "ADMIN": return "Campaign administration";
+    case "CAMPAIGN_MANAGER": return "Campaign command center";
+    case "CAMPAIGNER": return "My survey work";
+  }
+}
+
+function descriptionFor(role: PlatformRole) {
+  switch (role) {
+    case "SUPER_ADMIN": return "Review campaign ownership, execution progress and evidence exceptions across the platform.";
+    case "ADMIN": return "Track the campaigns you can manage, resolve assignment gaps and monitor research execution.";
+    case "CAMPAIGN_MANAGER": return "Plan assigned Iterations, review Run progress and move completed campaigns through closeout.";
+    case "CAMPAIGNER": return "See only your allocated Iterations, ready Runs and call follow-up work.";
+  }
+}
+
+function metricsFor(role: PlatformRole, s: Summary): Metric[] {
+  if (role === "CAMPAIGNER") return [
+    { label: "Assigned Iterations", value: count(s.iterationsVisible), detail: `${count(s.campaignsVisible)} visible Campaigns`, icon: ClipboardList },
+    { label: "Ready Runs", value: count(s.runsReady), detail: "Review recipients before launch", icon: PhoneCall },
+    { label: "Pending contacts", value: count(s.pendingContacts), detail: `${count(s.retryEligibleContacts)} retry eligible`, icon: Users },
+    { label: "Awaiting callbacks", value: count(s.awaitingCallbacks), detail: `${count(s.staleCallbacks)} beyond 30 minutes`, icon: Clock3 }
+  ];
+  if (role === "CAMPAIGN_MANAGER") return [
+    { label: "Assigned Campaigns", value: count(s.campaignsVisible), detail: `${count(s.campaignsCompleted)} completed`, icon: Megaphone },
+    { label: "Iterations complete", value: `${count(s.iterationsCompleted)}/${count(s.iterationsVisible)}`, detail: "Across assigned Campaigns", icon: CheckCircle2 },
+    { label: "Active Runs", value: count(s.runsReady + s.runsRunning), detail: `${count(s.runsClosed)} closed`, icon: PhoneCall },
+    { label: "Evidence gaps", value: count(s.missingTranscripts + s.missingResponses), detail: "Transcript and response exceptions", icon: AlertTriangle }
+  ];
+  return [
+    { label: "Visible Campaigns", value: count(s.campaignsVisible), detail: `${count(s.campaignsCompleted)} completed`, icon: Megaphone },
+    { label: "Manager gaps", value: count(s.campaignsWithoutManager), detail: "Campaigns awaiting ownership", icon: Users },
+    { label: "Active Runs", value: count(s.runsReady + s.runsRunning), detail: `${count(s.runsClosed)} closed`, icon: PhoneCall },
+    { label: "Delayed callbacks", value: count(s.staleCallbacks), detail: `${count(s.awaitingCallbacks)} awaiting in total`, icon: Clock3 }
+  ];
+}
+
+function actionLabel(kind: string) {
+  switch (kind) {
+    case "STALE_CALLBACKS": return "CALLBACK";
+    case "ASSIGN_MANAGER": return "OWNERSHIP";
+    case "CONFIGURE_ITERATION": return "CONFIGURATION";
+    case "REVIEW_RUN": return "READY RUN";
+    case "RETRY_CONTACTS": return "RETRY";
+    case "EVIDENCE_GAP": return "EVIDENCE";
+    case "REVIEW_CAMPAIGN": return "CLOSEOUT";
+    default: return "PLANNING";
+  }
+}
 
 export default function Home() {
-  return (
-    <AppShell>
-      <div className="dashboard-page">
+  const { user } = useCurrentUser();
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-        {/* PAGE INTRODUCTION */}
+  const loadDashboard = useCallback(async function (refresh = false) {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    try { setData(await apiFetch("/api/dashboard") as Dashboard); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Dashboard"); }
+    finally { setLoading(false); setRefreshing(false); }
+  }, []);
 
-        <section className="dashboard-hero">
+  useEffect(function () {
+    if (!user) return;
+    const timer = window.setTimeout(function () { void loadDashboard(); }, 0);
+    return function () { window.clearTimeout(timer); };
+  }, [loadDashboard, user]);
 
-          <div>
-            <div className="dashboard-eyebrow">
-              RESEARCH COMMAND CENTER
-            </div>
+  const role = user?.role.code;
+  const summary = data?.summary;
+  const metrics = role && summary ? metricsFor(role, summary) : [];
 
-            <h1 className="dashboard-title">
-              Survey Intelligence Dashboard
-            </h1>
-
-            <p className="dashboard-description">
-              Monitor research programs, survey execution,
-              voter coverage and analytical readiness from
-              one workspace.
-            </p>
-          </div>
-
-
-          <div className="dashboard-hero-actions">
-
-            <Link
-              href="/programs"
-              className="dashboard-secondary-button"
-            >
-              <ClipboardList size={16} />
-              View Programs
-            </Link>
-
-            <Link
-              href="/voters"
-              className="dashboard-primary-button"
-            >
-              <Users size={16} />
-              Voter Data
-            </Link>
-
-          </div>
-
+  return <AppShell><main className={styles.page}>
+    <header className={styles.hero}>
+      <div><span>RESEARCH COMMAND CENTER</span><h1>{role ? titleFor(role) : "Dashboard"}</h1><p>{role ? descriptionFor(role) : "Loading your work…"}</p></div>
+      <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
+    </header>
+    {error && <FeedbackMessage tone="error" message={error} />}
+    {loading ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={23} />Loading your Dashboard…</div> : data && <>
+      <div className={styles.scope}><ShieldCheck size={15} />These figures reflect only Campaigns and Iterations visible to your role. No demo result is presented as a vote forecast.</div>
+      <section className={styles.metrics} aria-label="Operational summary">
+        {metrics.map(function (metric) { const Icon = metric.icon; return <article key={metric.label} className={styles.metric}><div className={styles.metricIcon}><Icon size={18} /></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></article>; })}
+      </section>
+      <div className={styles.contentGrid}>
+        <section className={styles.panel}>
+          <div className={styles.panelHead}><div><span>PRIORITY QUEUE</span><h2>What needs attention</h2></div><strong>{data.actions.length} item{data.actions.length === 1 ? "" : "s"}</strong></div>
+          {!data.actions.length ? <div className={styles.empty}><CheckCircle2 size={24} /><strong>No action flags in your visible work</strong><p>This reflects only Dashboard checks; review Campaigns and Calls for full detail.</p></div> : <div className={styles.actions}>{data.actions.map(function (item, index) { return <Link href={item.href} key={`${item.kind}-${item.href}-${index}`} className={styles.action}><div className={styles.actionIcon} data-urgent={item.priority >= 90}>{item.priority >= 90 ? <AlertTriangle size={18} /> : <ArrowRight size={18} />}</div><div><span>{actionLabel(item.kind)}{item.campaignName ? ` · ${item.campaignName}` : ""}</span><strong>{item.title}</strong><p>{item.detail}</p></div><ArrowRight size={17} /></Link>; })}</div>}
         </section>
-
-
-        {/* KPI OVERVIEW */}
-
-        <section className="dashboard-kpi-grid">
-
-          <MetricCard
-            icon={ClipboardList}
-            label="Research Programs"
-            value="1"
-            detail="Active research workspace"
-            tone="rose"
-          />
-
-          <MetricCard
-            icon={Database}
-            label="Survey Contacts"
-            value="40"
-            detail="Voter master records"
-            tone="peach"
-          />
-
-          <MetricCard
-            icon={PhoneCall}
-            label="Analyzed Calls"
-            value="6"
-            detail="Survey evidence processed"
-            tone="pink"
-          />
-
-          <MetricCard
-            icon={Activity}
-            label="Platform Status"
-            value="Healthy"
-            detail="Core services available"
-            tone="cream"
-          />
-
+        <section className={styles.panel}>
+          <div className={styles.panelHead}><div><span>RESEARCH FLOW</span><h2>Execution and evidence</h2></div></div>
+          <div className={styles.flowGrid}>
+            <div><span>Runs ready</span><strong>{count(summary?.runsReady || 0)}</strong></div>
+            <div><span>Runs running</span><strong>{count(summary?.runsRunning || 0)}</strong></div>
+            <div><span>Call attempts</span><strong>{count(summary?.callAttempts || 0)}</strong></div>
+            <div><span>Connected calls</span><strong>{count(summary?.connectedCalls || 0)}</strong></div>
+            <div><span>Missing transcripts</span><strong>{count(summary?.missingTranscripts || 0)}</strong></div>
+            <div><span>Missing responses</span><strong>{count(summary?.missingResponses || 0)}</strong></div>
+          </div>
+          <div className={styles.quickLinks}>
+            <Link href="/campaigns"><Megaphone size={16} />Campaigns <ArrowRight size={15} /></Link>
+            <Link href="/calls"><PhoneCall size={16} />Calls <ArrowRight size={15} /></Link>
+            {role !== "CAMPAIGNER" && <Link href="/analytics"><BarChart3 size={16} />Analytics <ArrowRight size={15} /></Link>}
+            {(role === "SUPER_ADMIN" || role === "ADMIN") && <Link href="/programs"><FileText size={16} />Programs <ArrowRight size={15} /></Link>}
+          </div>
         </section>
-
-
-        <div className="dashboard-grid">
-
-          {/* RESEARCH LIFECYCLE */}
-
-          <section className="dashboard-panel dashboard-lifecycle-panel">
-
-            <div className="dashboard-panel-header">
-
-              <div>
-                <div className="dashboard-section-label">
-                  RESEARCH OPERATIONS
-                </div>
-
-                <h2>
-                  Survey Research Lifecycle
-                </h2>
-
-                <p>
-                  Follow research from voter data preparation
-                  through evidence-based analysis.
-                </p>
-              </div>
-
-            </div>
-
-
-            <div className="dashboard-lifecycle">
-
-              <LifecycleStep
-                number="01"
-                icon={Database}
-                title="Voter Data"
-                description="Prepare eligible survey contacts."
-                status="Ready"
-              />
-
-              <LifecycleConnector />
-
-              <LifecycleStep
-                number="02"
-                icon={ClipboardList}
-                title="Research Design"
-                description="Define iterations and questionnaires."
-                status="Configured"
-              />
-
-              <LifecycleConnector />
-
-              <LifecycleStep
-                number="03"
-                icon={PhoneCall}
-                title="AI Surveys"
-                description="Execute voice research and retries."
-                status="In Progress"
-              />
-
-              <LifecycleConnector />
-
-              <LifecycleStep
-                number="04"
-                icon={BarChart3}
-                title="Analysis"
-                description="Convert evidence into research insight."
-                status="Available"
-              />
-
-            </div>
-
-          </section>
-
-
-          {/* QUICK ACTIONS */}
-
-          <section className="dashboard-panel">
-
-            <div className="dashboard-panel-header">
-
-              <div>
-                <div className="dashboard-section-label">
-                  QUICK ACCESS
-                </div>
-
-                <h2>
-                  Continue your work
-                </h2>
-              </div>
-
-            </div>
-
-
-            <div className="dashboard-quick-actions">
-
-              <QuickAction
-                href="/programs"
-                icon={ClipboardList}
-                title="Programs"
-                description="Manage research programs and iterations."
-              />
-
-              <QuickAction
-                href="/voters"
-                icon={Users}
-                title="Voter Data"
-                description="Review survey contacts and geography."
-              />
-
-              <QuickAction
-                href="/questionnaires"
-                icon={Sparkles}
-                title="Questionnaires"
-                description="Manage research questions and themes."
-              />
-
-              <QuickAction
-                href="/geography"
-                icon={MapPinned}
-                title="Geography"
-                description="Review constituency and local mapping."
-              />
-
-            </div>
-
-          </section>
-
-        </div>
-
-
-        {/* BOTTOM ROW */}
-
-        <div className="dashboard-bottom-grid">
-
-          <section className="dashboard-panel">
-
-            <div className="dashboard-panel-header">
-
-              <div>
-                <div className="dashboard-section-label">
-                  SURVEY HEALTH
-                </div>
-
-                <h2>
-                  Operational Readiness
-                </h2>
-
-                <p>
-                  Core components required for survey execution.
-                </p>
-              </div>
-
-            </div>
-
-
-            <div className="dashboard-health-list">
-
-              <HealthRow
-                label="Voter Master"
-                detail="Survey contacts available"
-                status="Ready"
-              />
-
-              <HealthRow
-                label="Questionnaire"
-                detail="Baseline research questionnaire"
-                status="Ready"
-              />
-
-              <HealthRow
-                label="AI Voice Configuration"
-                detail="Agent and voice routing configured"
-                status="Ready"
-              />
-
-              <HealthRow
-                label="Research Analysis"
-                detail="Question-level evidence processing"
-                status="Ready"
-              />
-
-            </div>
-
-          </section>
-
-
-          <section className="dashboard-panel dashboard-insight-panel">
-
-            <div className="dashboard-insight-icon">
-              <Sparkles size={21} />
-            </div>
-
-            <div className="dashboard-section-label">
-              RESEARCH INTELLIGENCE
-            </div>
-
-            <h2>
-              Evidence before conclusions
-            </h2>
-
-            <p>
-              Survey findings are built from recorded
-              conversations, transcripts and question-level
-              responses before being aggregated into
-              geographical research insights.
-            </p>
-
-            <div className="dashboard-evidence-flow">
-
-              <span>Calls</span>
-              <ArrowRight size={13} />
-              <span>Evidence</span>
-              <ArrowRight size={13} />
-              <span>Signals</span>
-              <ArrowRight size={13} />
-              <span>Insights</span>
-
-            </div>
-
-          </section>
-
-        </div>
-
-
-        <div className="dashboard-demo-note">
-          Dashboard values currently represent the configured
-          demo environment. Operational metrics will progressively
-          use live Program, Iteration, Run and Call data.
-        </div>
-
       </div>
-    </AppShell>
-  );
-}
-
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  detail: string;
-  tone: string;
-}) {
-  return (
-    <div className={`dashboard-metric-card dashboard-tone-${tone}`}>
-
-      <div className="dashboard-metric-top">
-
-        <div className="dashboard-metric-icon">
-          <Icon size={18} />
-        </div>
-
-        <span>
-          Demo snapshot
-        </span>
-
-      </div>
-
-      <div className="dashboard-metric-label">
-        {label}
-      </div>
-
-      <div className="dashboard-metric-value">
-        {value}
-      </div>
-
-      <div className="dashboard-metric-detail">
-        {detail}
-      </div>
-
-    </div>
-  );
-}
-
-
-function LifecycleStep({
-  number,
-  icon: Icon,
-  title,
-  description,
-  status,
-}: {
-  number: string;
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  status: string;
-}) {
-  return (
-    <div className="dashboard-lifecycle-step">
-
-      <div className="dashboard-lifecycle-number">
-        {number}
-      </div>
-
-      <div className="dashboard-lifecycle-icon">
-        <Icon size={19} />
-      </div>
-
-      <h3>
-        {title}
-      </h3>
-
-      <p>
-        {description}
-      </p>
-
-      <div className="dashboard-lifecycle-status">
-        <CheckCircle2 size={13} />
-        {status}
-      </div>
-
-    </div>
-  );
-}
-
-
-function LifecycleConnector() {
-  return (
-    <div className="dashboard-lifecycle-connector">
-      <ArrowRight size={17} />
-    </div>
-  );
-}
-
-
-function QuickAction({
-  href,
-  icon: Icon,
-  title,
-  description,
-}: {
-  href: string;
-  icon: React.ElementType;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="dashboard-quick-action"
-    >
-
-      <div className="dashboard-quick-icon">
-        <Icon size={17} />
-      </div>
-
-      <div>
-        <h3>
-          {title}
-        </h3>
-
-        <p>
-          {description}
-        </p>
-      </div>
-
-      <ArrowRight
-        size={15}
-        className="dashboard-quick-arrow"
-      />
-
-    </Link>
-  );
-}
-
-
-function HealthRow({
-  label,
-  detail,
-  status,
-}: {
-  label: string;
-  detail: string;
-  status: string;
-}) {
-  return (
-    <div className="dashboard-health-row">
-
-      <div className="dashboard-health-check">
-        <CheckCircle2 size={16} />
-      </div>
-
-      <div className="dashboard-health-copy">
-        <strong>
-          {label}
-        </strong>
-
-        <span>
-          {detail}
-        </span>
-      </div>
-
-      <div className="dashboard-health-status">
-        {status}
-      </div>
-
-    </div>
-  );
+      <section className={styles.panel}>
+        <div className={styles.panelHead}><div><span>VISIBLE CAMPAIGNS</span><h2>{role === "CAMPAIGNER" ? "My allocated work" : "Campaign progress"}</h2></div><Link className={styles.viewAll} href="/campaigns">View all <ArrowRight size={15} /></Link></div>
+        {!data.campaigns.length ? <div className={styles.empty}><Megaphone size={24} /><strong>No Campaigns visible yet</strong><p>{role === "CAMPAIGNER" ? "Assigned Campaigns will appear here when work is allocated." : "Create or assign a Campaign to begin tracking research operations."}</p></div> : <div className={styles.campaigns}>{data.campaigns.map(function (campaign) { return <article className={styles.campaign} key={campaign.id}><div className={styles.campaignTop}><div><span>{campaign.code} · {campaign.status}</span><Link href={`/campaigns/${campaign.id}`}>{campaign.name} <ArrowRight size={15} /></Link></div><strong>{campaign.completedIterationCount}/{campaign.iterationCount} Iterations complete</strong></div><div className={styles.iterations}>{!campaign.iterations.length ? <p>No Iterations visible for this Campaign.</p> : campaign.iterations.map(function (iteration) { return <Link href={`/iterations/${iteration.id}`} key={iteration.id}><div><strong>Iteration {iteration.number}</strong><span>{iteration.name}</span></div><small>{iteration.status} · {iteration.readyRunCount} ready · {iteration.runningRunCount} running</small><ArrowRight size={14} /></Link>; })}</div></article>; })}</div>}
+      </section>
+      <footer className={styles.footer}>Snapshot generated {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt))}. Status metrics are operational; research interpretation remains in Analytics.</footer>
+    </>}
+  </main></AppShell>;
 }
