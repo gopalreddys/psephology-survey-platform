@@ -122,6 +122,7 @@ export async function selectAssignedVoters(db, {
         AND voter.contact_status = 'ACTIVE'
         AND voter.is_demo_contact = TRUE
         AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
+        AND voter_is_eligible_for_campaign(voter.id, $3)
         AND ($2::text IS NULL OR voter.source_name = $2)
         AND previous_contact.retry_eligible = TRUE
         AND previous_contact.retry_exhausted = FALSE
@@ -188,6 +189,7 @@ export async function selectAssignedVoters(db, {
       AND voter.contact_status = 'ACTIVE'
       AND voter.is_demo_contact = TRUE
       AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
+      AND voter_is_eligible_for_campaign(voter.id, $1)
       AND ($4::text IS NULL OR voter.source_name = $4)
       AND NOT EXISTS (
         SELECT 1

@@ -25,6 +25,7 @@ import {
 import AppShell
   from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import VoterElectorateManager from "@/components/VoterElectorateManager";
 import {
   useCurrentUser
 } from "@/hooks/useCurrentUser";
@@ -114,6 +115,9 @@ export default function VotersPage() {
     user?.role.code === "SUPER_ADMIN" ||
     user?.role.code === "ADMIN";
 
+  const canManageElectorate =
+    canLaunchDemoCall;
+
   const [
     summary,
     setSummary
@@ -174,6 +178,14 @@ export default function VotersPage() {
   const [
     selectedDemoVoter,
     setSelectedDemoVoter
+  ] =
+    useState<Voter | null>(
+      null
+    );
+
+  const [
+    selectedElectorateVoter,
+    setSelectedElectorateVoter
   ] =
     useState<Voter | null>(
       null
@@ -983,6 +995,14 @@ export default function VotersPage() {
                             Phone
                           </th>
 
+                          {canManageElectorate && (
+
+                            <th>
+                              Electoral Eligibility
+                            </th>
+
+                          )}
+
                           {canLaunchDemoCall && (
 
                             <th>
@@ -1147,6 +1167,30 @@ export default function VotersPage() {
                                   </td>
 
 
+                                  {canManageElectorate && (
+
+                                    <td>
+
+                                      <button
+                                        type="button"
+                                        className="voter-demo-call-button"
+                                        onClick={
+                                          function () {
+                                            setSelectedElectorateVoter(
+                                              voter
+                                            );
+                                          }
+                                        }
+                                      >
+                                        <ShieldCheck size={14} />
+                                        Manage Rolls
+                                      </button>
+
+                                    </td>
+
+                                  )}
+
+
                                   {canLaunchDemoCall && (
 
                                     <td>
@@ -1222,6 +1266,22 @@ export default function VotersPage() {
           }
 
         </section>
+
+
+        {selectedElectorateVoter && (
+
+          <VoterElectorateManager
+            voter={selectedElectorateVoter}
+            onClose={
+              function () {
+                setSelectedElectorateVoter(
+                  null
+                );
+              }
+            }
+          />
+
+        )}
 
 
         {selectedDemoVoter && (

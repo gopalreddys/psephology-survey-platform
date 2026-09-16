@@ -292,6 +292,9 @@ export async function listCampaignVoters(id, actor, { limit = 100, offset = 0 } 
     )
     SELECT voter.*, COUNT(*) OVER()::int AS total_count
     FROM voter_master voter JOIN permitted_geographies geography ON geography.id = voter.geo_unit_id
+    WHERE voter.is_active = TRUE
+      AND voter.contact_status = 'ACTIVE'
+      AND voter_is_eligible_for_campaign(voter.id, $1)
     ORDER BY voter.id
     LIMIT $${limitParameter} OFFSET $${limitParameter + 1}
   `, values);
