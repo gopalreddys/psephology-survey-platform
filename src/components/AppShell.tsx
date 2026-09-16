@@ -156,6 +156,7 @@ const menuItems: MenuItem[] = [
   {
     label: "Analytics",
     icon: BarChart3,
+    href: "/analytics",
     roles: [
       "SUPER_ADMIN",
       "ADMIN",
