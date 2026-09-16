@@ -1,0 +1,19 @@
+.root { margin: 0.75rem 0; }
+.openButton { display: inline-flex; align-items: center; gap: 0.45rem; border: 1px solid #b7ded9; border-radius: 0.65rem; padding: 0.65rem 0.9rem; color: #116b63; background: #f1fffc; font-weight: 650; cursor: pointer; }
+.openButton:disabled { opacity: 0.55; cursor: not-allowed; }
+.panel { margin-top: 0.85rem; border: 1px solid #cce9e4; border-radius: 0.85rem; padding: 1rem; background: #f7fffd; }
+.header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.header strong { color: #184c49; }
+.header p { margin: 0.3rem 0 1rem; color: #5e7773; font-size: 0.9rem; }
+.close { border: 0; background: transparent; color: #4f7772; cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.grid label { display: grid; gap: 0.3rem; font-size: 0.85rem; font-weight: 650; color: #315450; }
+.grid input, .grid select { width: 100%; min-height: 2.7rem; padding: 0.55rem 0.7rem; border: 1px solid #c9dcd8; border-radius: 0.5rem; background: #fff; color: #243d39; font: inherit; }
+.consent { display: flex; align-items: flex-start; gap: 0.55rem; margin-top: 1rem; color: #315450; font-size: 0.9rem; }
+.consent input { margin-top: 0.2rem; }
+.actions { display: flex; justify-content: flex-end; gap: 0.65rem; margin-top: 1rem; }
+.actions button { padding: 0.65rem 0.9rem; border: 1px solid #c9dcd8; border-radius: 0.55rem; background: #fff; cursor: pointer; }
+.actions .submit { background: #168c7f; border-color: #168c7f; color: #fff; font-weight: 650; }
+.actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+.error { margin: 0.5rem 0; color: #b9475c; }
+@media (max-width: 640px) { .grid { grid-template-columns: 1fr; } .actions { flex-wrap: wrap; } }

@@ -28,6 +28,7 @@ import {
 } from "next/navigation";
 
 import AppShell from "@/components/AppShell";
+import DemoVoterQuickAdd from "@/components/DemoVoterQuickAdd";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { apiFetch } from "@/lib/api";
 import { surveyStageOptions } from "@/lib/research-codes";
@@ -105,6 +106,10 @@ export default function IterationPage() {
 
   const canCreateRuns =
     user?.role.code === "CAMPAIGNER";
+
+  const canAddDemoVoters =
+    user?.role.code === "SUPER_ADMIN" ||
+    user?.role.code === "ADMIN";
 
   const canReconcileRuns =
     user?.role.code === "CAMPAIGNER" ||
@@ -1563,6 +1568,18 @@ export default function IterationPage() {
                               )}
 
                             </div>
+
+
+                            {canAddDemoVoters && Number(run.run_number) === 1 &&
+                              String(run.status).toUpperCase() === "READY" && (
+                                <DemoVoterQuickAdd
+                                  runId={run.id}
+                                  onAdded={async function () {
+                                    setLaunchPreview(null);
+                                    await Promise.all([loadRuns(), loadIteration()]);
+                                  }}
+                                />
+                              )}
 
 
                             {!runIsClosed && launchPreview?.run.id === run.id && (

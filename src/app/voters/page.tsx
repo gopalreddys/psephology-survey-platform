@@ -956,7 +956,7 @@ export default function VotersPage() {
                         <tr>
 
                           <th>
-                            EPIC
+                            Electoral / Source ID
                           </th>
 
                           <th>
