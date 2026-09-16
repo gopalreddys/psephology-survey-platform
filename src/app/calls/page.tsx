@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  Activity, AlertCircle, BarChart3, CheckCircle2, Clock3, FileText,
-  LoaderCircle, Phone, RefreshCw, Search, Timer, UserRound, X
+  AlertCircle, CheckCircle2, Clock3, FileText,
+  LoaderCircle, Phone, RefreshCw, Search, X
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
@@ -97,14 +97,25 @@ export default function CallsPage() {
     setLoading(true); setMessage(null);
     try {
       const scope = await apiFetch(`/api/call-operations?${queryFor().toString()}`) as CallResponse;
-      const iterationId = scope.hierarchy.some(function (row) { return row.iteration_id === selectedIterationId; })
-        ? selectedIterationId : scope.hierarchy[0]?.iteration_id || "";
-      const runId = scope.hierarchy.some(function (row) { return row.iteration_id === iterationId && row.run_id === selectedRunId; })
-        ? selectedRunId : scope.hierarchy.find(function (row) { return row.iteration_id === iterationId; })?.run_id || "";
+      const requestedExecutionId = typeof window === "undefined"
+        ? ""
+        : new URLSearchParams(window.location.search).get("executionId") || "";
+      const requestedDetail = requestedExecutionId
+        ? await apiFetch(`/api/call-operations/${requestedExecutionId}`) as CallDetail
+        : null;
+      const iterationId = requestedDetail?.iteration_id || (
+        scope.hierarchy.some(function (row) { return row.iteration_id === selectedIterationId; })
+          ? selectedIterationId : scope.hierarchy[0]?.iteration_id || ""
+      );
+      const runId = requestedDetail?.run_id || (
+        scope.hierarchy.some(function (row) { return row.iteration_id === iterationId && row.run_id === selectedRunId; })
+          ? selectedRunId : scope.hierarchy.find(function (row) { return row.iteration_id === iterationId; })?.run_id || ""
+      );
       setSelectedIterationId(iterationId); setSelectedRunId(runId);
       if (!runId) return setData(scope);
       const selectedData = await apiFetch(`/api/call-operations?${queryFor(iterationId, runId).toString()}`) as CallResponse;
       setData({ ...selectedData, hierarchy: scope.hierarchy, campaigns: scope.campaigns });
+      if (requestedDetail) setSelected(requestedDetail);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to load call operations"); }
     finally { setLoading(false); }
   }
@@ -120,7 +131,15 @@ export default function CallsPage() {
     finally { setLoading(false); }
   }
 
-  useEffect(function () { if (user) loadCalls(); }, [user]);
+  useEffect(function () {
+    if (!user) return;
+    const timer = window.setTimeout(function () {
+      void loadCalls();
+    }, 0);
+    return function () { window.clearTimeout(timer); };
+    // Initial role-scoped load only; filters are applied explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   async function openDetail(executionId: string) {
     setDetailLoading(true); setMessage(null);

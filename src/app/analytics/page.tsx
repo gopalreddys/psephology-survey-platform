@@ -371,6 +371,9 @@ export default function AnalyticsPage() {
                               <span><Users size={14} />{campaign.campaignManagerName || "Manager not assigned"}</span>
                               <span><ShieldCheck size={14} />{campaign.programName || "Standalone Campaign"}</span>
                               <span><Gauge size={14} />{pct(campaign.callbackCoveragePct)} callbacks</span>
+                              <Link href={`/analytics/campaigns/${campaign.id}`}>
+                                Strategic Analysis <ChevronRight size={15} />
+                              </Link>
                               <Link href={`/campaigns/${campaign.id}/analysis`}>
                                 Compare Campaign Iterations <ChevronRight size={15} />
                               </Link>

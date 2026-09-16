@@ -16,6 +16,17 @@ The overview reports survey coverage and evidence completeness independently:
 - transcript coverage for connected calls;
 - structured response coverage for connected calls.
 
+Phase 1 strategic Campaign analysis adds:
+
+- a directional/demo validity banner;
+- comparable Iteration movement;
+- questionnaire answer and missing-data performance;
+- issue-priority coding;
+- candidate awareness and criterion-fit distributions;
+- party salience, perceived issue leadership and association visibility;
+- deterministic transcript themes with links back to stored call evidence;
+- evidence-qualified finding cards.
+
 Install on the API host:
 
 ```bash

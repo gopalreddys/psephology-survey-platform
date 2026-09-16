@@ -21,6 +21,10 @@ await copyFile(
   path.resolve(packageRoot, "../campaign-draft-privacy/campaign-visibility.repository.js"),
   path.join(runtimeRoot, "src/repositories/campaign-visibility.repository.js")
 );
+await copyFile(
+  path.resolve(packageRoot, "../campaign-comparative-analysis/campaign-analysis.repository.js"),
+  path.join(runtimeRoot, "src/repositories/campaign-analysis.repository.js")
+);
 
 let server = await readFile(serverPath, "utf8");
 const importAnchor = /import\s+votersRoutes\s+from\s+["']\.\/routes\/voters\.routes\.js["'];/m;

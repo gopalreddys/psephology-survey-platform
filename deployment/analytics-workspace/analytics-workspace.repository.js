@@ -1,5 +1,6 @@
 import { getDb } from "../db/postgres.js";
 import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js";
+import { getCampaignAnalysis } from "./campaign-analysis.repository.js";
 
 const ANALYTICS_ROLES = new Set([
   "SUPER_ADMIN",
@@ -23,6 +24,38 @@ const SUCCESS_STATUSES = [
   "SUCCESS_PULSE",
   "SUCCESS_COMPLETE",
   "SUCCESS_SUBSTANTIAL"
+];
+
+const TECHNICAL_VARIABLES = new Set([
+  "agent_code", "agent_style_context", "analytics_excluded", "attempt_cycle_id",
+  "demo_call_id", "iteration_id", "iteration_number", "knowledge_context",
+  "knowledge_packs", "max_probes", "preferred_language", "probe_context",
+  "probe_set", "questionnaire_code", "questionnaire_context", "research_context",
+  "run_contact_id", "run_id", "source", "study_id", "user_name", "voice_code",
+  "voter_id", "voter_profession", "voter_qualification"
+]);
+
+const MLC_QUESTION_CATALOG = [
+  { code: "Q_GRADUATE_ISSUE_PRIORITY", label: "Graduate issue priority", section: "ISSUES", required: true, keys: ["graduate_issue_priority", "issue_sentiment"] },
+  { code: "Q_MLC_ROLE_AWARENESS", label: "MLC role awareness", section: "INSTITUTION", required: true, keys: ["mlc_role_awareness"] },
+  { code: "Q_INCUMBENT_AWARENESS", label: "Incumbent awareness", section: "INSTITUTION", required: true, keys: ["incumbent_awareness"] },
+  { code: "Q_INCUMBENT_ASSESSMENT", label: "Incumbent assessment", section: "INSTITUTION", required: false, keys: ["incumbent_assessment"] },
+  { code: "Q_CANDIDATE_CRITERION", label: "Preferred candidate quality", section: "CANDIDATE", required: true, keys: ["candidate_criterion"] },
+  { code: "Q_ASSOCIATION_INFLUENCE", label: "Association influence", section: "GROUPS", required: false, keys: ["association_influence", "association_named"] },
+  { code: "Q_PARTY_SALIENCE_UNAIDED", label: "Unaided party salience", section: "PARTIES", required: true, keys: ["party_salience_unaided", "party_salience_reason"] },
+  { code: "Q_GROUP_ISSUE_LEADER_AIDED", label: "Perceived issue leader", section: "PARTIES", required: true, keys: ["perceived_issue_leader_aided"] },
+  { code: "Q_VEERESH_AWARENESS", label: "Veeresh awareness", section: "CANDIDATE", required: true, keys: ["veeresh_awareness", "veeresh_impression"] },
+  { code: "Q_VEERESH_CRITERION_FIT", label: "Veeresh criterion fit", section: "CANDIDATE", required: false, keys: ["veeresh_criterion_fit"] }
+];
+
+const TRANSCRIPT_THEMES = [
+  { key: "EMPLOYMENT", label: "Employment and jobs", pattern: /job|employment|unemploy|recruit|career|ఉద్యోగ/gi },
+  { key: "EDUCATION", label: "Education and universities", pattern: /education|college|university|student|teacher|fee|scholarship|విద్య/gi },
+  { key: "GRADUATE_REPRESENTATION", label: "Graduate representation", pattern: /graduate|mlc|represent|constituency|పట్టభద్ర/gi },
+  { key: "CANDIDATE", label: "Candidate awareness", pattern: /veeresh|kasani|వీరేశ్/gi },
+  { key: "PARTY", label: "Party landscape", pattern: /\bbrs\b|\bbjp\b|congress|communist|left part|political party/gi },
+  { key: "ASSOCIATIONS", label: "Associations and unions", pattern: /association|union|student wing|teacher wing|graduate group|సంఘ/gi },
+  { key: "CIVIC_SERVICES", label: "Civic services", pattern: /road|water|transport|municipal|infrastructure|traffic/gi }
 ];
 
 function number(value) {
@@ -305,6 +338,343 @@ export async function getAnalyticsWorkspace(actor) {
       responseCoveragePct: percentage(responses, connected)
     },
     campaigns,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+function labelFromKey(value) {
+  return String(value || "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function scalarText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (["number", "boolean"].includes(typeof value)) return String(value);
+  if (Array.isArray(value)) return value.map(scalarText).filter(Boolean).join(", ");
+  return "";
+}
+
+function validAnswer(value) {
+  const text = scalarText(value);
+  return Boolean(text && !/^(null|undefined|n\/a)$/i.test(text));
+}
+
+function distribution(records, key, classifier = null) {
+  const values = new Map();
+  for (const record of records) {
+    const raw = scalarText(record.response_variables?.[key]);
+    if (!raw) continue;
+    const display = classifier ? classifier(raw) : raw;
+    if (!display) continue;
+    const normalized = display.toLowerCase();
+    const current = values.get(normalized) || { value: display, respondents: 0 };
+    current.respondents += 1;
+    values.set(normalized, current);
+  }
+  const answered = Array.from(values.values()).reduce(
+    (total, item) => total + item.respondents,
+    0
+  );
+  return Array.from(values.values())
+    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value))
+    .slice(0, 12)
+    .map((item) => ({
+      ...item,
+      percentage: percentage(item.respondents, answered)
+    }));
+}
+
+function latestRespondents(records, iterationId) {
+  const respondents = new Map();
+  for (const record of records) {
+    if (record.iteration_id !== iterationId) continue;
+    const key = record.voter_id || record.call_id;
+    if (!respondents.has(key)) respondents.set(key, record);
+  }
+  return Array.from(respondents.values());
+}
+
+function questionnaireCatalog(records) {
+  const keys = new Set();
+  for (const record of records) {
+    for (const key of Object.keys(record.response_variables || {})) {
+      const normalized = key.toLowerCase().trim();
+      if (!TECHNICAL_VARIABLES.has(normalized)) keys.add(normalized);
+    }
+  }
+  const mlc = MLC_QUESTION_CATALOG.some((question) =>
+    question.keys.some((key) => keys.has(key))
+  );
+  if (mlc) return MLC_QUESTION_CATALOG;
+  return Array.from(keys).sort().map((key) => ({
+    code: key.toUpperCase(),
+    label: labelFromKey(key),
+    section: "RECORDED OUTPUTS",
+    required: false,
+    keys: [key]
+  }));
+}
+
+function questionPerformance(records) {
+  const catalog = questionnaireCatalog(records);
+  return catalog.map((question) => {
+    const answeredRecords = records.filter((record) =>
+      question.keys.some((key) => validAnswer(record.response_variables?.[key]))
+    );
+    const primaryKey = question.keys.find((key) =>
+      records.some((record) => validAnswer(record.response_variables?.[key]))
+    ) || question.keys[0];
+    const values = distribution(records, primaryKey);
+    const highCardinality = values.length > 8 || values.some((item) => item.value.length > 80);
+    return {
+      code: question.code,
+      label: question.label,
+      section: question.section,
+      required: question.required,
+      outputVariables: question.keys,
+      answered: answeredRecords.length,
+      missing: Math.max(records.length - answeredRecords.length, 0),
+      answeredPct: percentage(answeredRecords.length, records.length),
+      structured: !highCardinality,
+      distribution: highCardinality ? [] : values,
+      qualitativeAnswers: highCardinality
+        ? values.slice(0, 5).map((item) => item.value)
+        : []
+    };
+  });
+}
+
+function classifyIssue(value) {
+  const text = value.toLowerCase();
+  if (/job|employment|unemploy|recruit|career|ఉద్యోగ/.test(text)) return "Employment and jobs";
+  if (/education|college|university|student|teacher|fee|scholarship|విద్య/.test(text)) return "Education and universities";
+  if (/skill|training|internship/.test(text)) return "Skills and professional development";
+  if (/represent|voice|access|available|leadership/.test(text)) return "Representation and accessibility";
+  if (/road|water|transport|traffic|infrastructure/.test(text)) return "Civic services and infrastructure";
+  if (/not sure|don't know|do not know|none|no idea/.test(text)) return "No stated priority";
+  return "Other or uncoded issue";
+}
+
+function classifyAwareness(value) {
+  const text = value.toLowerCase();
+  if (/not heard|never heard|don't know|do not know|unaware|not familiar|nothing|no idea/.test(text)) {
+    return "Not previously aware";
+  }
+  if (/\byes\b|heard|know|aware|familiar|work|leader|candidate/.test(text)) {
+    return "Previously aware";
+  }
+  return "Unclear or qualitative awareness";
+}
+
+function transcriptText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(transcriptText).filter(Boolean).join(" ");
+  if (typeof value === "object") {
+    for (const key of ["text", "content", "message", "utterance", "transcript"]) {
+      if (typeof value[key] === "string") return value[key];
+    }
+    return Object.values(value).map(transcriptText).filter(Boolean).join(" ");
+  }
+  return "";
+}
+
+function safeSnippet(text, index) {
+  const start = Math.max(index - 90, 0);
+  const end = Math.min(index + 170, text.length);
+  return text.slice(start, end)
+    .replace(/\s+/g, " ")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email redacted]")
+    .replace(/\+?\d[\d\s-]{7,}\d/g, "[number redacted]")
+    .trim();
+}
+
+function transcriptThemes(records) {
+  return TRANSCRIPT_THEMES.map((theme) => {
+    const evidence = [];
+    let mentions = 0;
+    for (const record of records) {
+      const text = transcriptText(record.interaction_transcript);
+      if (!text) continue;
+      const matches = text.match(theme.pattern) || [];
+      if (!matches.length) continue;
+      mentions += matches.length;
+      if (evidence.length < 3) {
+        evidence.push({
+          executionId: record.execution_id,
+          iterationId: record.iteration_id,
+          iterationNumber: number(record.iteration_number),
+          snippet: safeSnippet(text, text.search(theme.pattern))
+        });
+      }
+    }
+    return {
+      key: theme.key,
+      label: theme.label,
+      respondents: records.filter((record) =>
+        Boolean(transcriptText(record.interaction_transcript).match(theme.pattern))
+      ).length,
+      mentions,
+      evidence
+    };
+  }).filter((theme) => theme.respondents > 0)
+    .sort((left, right) => right.respondents - left.respondents || right.mentions - left.mentions);
+}
+
+function strategicFindings(issuePriority, candidateAwareness, issueLeader, performance, respondentBase) {
+  const findings = [];
+  const topIssue = issuePriority[0];
+  const awareness = candidateAwareness.find((item) => item.value === "Previously aware");
+  const topLeader = issueLeader[0];
+  const weakQuestion = [...performance].sort((left, right) => left.answeredPct - right.answeredPct)[0];
+
+  if (topIssue) findings.push({
+    type: "ISSUE",
+    title: `${topIssue.value} leads the recorded issue priorities`,
+    evidence: `${topIssue.respondents} respondents · ${topIssue.percentage}% of coded issue answers`,
+    caution: "Open-text classification is directional and should be reviewed against transcript evidence."
+  });
+  if (awareness) findings.push({
+    type: "CANDIDATE",
+    title: `${awareness.percentage}% show some prior candidate awareness`,
+    evidence: `${awareness.respondents} of ${candidateAwareness.reduce((total, item) => total + item.respondents, 0)} classified awareness answers`,
+    caution: "Awareness does not imply positive support or vote intention."
+  });
+  if (topLeader) findings.push({
+    type: "PARTY",
+    title: `${topLeader.value} is the most frequently recorded aided issue leader`,
+    evidence: `${topLeader.respondents} respondents · ${topLeader.percentage}% of answered records`,
+    caution: "This is perceived issue leadership, not a vote-choice measure."
+  });
+  if (weakQuestion && weakQuestion.answeredPct < 80) findings.push({
+    type: "QUALITY",
+    title: `${weakQuestion.label} has the largest answer gap`,
+    evidence: `${weakQuestion.answered}/${respondentBase} respondents answered · ${weakQuestion.answeredPct}%`,
+    caution: "Review question wording, conditional logic and agent probing before the next Iteration."
+  });
+  return findings;
+}
+
+async function loadStrategicEvidence(db, iterationIds) {
+  if (!iterationIds.length) return [];
+  const result = await db.query(`
+    SELECT call_record.id AS call_id, call_record.attempt_id,
+      execution.id AS execution_id, call_record.iteration_id,
+      iteration.iteration_number, iteration.iteration_name,
+      call_record.voter_id, voter.is_demo_contact,
+      call_record.response_variables, call_record.interaction_transcript,
+      call_record.duration_seconds, call_record.updated_at
+    FROM calls call_record
+    JOIN program_iterations iteration ON iteration.id = call_record.iteration_id
+    LEFT JOIN voter_master voter ON voter.id = call_record.voter_id
+    LEFT JOIN LATERAL (
+      SELECT candidate.id
+      FROM call_executions candidate
+      WHERE candidate.provider_attempt_id = call_record.attempt_id
+      ORDER BY candidate.updated_at DESC NULLS LAST
+      LIMIT 1
+    ) execution ON TRUE
+    WHERE call_record.iteration_id = ANY($1::uuid[])
+      AND LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+    ORDER BY call_record.updated_at DESC NULLS LAST
+  `, [iterationIds]);
+  return result.rows;
+}
+
+export async function getCampaignStrategicAnalytics(campaignId, actor) {
+  const campaignAnalysis = await getCampaignAnalysis(campaignId, actor);
+  const db = await getDb();
+  const iterationIds = campaignAnalysis.iterations.map((iteration) => iteration.id);
+  const records = await loadStrategicEvidence(db, iterationIds);
+  const completed = campaignAnalysis.iterations.filter((iteration) => iteration.completed);
+  const latestIteration = completed.at(-1) || campaignAnalysis.iterations.at(-1) || null;
+  const latestRecords = latestIteration
+    ? latestRespondents(records, latestIteration.id)
+    : [];
+  const performance = questionPerformance(latestRecords);
+  const issuePriority = distribution(latestRecords, "graduate_issue_priority", classifyIssue);
+  const candidateAwareness = distribution(latestRecords, "veeresh_awareness", classifyAwareness);
+  const candidateFit = distribution(latestRecords, "veeresh_criterion_fit");
+  const partySalience = distribution(latestRecords, "party_salience_unaided");
+  const issueLeader = distribution(latestRecords, "perceived_issue_leader_aided");
+  const associations = distribution(latestRecords, "association_named");
+  const themes = transcriptThemes(latestRecords);
+  const demoRespondents = latestRecords.filter((record) => record.is_demo_contact).length;
+  const answeredQuestions = performance.filter((question) => question.answered > 0);
+  const averageAnswerCoveragePct = answeredQuestions.length
+    ? Number((answeredQuestions.reduce((total, question) => total + question.answeredPct, 0) / answeredQuestions.length).toFixed(1))
+    : 0;
+  const comparison = campaignAnalysis.comparison
+    ? {
+        previousIteration: campaignAnalysis.comparison.previousIteration,
+        latestIteration: campaignAnalysis.comparison.latestIteration,
+        movements: campaignAnalysis.comparison.questions
+          .filter((question) => question.comparable && question.largestShift)
+          .slice(0, 12)
+          .map((question) => ({
+            key: question.key,
+            label: question.label,
+            respondentBases: question.iterations.map((iteration) => ({
+              iterationId: iteration.iterationId,
+              respondents: iteration.totalRespondents
+            })),
+            largestShift: question.largestShift
+          }))
+      }
+    : null;
+
+  const warnings = [...campaignAnalysis.readiness.warnings];
+  if (latestRecords.length && demoRespondents === latestRecords.length) {
+    warnings.unshift("The selected Iteration contains only controlled demo respondents; all findings are directional demonstrations.");
+  }
+  if (!latestRecords.length) {
+    warnings.unshift("No connected respondent evidence is available for the latest Iteration.");
+  }
+
+  return {
+    campaign: campaignAnalysis.campaign,
+    validity: {
+      ...campaignAnalysis.readiness,
+      directionalOnly: true,
+      latestRespondentBase: latestRecords.length,
+      latestDemoRespondents: demoRespondents,
+      averageAnswerCoveragePct,
+      warnings: Array.from(new Set(warnings))
+    },
+    latestIteration,
+    comparison,
+    questionPerformance: performance,
+    issueAnalysis: {
+      priorities: issuePriority
+    },
+    candidateAnalysis: {
+      awareness: candidateAwareness,
+      criterionFit: candidateFit
+    },
+    partyAndInstitutionalAnalysis: {
+      unaidedPartySalience: partySalience,
+      aidedIssueLeader: issueLeader,
+      associations
+    },
+    transcriptAnalysis: {
+      transcriptRespondents: latestRecords.filter((record) =>
+        Boolean(transcriptText(record.interaction_transcript))
+      ).length,
+      themes
+    },
+    findings: strategicFindings(
+      issuePriority,
+      candidateAwareness,
+      issueLeader,
+      performance,
+      latestRecords.length
+    ),
     generatedAt: new Date().toISOString()
   };
 }

@@ -16,7 +16,12 @@ assert.match(repository, /callbackCoveragePct/);
 assert.match(repository, /transcriptCoveragePct/);
 assert.match(repository, /questionnaire_code/);
 assert.match(repository, /campaign\.status <> 'ARCHIVED'/);
+assert.match(repository, /getCampaignStrategicAnalytics/);
+assert.match(repository, /MLC_QUESTION_CATALOG/);
+assert.match(repository, /TRANSCRIPT_THEMES/);
+assert.match(repository, /directionalOnly: true/);
 assert.match(routes, /requireRole\(\["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"\]\)/);
 assert.match(routes, /"\/analytics"/);
+assert.match(routes, /"\/analytics\/campaigns\/:campaignId"/);
 
 console.log("Analytics workspace access and evidence tests passed.");
