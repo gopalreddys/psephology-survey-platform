@@ -37,6 +37,22 @@ sudo systemctl restart psephology-api.service
 
 Use the Admin **Voice Agents** page to synchronize deployment records or register every committed Agent App ID/version and outbound telephony configuration shown in Sarvam. A catalog entry is iteration-selectable only when it is active, outbound/both, categorized, and has both a connection id and outbound phone number. Campaign Managers have read-only access to this ready catalog; only Admins can synchronize, register, classify or disable agents.
 
+For manually registered Agent Apps, **Edit** lets an Admin update the display name, note and category in place. Changing the committed version, connection ID or outbound number instead registers a separate catalog entry and leaves the previous entry intact. It inherits the old entry's enabled setting, so editing a disabled agent does not silently enable it. App ID is fixed; register a separate Agent App for a different App ID. Existing iteration snapshots and Runs never change automatically. First commit the agent change in Sarvam, then update the platform catalog and explicitly select the new entry for a future iteration. Sarvam Deployment API entries remain provider-managed; edit them in Sarvam and use **Sync Deployments**.
+
+To install the edit endpoint on an already deployed API, pull the latest UI repository and run this from its root. The installer checks both existing API files against the known catalog version and makes backups; it stops without overwriting customized files.
+
+No database migration is required. Run `node deployment/voice-agent-catalog/test-voice-agent-edit.js` locally before installation if you want to repeat the edit-flow checks.
+
+```bash
+node deployment/voice-agent-catalog/install-voice-agent-edit.js /opt/sarvam-voice-analytics
+node --check /opt/sarvam-voice-analytics/src/repositories/voice-agents.repository.js
+node --check /opt/sarvam-voice-analytics/src/routes/voice-agents.routes.js
+sudo systemctl restart psephology-api.service
+curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/ready
+```
+
+Rebuild and deploy the Next.js UI separately for the **Edit** button to appear.
+
 Sarvam's documented Deployment API does not enumerate Agent Apps that exist only in the Build/Campaigns workflow. Those Agent Apps must be registered in the platform catalog using the values shown in Sarvam. This avoids depending on a private dashboard endpoint and allows multiple Agent Apps to coexist safely.
 
 The migration is deliberately re-runnable. Deployments installed before Agent App registration was added should copy the latest SQL and run the same migration runner again.
@@ -49,6 +65,7 @@ GET   /api/voice-agents?selectable=true
 POST  /api/voice-agents/sync
 POST  /api/voice-agents/register
 PATCH /api/voice-agents/:id
+PATCH /api/voice-agents/:id/config
 ```
 
 The runtime patch removes the legacy hardcoded App ID/version/connection/phone values and resolves the exact iteration snapshot for every Run contact.

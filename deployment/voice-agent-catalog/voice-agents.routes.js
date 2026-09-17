@@ -1,7 +1,7 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
-import { classifyVoiceAgent, listVoiceAgents, registerVoiceAgent, synchronizeVoiceAgents } from "../repositories/voice-agents.repository.js";
+import { classifyVoiceAgent, editManualVoiceAgent, listVoiceAgents, registerVoiceAgent, synchronizeVoiceAgents } from "../repositories/voice-agents.repository.js";
 
 const router = express.Router();
 const adminRoles = ["SUPER_ADMIN", "ADMIN"];
@@ -33,6 +33,14 @@ router.post("/voice-agents/register", requireAuth, requireRole(adminRoles), asyn
     return res.status(201).json(await registerVoiceAgent(req.body || {}, req.platformUser));
   } catch (error) {
     return sendError(res, error, "Unable to register Sarvam Agent App");
+  }
+});
+
+router.patch("/voice-agents/:id/config", requireAuth, requireRole(adminRoles), async function (req, res) {
+  try {
+    return res.json(await editManualVoiceAgent(req.params.id, req.body || {}, req.platformUser));
+  } catch (error) {
+    return sendError(res, error, "Unable to edit Sarvam Agent App");
   }
 });
 

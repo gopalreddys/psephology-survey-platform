@@ -147,6 +147,82 @@ export async function registerVoiceAgent(input, actor) {
   return result.rows[0];
 }
 
+export async function editManualVoiceAgent(id, input, actor) {
+  if (!["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
+    throw errorWithStatus("Only Admin and Super Admin users can edit Sarvam agents", 403);
+  }
+  const providerName = String(input.providerName || "").trim();
+  const appId = String(input.appId || "").trim();
+  const appVersion = Number(input.appVersion);
+  const connectionId = String(input.connectionId || "").trim();
+  const phoneNumber = String(input.outboundPhoneNumber || "").replace(/[\s()-]/g, "");
+  const category = String(input.usageCategory || "").trim().toUpperCase();
+  const description = String(input.description || "").trim() || null;
+  if (!providerName || !appId || !Number.isInteger(appVersion) || appVersion < 1 || !connectionId || !phoneNumber) {
+    throw errorWithStatus("Agent name, App ID, committed version, connection ID and outbound phone number are required", 400);
+  }
+  if (!CATEGORIES.has(category)) throw errorWithStatus("Voice-agent category is invalid", 400);
+  if (!/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
+    throw errorWithStatus("Outbound phone number must use E.164 format, for example +918065356536", 400);
+  }
+
+  const db = await getDb();
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const sourceResult = await client.query(
+      "SELECT * FROM sarvam_voice_agents WHERE id = $1 FOR UPDATE", [id]
+    );
+    if (!sourceResult.rowCount) throw errorWithStatus("Voice agent not found", 404);
+    const source = sourceResult.rows[0];
+    if (source.catalog_source !== "MANUAL_AGENT_APP") {
+      throw errorWithStatus("Synced deployments must be edited in Sarvam, then synchronized", 409);
+    }
+    if (appId !== source.app_id) {
+      throw errorWithStatus("App ID cannot be changed. Register a separate Agent App instead", 400);
+    }
+
+    const configChanged = appVersion !== Number(source.app_version)
+      || connectionId !== source.connection_id
+      || phoneNumber !== source.outbound_phone_number;
+    let result;
+    if (!configChanged) {
+      result = await client.query(`
+        UPDATE sarvam_voice_agents
+        SET provider_name = $2, description = $3, usage_category = $4,
+          categorized_by_user_id = $5, categorized_at = NOW(), updated_at = NOW()
+        WHERE id = $1 RETURNING *
+      `, [id, providerName, description, category, actor.id]);
+    } else {
+      const fingerprint = crypto.createHash("sha256")
+        .update(`${appId}|${appVersion}|${connectionId}|${phoneNumber}`)
+        .digest("hex").slice(0, 32);
+      result = await client.query(`
+        INSERT INTO sarvam_voice_agents (
+          provider_deployment_id, app_id, app_version, provider_name, description,
+          channel_direction, provider_status, connection_id, outbound_phone_number,
+          catalog_source, usage_category, is_enabled, provider_payload,
+          categorized_by_user_id, categorized_at, last_synced_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,'outbound','active',$6,$7,'MANUAL_AGENT_APP',$8,$9,$10::jsonb,$11,NOW(),NOW(),NOW())
+        ON CONFLICT (provider_deployment_id) DO NOTHING
+        RETURNING *
+      `, [`MANUAL:${fingerprint}`, appId, appVersion, providerName, description,
+        connectionId, phoneNumber, category, source.is_enabled,
+        JSON.stringify({ catalog_source: "MANUAL_AGENT_APP", previous_catalog_id: source.id }), actor.id]);
+      if (!result.rowCount) {
+        throw errorWithStatus("This App version and connection are already registered. Select the existing catalog entry", 409);
+      }
+    }
+    await client.query("COMMIT");
+    return { agent: result.rows[0], createdVersion: configChanged };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function classifyVoiceAgent(id, input, actor) {
   if (!["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
     throw errorWithStatus("Only Admin and Super Admin users can classify voice agents", 403);

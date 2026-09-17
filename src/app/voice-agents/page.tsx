@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, CheckCircle2, CloudDownload, PhoneCall, Plus, ShieldCheck, Tags, X } from "lucide-react";
+import { Bot, CheckCircle2, CloudDownload, Pencil, PhoneCall, Plus, ShieldCheck, Tags, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -46,6 +46,7 @@ export default function VoiceAgentsPage() {
   const [syncing, setSyncing] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<VoiceAgent | null>(null);
   const [registering, setRegistering] = useState(false);
   const [registration, setRegistration] = useState(emptyRegistration);
   const [message, setMessage] = useState<string | null>(null);
@@ -76,6 +77,35 @@ export default function VoiceAgentsPage() {
     };
   }, [agents]);
 
+  function startRegistration() {
+    setEditingAgent(null);
+    setRegistration(emptyRegistration);
+    setShowRegistration(true);
+    setMessage(null);
+  }
+
+  function startEditing(agent: VoiceAgent) {
+    setEditingAgent(agent);
+    setRegistration({
+      providerName: agent.provider_name || "",
+      appId: agent.app_id,
+      appVersion: String(agent.app_version),
+      connectionId: agent.connection_id || "",
+      outboundPhoneNumber: agent.outbound_phone_number || "",
+      usageCategory: agent.usage_category || "",
+      description: agent.description || ""
+    });
+    setShowRegistration(true);
+    setMessage(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function closeEditor() {
+    setShowRegistration(false);
+    setEditingAgent(null);
+    setRegistration(emptyRegistration);
+  }
+
   async function synchronize() {
     setSyncing(true); setMessage(null);
     try {
@@ -93,24 +123,34 @@ export default function VoiceAgentsPage() {
     }
   }
 
-  async function registerAgent(event: React.FormEvent<HTMLFormElement>) {
+  async function saveAgent(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setRegistering(true); setMessage(null);
     try {
-      const created = await apiFetch("/api/voice-agents/register", {
-        method: "POST",
+      const result = await apiFetch(editingAgent
+        ? `/api/voice-agents/${editingAgent.id}/config`
+        : "/api/voice-agents/register", {
+        method: editingAgent ? "PATCH" : "POST",
         body: JSON.stringify({ ...registration, appVersion: Number(registration.appVersion) })
       });
-      setAgents(function (current) {
-        const next = current.filter(function (agent) { return agent.id !== created.id; });
-        return [{ ...created, is_selectable: true }, ...next];
-      });
-      setRegistration(emptyRegistration);
+      const saved = editingAgent ? result.agent : result;
+      const successMessage = editingAgent
+        ? result.createdVersion
+          ? `${saved.provider_name} version ${saved.app_version} was added as a separate catalog entry. Existing iterations remain on their saved agent version. Disable the older entry if it should no longer be selectable for new iterations.`
+          : `${saved.provider_name} details updated. Existing iteration snapshots remain unchanged.`
+        : `${saved.provider_name} registered and ready for iteration assignment.`;
       setTone("success");
-      setMessage(`${created.provider_name} registered and ready for iteration assignment. You can register the next Sarvam Agent App below.`);
+      setMessage(successMessage);
+      closeEditor();
+      try {
+        setAgents(await apiFetch("/api/voice-agents"));
+      } catch {
+        setTone("info");
+        setMessage(`${successMessage} Refresh the page to update the catalog list.`);
+      }
     } catch (error) {
       setTone("error");
-      setMessage(error instanceof Error ? error.message : "Unable to register Sarvam Agent App");
+      setMessage(error instanceof Error ? error.message : "Unable to save Sarvam Agent App");
     } finally {
       setRegistering(false);
     }
@@ -150,22 +190,22 @@ export default function VoiceAgentsPage() {
   return <AppShell><div className={styles.page}>
     <header className={styles.header}>
       <div><span>AI CONVERSATION OPERATIONS</span><h1>Voice Agents</h1><p>Maintain every approved Sarvam Agent App, committed version and outbound connection that Campaign Managers may select for an iteration.</p></div>
-      <div className={styles.headerActions}><button type="button" className={styles.secondaryAction} onClick={function () { setShowRegistration(function (value) { return !value; }); }}><Plus size={17} />Register Agent App</button><button type="button" onClick={synchronize} disabled={syncing}><CloudDownload size={17} />{syncing ? "Synchronizing…" : "Sync Deployments"}</button></div>
+      <div className={styles.headerActions}><button type="button" className={styles.secondaryAction} onClick={startRegistration}><Plus size={17} />Register Agent App</button><button type="button" onClick={synchronize} disabled={syncing}><CloudDownload size={17} />{syncing ? "Synchronizing…" : "Sync Deployments"}</button></div>
     </header>
 
     {message && <FeedbackMessage message={message} tone={tone} />}
 
     {showRegistration && <section className={styles.registrationPanel}>
-      <div className={styles.registrationHeader}><div><span>OUTBOUND AGENT APP</span><h2>Register callable Sarvam configuration</h2><p>Copy these values from the committed Sarvam agent and its outbound telephony connection.</p></div><button type="button" aria-label="Close registration" onClick={function () { setShowRegistration(false); }}><X size={18} /></button></div>
-      <form onSubmit={registerAgent} className={styles.registrationForm}>
+      <div className={styles.registrationHeader}><div><span>OUTBOUND AGENT APP</span><h2>{editingAgent ? `Edit ${editingAgent.provider_name || editingAgent.app_id}` : "Register callable Sarvam configuration"}</h2><p>{editingAgent ? "Update the catalog after committing the change in Sarvam. A new version or outbound connection creates a separate entry; existing iterations keep their original snapshot." : "Copy these values from the committed Sarvam agent and its outbound telephony connection."}</p></div><button type="button" aria-label="Close agent form" onClick={closeEditor}><X size={18} /></button></div>
+      <form onSubmit={saveAgent} className={styles.registrationForm}>
         <Field label="Agent display name *"><input value={registration.providerName} onChange={function (event) { setRegistration({ ...registration, providerName: event.target.value }); }} placeholder="Telangana Urban Male Agent" required /></Field>
         <Field label="Audience category *"><select value={registration.usageCategory} onChange={function (event) { setRegistration({ ...registration, usageCategory: event.target.value as Category | "" }); }} required><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></Field>
-        <Field label="Sarvam Agent App ID *"><input value={registration.appId} onChange={function (event) { setRegistration({ ...registration, appId: event.target.value }); }} placeholder="Conversatio-…" required /></Field>
+        <Field label="Sarvam Agent App ID *"><input value={registration.appId} onChange={function (event) { setRegistration({ ...registration, appId: event.target.value }); }} placeholder="Conversatio-…" readOnly={Boolean(editingAgent)} required /></Field>
         <Field label="Committed version *"><input type="number" min="1" step="1" value={registration.appVersion} onChange={function (event) { setRegistration({ ...registration, appVersion: event.target.value }); }} placeholder="9" required /></Field>
         <Field label="Connection ID *"><input value={registration.connectionId} onChange={function (event) { setRegistration({ ...registration, connectionId: event.target.value }); }} placeholder="Exotel-Sarv-…" required /></Field>
         <Field label="Outbound phone number *"><input value={registration.outboundPhoneNumber} onChange={function (event) { setRegistration({ ...registration, outboundPhoneNumber: event.target.value }); }} placeholder="+9180…" required /></Field>
         <Field label="Operational note"><input value={registration.description} onChange={function (event) { setRegistration({ ...registration, description: event.target.value }); }} placeholder="Telugu urban research voice" /></Field>
-        <div className={styles.registrationFooter}><span>Register each Sarvam Agent App once. Saving makes it selectable for new iterations.</span><button type="submit" disabled={registering}>{registering ? "Registering…" : "Register Agent"}</button></div>
+        <div className={styles.registrationFooter}><span>{editingAgent ? "App ID is fixed. Version and connection changes never retarget existing iterations or runs." : "Register each Sarvam Agent App once. Saving makes it selectable for new iterations."}</span><div className={styles.formActions}><button type="button" className={styles.cancelButton} onClick={closeEditor}>Cancel</button><button type="submit" disabled={registering}>{registering ? "Saving…" : editingAgent ? "Save Agent" : "Register Agent"}</button></div></div>
       </form>
     </section>}
 
@@ -178,7 +218,7 @@ export default function VoiceAgentsPage() {
 
     <section className={styles.panel}>
       <div className={styles.panelHeader}><div><span>APPROVED SARVAM CATALOG</span><h2>Available voice agents</h2><p>Only active outbound agents with a category and complete telephony configuration appear during iteration creation.</p></div><strong>{agents.length} agents</strong></div>
-      {loading ? <div className={styles.empty}>Loading voice-agent catalog…</div> : !agents.length ? <div className={styles.empty}><Bot size={28} /><strong>No callable Sarvam agents registered</strong><span>Register the Agent App ID, committed version and outbound connection used for calling.</span><button type="button" onClick={function () { setShowRegistration(true); }}>Register first agent</button></div> : <div className={styles.list}>
+      {loading ? <div className={styles.empty}>Loading voice-agent catalog…</div> : !agents.length ? <div className={styles.empty}><Bot size={28} /><strong>No callable Sarvam agents registered</strong><span>Register the Agent App ID, committed version and outbound connection used for calling.</span><button type="button" onClick={startRegistration}>Register first agent</button></div> : <div className={styles.list}>
         {agents.map(function (agent) {
           return <article key={agent.id} className={agent.is_selectable ? styles.readyCard : styles.agentCard}>
             <div className={styles.agentIcon}><Bot size={20} /></div>
@@ -187,6 +227,7 @@ export default function VoiceAgentsPage() {
             <label className={styles.category}><span>Audience category</span><select value={agent.usage_category || ""} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { usageCategory: event.target.value as Category | "" }); }}><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></label>
             <label className={styles.toggle}><input type="checkbox" checked={agent.is_enabled} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { isEnabled: event.target.checked }); }} /><span>Enabled</span></label>
             <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Iteration ready" : "Not selectable"}</em>
+            {agent.catalog_source === "MANUAL_AGENT_APP" && <button type="button" className={styles.editButton} onClick={function () { startEditing(agent); }}><Pencil size={15} />Edit</button>}
           </article>;
         })}
       </div>}
