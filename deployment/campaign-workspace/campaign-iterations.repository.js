@@ -180,9 +180,12 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
     const numberResult = await client.query(`
       SELECT COALESCE(MAX(iteration_number), 0) + 1 AS next_number
       FROM program_iterations
-      WHERE study_id = $1
-    `, [campaign.program_id]);
+      WHERE campaign_id = $1
+    `, [campaignId]);
     const iterationNumber = Number(numberResult.rows[0].next_number);
+    if (iterationNumber > 3) {
+      throw errorWithStatus("This campaign already has three iterations", 409);
+    }
     const defaultObjective = {
       BASE: "Establish the voter thought baseline.",
       CAMPAIGN: "Measure campaign-stage awareness, concerns, and candidate and party perceptions without influencing respondents.",
@@ -194,8 +197,8 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
         study_id, iteration_number, iteration_name, research_phase, objective,
         sample_design_type, target_sample_size, planned_start_date, planned_end_date,
         questionnaire_id, questionnaire_snapshot, agent_config, calling_profile, status, created_by,
-        voice_agent_id, voice_agent_snapshot
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'{}'::jsonb,'{}'::jsonb,'DRAFT',$12,$13,$14::jsonb)
+        voice_agent_id, voice_agent_snapshot, campaign_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'{}'::jsonb,'{}'::jsonb,'DRAFT',$12,$13,$14::jsonb,$15)
       RETURNING *
     `, [
       campaign.program_id,
@@ -213,7 +216,8 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
         status_at_selection: questionnaire.status }),
       createdBy,
       voiceAgent.id,
-      JSON.stringify(voiceAgentSnapshot(voiceAgent))
+      JSON.stringify(voiceAgentSnapshot(voiceAgent)),
+      campaignId
     ]);
 
     const iteration = iterationResult.rows[0];
