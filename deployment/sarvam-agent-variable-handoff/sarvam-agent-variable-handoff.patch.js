@@ -19,6 +19,13 @@ const REGISTERED_INPUT_VARIABLES = [
 
 const BODY_PATTERN = /const body\s*=\s*\{[\s\S]*?app_id\s*:\s*appId[\s\S]*?user_phone_number\s*:\s*\n?\s*userPhoneNumber[\s\S]*?\n\s*\};/m;
 
+const LEGACY_NORMALIZATION_PATTERN = new RegExp(
+  `\\s*/\\* SARVAM_AGENT_VARIABLE_HANDOFF_V(?:1|2):[^*]*\\*/` +
+  `\\s*const normalizedAgentVariables\\s*=\\s*Object\\.fromEntries\\(` +
+  `[\\s\\S]*?\\n\\s*\\);\\s*(?=const body\\s*=)`,
+  "m"
+);
+
 const CORRECT_BODY = `/* ${MARKER}: submit only variables registered on the committed Sarvam agent. */
   const registeredInputVariables = new Set(${JSON.stringify(
     REGISTERED_INPUT_VARIABLES,
@@ -119,12 +126,16 @@ export function patchAgentVariableHandoff(source) {
     return { source, changed: false };
   }
 
+  const sourceWithoutLegacyNormalization = source.replace(
+    LEGACY_NORMALIZATION_PATTERN,
+    "\n\n"
+  );
   const sourceWithoutLegacyMarker = LEGACY_MARKERS.reduce(
     (current, marker) => current.replace(
       new RegExp(`\\s*/\\* ${marker}:[^*]*\\*/\\n`, "g"),
       "\n"
     ),
-    source
+    sourceWithoutLegacyNormalization
   );
   const matches = sourceWithoutLegacyMarker.match(
     new RegExp(BODY_PATTERN.source, "gm")

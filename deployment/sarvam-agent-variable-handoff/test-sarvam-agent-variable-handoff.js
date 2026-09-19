@@ -101,6 +101,10 @@ const upgradedV2Client = first.source
 const upgradedFromV2 = patchAgentVariableHandoff(upgradedV2Client);
 assert.equal(upgradedFromV2.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(upgradedFromV2.source), true);
+assert.equal(
+  upgradedFromV2.source.match(/const normalizedAgentVariables/g)?.length,
+  1
+);
 
 const preparedVariables = {
   user_name: "Sathish",
