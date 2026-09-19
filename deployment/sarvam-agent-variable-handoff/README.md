@@ -6,11 +6,15 @@ they were nested under `user_config`, causing the `load_runtime_context`
 on-start hook to receive an empty `run_contact_id` and preventing the correct
 voter name from being loaded.
 
-The V2 patch also removes `null` and `undefined` values before submission.
-Sarvam validates every supplied agent-variable value, so optional database
-fields must be omitted rather than sent as JSON `null`. Provider validation
-errors now retain only safe field locations and messages, making a future 422
-diagnosable without persisting phone numbers or request values.
+The V3 patch also removes `null` and `undefined` values and restricts the
+outbound payload to the ten input variables registered on
+`Political_Agent_Base`: `agent_style_context`, `knowledge_context`,
+`preferred_language`, `probe_context`, `questionnaire_context`,
+`research_context`, `run_contact_id`, `run_id`, `user_name`, and `voter_id`.
+Sarvam rejects the entire request when `agent_variables` contains unregistered
+platform-internal fields, even if the registered values are correct. Provider
+validation errors retain only safe field locations and messages, making a
+future 422 diagnosable without persisting phone numbers or request values.
 
 The change does not place a call. It preserves a timestamped copy of the
 previous client and is safe to run repeatedly.
@@ -44,7 +48,9 @@ API log must show a non-empty `run_contact_id`, and the completed callback must
 retain the intended `user_name`.
 
 If a provider-rejected execution already occupies the contact's idempotency
-key, preview the guarded recovery first and then apply it:
+key, preview the guarded recovery first and then apply it. Use either the exact
+execution ID or a Run ID. Run selection inspects only the newest execution and
+still applies every untouched-422 safety check:
 
 ```bash
 node deployment/sarvam-agent-variable-handoff/recover-provider-rejected-execution.js \
@@ -52,6 +58,13 @@ node deployment/sarvam-agent-variable-handoff/recover-provider-rejected-executio
 
 node deployment/sarvam-agent-variable-handoff/recover-provider-rejected-execution.js \
   --execution-id=<execution-uuid> \
+  --apply
+
+node deployment/sarvam-agent-variable-handoff/recover-provider-rejected-execution.js \
+  --run-id=<run-uuid>
+
+node deployment/sarvam-agent-variable-handoff/recover-provider-rejected-execution.js \
+  --run-id=<run-uuid> \
   --apply
 ```
 

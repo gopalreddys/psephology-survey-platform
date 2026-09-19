@@ -52,7 +52,8 @@ const first = patchAgentVariableHandoff(legacyClient);
 assert.equal(first.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(first.source), true);
 assert.match(first.source, /agent_variables:\s*normalizedAgentVariables/);
-assert.match(first.source, /value !== null && value !== undefined/);
+assert.match(first.source, /registeredInputVariables\.has\(key\)/);
+assert.match(first.source, /value !== null\s*&&\s*value !== undefined/);
 assert.match(first.source, /const providerDetail =/);
 assert.doesNotMatch(
   first.source.match(/user_config\s*:\s*\{[\s\S]*?\n\s*\}/m)[0],
@@ -73,7 +74,7 @@ assert.throws(
 );
 
 const upgradedV1Client = first.source
-  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V2", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V3", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
   .replace(
     /const normalizedAgentVariables =[\s\S]*?\n\s*const body =/m,
     "const body ="
@@ -87,14 +88,48 @@ const upgraded = patchAgentVariableHandoff(upgradedV1Client);
 assert.equal(upgraded.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(upgraded.source), true);
 
+const upgradedV2Client = first.source
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V3", "SARVAM_AGENT_VARIABLE_HANDOFF_V2")
+  .replace(
+    /\s*const registeredInputVariables = new Set\([\s\S]*?\);\n\n/m,
+    "\n"
+  )
+  .replace(
+    /\.filter\(\(\[key, value\]\) =>[\s\S]*?value !== undefined\n\s*\)/m,
+    ".filter(([, value]) => value !== null && value !== undefined)"
+  );
+const upgradedFromV2 = patchAgentVariableHandoff(upgradedV2Client);
+assert.equal(upgradedFromV2.changed, true);
+assert.equal(hasCorrectAgentVariableHandoff(upgradedFromV2.source), true);
+
 const preparedVariables = {
   user_name: "Sathish",
   run_contact_id: "0d3f16b8-0cab-4452-b0cc-3171ac21450d",
-  agent_code: null
+  questionnaire_context: "Ask the configured neutral research questions.",
+  agent_code: "INTERNAL_ONLY",
+  iteration_id: "internal-iteration-id",
+  voice_code: null
 };
+const registeredInputVariables = new Set([
+  "agent_style_context",
+  "knowledge_context",
+  "preferred_language",
+  "probe_context",
+  "questionnaire_context",
+  "research_context",
+  "run_contact_id",
+  "run_id",
+  "user_name",
+  "voter_id"
+]);
+assert.equal(registeredInputVariables.size, 10);
 const normalizedPreparedVariables = Object.fromEntries(
   Object.entries(preparedVariables)
-    .filter(([, value]) => value !== null && value !== undefined)
+    .filter(([key, value]) =>
+      registeredInputVariables.has(key) &&
+      value !== null &&
+      value !== undefined
+    )
     .map(([key, value]) => [
       key,
       typeof value === "string" ? value : JSON.stringify(value)
@@ -122,5 +157,10 @@ assert.equal(
 );
 assert.equal("agent_variables" in requestBody.user_config, false);
 assert.equal("agent_code" in requestBody.app_config.agent_variables, false);
+assert.equal("iteration_id" in requestBody.app_config.agent_variables, false);
+assert.equal(
+  requestBody.app_config.agent_variables.questionnaire_context,
+  "Ask the configured neutral research questions."
+);
 
 console.log("Sarvam agent-variable handoff tests passed.");

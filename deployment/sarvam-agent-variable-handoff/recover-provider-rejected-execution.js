@@ -4,17 +4,23 @@ import { pathToFileURL } from "node:url";
 const executionArgument = process.argv.find((value) =>
   value.startsWith("--execution-id=")
 );
+const runArgument = process.argv.find((value) =>
+  value.startsWith("--run-id=")
+);
 const runtimeArgument = process.argv.find((value) =>
   value.startsWith("--runtime-root=")
 );
 const apply = process.argv.includes("--apply");
 const executionId = executionArgument?.split("=")[1];
+const runId = runArgument?.split("=")[1];
 const runtimeRoot = path.resolve(
   runtimeArgument?.split("=")[1] || "/opt/sarvam-voice-analytics"
 );
 
-if (!executionId) {
-  throw new Error("--execution-id=<uuid> is required");
+if (Boolean(executionId) === Boolean(runId)) {
+  throw new Error(
+    "Provide exactly one selector: --execution-id=<uuid> or --run-id=<uuid>"
+  );
 }
 
 const databaseModule = pathToFileURL(
@@ -26,6 +32,12 @@ const db = await pool.connect();
 
 try {
   await db.query("BEGIN");
+  const candidateWhere = executionId
+    ? "execution.id = $1"
+    : "contact.run_id = $1";
+  const candidateOrder = executionId
+    ? ""
+    : "ORDER BY execution.created_at DESC, execution.id DESC LIMIT 1";
   const candidate = await db.query(
     `
       SELECT
@@ -36,6 +48,7 @@ try {
         execution.provider_attempt_id,
         execution.callback_received_at,
         contact.id AS run_contact_id,
+        contact.run_id,
         contact.attempt_count,
         contact.attempt_status,
         contact.final_status,
@@ -45,14 +58,19 @@ try {
         ON contact.id = execution.run_contact_id
       JOIN voter_master voter
         ON voter.id = execution.voter_id
-      WHERE execution.id = $1
+      WHERE ${candidateWhere}
+      ${candidateOrder}
       FOR UPDATE OF execution, contact
     `,
-    [executionId]
+    [executionId || runId]
   );
 
   if (!candidate.rowCount) {
-    throw new Error(`Execution not found: ${executionId}`);
+    throw new Error(
+      executionId
+        ? `Execution not found: ${executionId}`
+        : `No execution found for Run: ${runId}`
+    );
   }
 
   const row = candidate.rows[0];
