@@ -112,7 +112,7 @@ try {
         AND callback_received_at IS NULL
       RETURNING id, execution_key, status
     `,
-    [executionId, archivedExecutionKey]
+    [row.execution_id, archivedExecutionKey]
   );
 
   if (update.rowCount !== 1) {
