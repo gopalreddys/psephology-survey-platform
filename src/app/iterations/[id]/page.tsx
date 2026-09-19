@@ -624,13 +624,16 @@ export default function IterationPage() {
   }
 
 
-  async function launchPendingCalls() {
+  async function launchPendingCalls(requestedCount?: number) {
     if (!launchPreview || launchPreview.items.length === 0) {
       return;
     }
 
     const run = launchPreview.run;
-    const launchCount = launchPreview.items.length;
+    const launchCount = Math.min(
+      Math.max(Number(requestedCount) || launchPreview.items.length, 1),
+      launchPreview.items.length
+    );
     const confirmed = window.confirm(
       `Submit ${launchCount} approved demo calls from "${run.run_name || `Run ${run.run_number}`}"? Only the voters shown in the preview will be eligible.`
     );
@@ -1641,11 +1644,28 @@ export default function IterationPage() {
                                     Only approved demo contacts can pass the server-side launch check.
                                   </span>
 
+                                  {launchPreview.items.length > 1 && (
+                                    <button
+                                      type="button"
+                                      className="iteration-analysis-button"
+                                      disabled={launchingRunId === run.id}
+                                      onClick={function () {
+                                        void launchPendingCalls(1);
+                                      }}
+                                      title="Submit only the first voter shown so the call configuration can be validated before the remaining batch."
+                                    >
+                                      <PhoneCall size={15} />
+                                      Launch 1 Test Call
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
                                     className="run-submit-button"
                                     disabled={launchingRunId === run.id}
-                                    onClick={launchPendingCalls}
+                                    onClick={function () {
+                                      void launchPendingCalls();
+                                    }}
                                   >
                                     <PhoneCall size={15} />
                                     {launchingRunId === run.id
