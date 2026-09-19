@@ -32,6 +32,18 @@ export async function createInstantOutboundCall({
     }
   };
 
+  const response = { ok: false, status: 422 };
+  const responseBody = {
+    detail: [{ loc: ["body", "app_config"], msg: "invalid" }]
+  };
+  if (!response.ok) {
+    const error = new Error(
+      \`Sarvam Instant Outbound returned \${response.status}\`
+    );
+    error.body = responseBody;
+    throw error;
+  }
+
   return body;
 }
 `;
@@ -39,10 +51,9 @@ export async function createInstantOutboundCall({
 const first = patchAgentVariableHandoff(legacyClient);
 assert.equal(first.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(first.source), true);
-assert.match(
-  first.source,
-  /app_config\s*:\s*\{[\s\S]*?agent_variables:\s*agentVariables/
-);
+assert.match(first.source, /agent_variables:\s*normalizedAgentVariables/);
+assert.match(first.source, /value !== null && value !== undefined/);
+assert.match(first.source, /const providerDetail =/);
 assert.doesNotMatch(
   first.source.match(/user_config\s*:\s*\{[\s\S]*?\n\s*\}/m)[0],
   /agent_variables/
@@ -61,10 +72,34 @@ assert.throws(
   /Expected exactly one/
 );
 
+const upgradedV1Client = first.source
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V2", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
+  .replace(
+    /const normalizedAgentVariables =[\s\S]*?\n\s*const body =/m,
+    "const body ="
+  )
+  .replace("agent_variables: normalizedAgentVariables", "agent_variables: agentVariables")
+  .replace(
+    /const providerDetail =[\s\S]*?\n\s*const error =\s*new Error\([\s\S]*?\n\s*\);/m,
+    "const error = new Error(\n          `Sarvam Instant Outbound returned ${response.status}`\n        );"
+  );
+const upgraded = patchAgentVariableHandoff(upgradedV1Client);
+assert.equal(upgraded.changed, true);
+assert.equal(hasCorrectAgentVariableHandoff(upgraded.source), true);
+
 const preparedVariables = {
   user_name: "Sathish",
-  run_contact_id: "0d3f16b8-0cab-4452-b0cc-3171ac21450d"
+  run_contact_id: "0d3f16b8-0cab-4452-b0cc-3171ac21450d",
+  agent_code: null
 };
+const normalizedPreparedVariables = Object.fromEntries(
+  Object.entries(preparedVariables)
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([key, value]) => [
+      key,
+      typeof value === "string" ? value : JSON.stringify(value)
+    ])
+);
 const requestBody = {
   app_config: {
     app_id: "Political-A-b26ad56c-c4ae",
@@ -73,7 +108,7 @@ const requestBody = {
       connection_id: "ee3407f4-85-8805a44f-a822",
       agent_phone_number: "+918065356536"
     },
-    agent_variables: preparedVariables
+    agent_variables: normalizedPreparedVariables
   },
   user_config: {
     user_phone_number: "+919999999999"
@@ -86,5 +121,6 @@ assert.equal(
   "0d3f16b8-0cab-4452-b0cc-3171ac21450d"
 );
 assert.equal("agent_variables" in requestBody.user_config, false);
+assert.equal("agent_code" in requestBody.app_config.agent_variables, false);
 
 console.log("Sarvam agent-variable handoff tests passed.");

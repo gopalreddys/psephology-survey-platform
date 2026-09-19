@@ -1,8 +1,20 @@
-const MARKER = "SARVAM_AGENT_VARIABLE_HANDOFF_V1";
+const MARKER = "SARVAM_AGENT_VARIABLE_HANDOFF_V2";
+const LEGACY_MARKER = "SARVAM_AGENT_VARIABLE_HANDOFF_V1";
 
 const BODY_PATTERN = /const body\s*=\s*\{[\s\S]*?app_id\s*:\s*appId[\s\S]*?user_phone_number\s*:\s*\n?\s*userPhoneNumber[\s\S]*?\n\s*\};/m;
 
-const CORRECT_BODY = `/* ${MARKER}: instant-outbound variables belong to app_config. */
+const CORRECT_BODY = `/* ${MARKER}: instant-outbound variables belong to app_config and must not contain null values. */
+  const normalizedAgentVariables = Object.fromEntries(
+    Object.entries(agentVariables || {})
+      .filter(([, value]) => value !== null && value !== undefined)
+      .map(([key, value]) => [
+        key,
+        typeof value === "string"
+          ? value
+          : JSON.stringify(value)
+      ])
+  );
+
   const body = {
     app_config: {
       app_id: appId,
@@ -11,15 +23,45 @@ const CORRECT_BODY = `/* ${MARKER}: instant-outbound variables belong to app_con
         connection_id: connectionId,
         agent_phone_number: agentPhoneNumber
       },
-      agent_variables: agentVariables
+      agent_variables: normalizedAgentVariables
     },
     user_config: {
       user_phone_number: userPhoneNumber
     }
   };`;
 
+const ERROR_PATTERN = /const error\s*=\s*new Error\(\s*`Sarvam Instant Outbound returned \$\{response\.status\}`\s*\);/m;
+
+const CORRECT_ERROR = `const providerDetail =
+        Array.isArray(responseBody?.detail)
+          ? responseBody.detail
+              .map((item) => {
+                const location = Array.isArray(item?.loc)
+                  ? item.loc.join(".")
+                  : "";
+                const message =
+                  typeof item?.msg === "string"
+                    ? item.msg
+                    : "";
+
+                return [location, message]
+                  .filter(Boolean)
+                  .join(": ");
+              })
+              .filter(Boolean)
+              .join("; ")
+              .slice(0, 600)
+          : "";
+
+      const error =
+        new Error(
+          "Sarvam Instant Outbound returned " +
+          response.status +
+          (providerDetail ? ": " + providerDetail : "")
+        );`;
+
 function appConfigContainsVariables(source) {
-  return /app_config\s*:\s*\{[\s\S]*?agent_variables\s*:\s*agentVariables[\s\S]*?\n\s*\},\s*\n\s*user_config\s*:/m.test(source);
+  return /app_config\s*:\s*\{[\s\S]*?agent_variables\s*:\s*normalizedAgentVariables[\s\S]*?\n\s*\},\s*\n\s*user_config\s*:/m.test(source);
 }
 
 function userConfigContainsVariables(source) {
@@ -32,7 +74,10 @@ function userConfigContainsVariables(source) {
 
 export function hasCorrectAgentVariableHandoff(source) {
   return appConfigContainsVariables(source) &&
-    !userConfigContainsVariables(source);
+    !userConfigContainsVariables(source) &&
+    source.includes("value !== null && value !== undefined") &&
+    source.includes("const providerDetail =") &&
+    source.includes("responseBody?.detail");
 }
 
 export function patchAgentVariableHandoff(source) {
@@ -46,7 +91,13 @@ export function patchAgentVariableHandoff(source) {
     return { source, changed: false };
   }
 
-  const matches = source.match(new RegExp(BODY_PATTERN.source, "gm")) || [];
+  const sourceWithoutLegacyMarker = source.replace(
+    new RegExp(`\\s*/\\* ${LEGACY_MARKER}:[^*]*\\*/\\n`, "g"),
+    "\n"
+  );
+  const matches = sourceWithoutLegacyMarker.match(
+    new RegExp(BODY_PATTERN.source, "gm")
+  ) || [];
 
   if (matches.length !== 1) {
     throw new Error(
@@ -54,7 +105,21 @@ export function patchAgentVariableHandoff(source) {
     );
   }
 
-  const patched = source.replace(BODY_PATTERN, CORRECT_BODY);
+  const bodyPatched = sourceWithoutLegacyMarker.replace(
+    BODY_PATTERN,
+    CORRECT_BODY
+  );
+  const errorMatches = bodyPatched.match(
+    new RegExp(ERROR_PATTERN.source, "gm")
+  ) || [];
+
+  if (errorMatches.length !== 1) {
+    throw new Error(
+      `Expected exactly one Sarvam instant-outbound error block; found ${errorMatches.length}`
+    );
+  }
+
+  const patched = bodyPatched.replace(ERROR_PATTERN, CORRECT_ERROR);
 
   if (!hasCorrectAgentVariableHandoff(patched)) {
     throw new Error("Unable to verify corrected Sarvam agent-variable handoff");
