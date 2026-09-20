@@ -24,6 +24,10 @@ await copy(
   path.join(runtimeRoot, "src/repositories/sarvam-outbound-webhook.repository.js")
 );
 await copy(
+  "call-completion-policy.js",
+  path.join(runtimeRoot, "src/repositories/call-completion-policy.js")
+);
+await copy(
   "sarvam-outbound-webhook.routes.js",
   path.join(runtimeRoot, "src/routes/sarvam-outbound-webhook.routes.js")
 );
@@ -34,6 +38,10 @@ await copy(
 await copy(
   "finalize-resolved-runs.js",
   path.join(runtimeRoot, "src/db/finalize-resolved-runs.js")
+);
+await copy(
+  "reclassify-connected-incomplete-call.js",
+  path.join(runtimeRoot, "src/db/reclassify-connected-incomplete-call.js")
 );
 await copyFile(
   path.resolve(

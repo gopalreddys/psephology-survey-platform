@@ -2,34 +2,12 @@ import { createHash } from "node:crypto";
 
 import { getDb } from "../db/postgres.js";
 import { reconcileRunLifecycle } from "./run-lifecycle.repository.js";
+import {
+  classifyCallCompletion,
+  DEFAULT_TECHNICAL_VARIABLES
+} from "./call-completion-policy.js";
 
-const TECHNICAL_VARIABLES = new Set([
-  "agent_code",
-  "agent_style_context",
-  "analytics_excluded",
-  "attempt_cycle_id",
-  "demo_call_id",
-  "iteration_id",
-  "iteration_number",
-  "knowledge_context",
-  "knowledge_packs",
-  "max_probes",
-  "preferred_language",
-  "probe_context",
-  "probe_set",
-  "questionnaire_code",
-  "questionnaire_context",
-  "research_context",
-  "run_contact_id",
-  "run_id",
-  "source",
-  "study_id",
-  "user_name",
-  "voice_code",
-  "voter_id",
-  "voter_profession",
-  "voter_qualification"
-]);
+const TECHNICAL_VARIABLES = DEFAULT_TECHNICAL_VARIABLES;
 
 function normalizeStatus(status) {
   const value = String(status || "").trim().toLowerCase();
@@ -183,12 +161,6 @@ export async function recordSarvamOutboundResult(payload) {
       [String(execution.run_id)]
     );
 
-    const successful = providerStatus === "connected";
-    const retryEligible = !successful;
-    const normalizedStatus = successful
-      ? "COMPLETED"
-      : providerStatus.toUpperCase();
-    const executionStatus = successful ? "COMPLETED" : "FAILED";
     const transcript = Array.isArray(payload.interaction_transcript)
       ? payload.interaction_transcript
       : [];
@@ -197,6 +169,17 @@ export async function recordSarvamOutboundResult(payload) {
       typeof payload.final_agent_variables === "object"
         ? payload.final_agent_variables
         : {};
+    const completion = classifyCallCompletion({
+      providerStatus,
+      finalVariables,
+      technicalVariables: TECHNICAL_VARIABLES
+    });
+    const {
+      successful,
+      retryEligible,
+      normalizedStatus,
+      executionStatus
+    } = completion;
 
     await db.query(
       `
@@ -216,7 +199,10 @@ export async function recordSarvamOutboundResult(payload) {
         attemptId,
         executionStatus,
         JSON.stringify(storedPayload),
-        payload.failure_reason || null
+        payload.failure_reason ||
+          (completion.providerConnected && !successful
+            ? completion.completionReason
+            : null)
       ]
     );
 
@@ -268,7 +254,10 @@ export async function recordSarvamOutboundResult(payload) {
           duration: payload.duration ?? null,
           channel_info: payload.channel_info || null,
           final_agent_variables: finalVariables,
-          transcript_turns: transcript.length
+          transcript_turns: transcript.length,
+          research_successful: successful,
+          completion_reason: completion.completionReason,
+          meaningful_response_keys: completion.meaningfulResponseKeys
         }),
         execution.run_contact_id,
         execution.attempt_cycle_id,
@@ -335,7 +324,10 @@ export async function recordSarvamOutboundResult(payload) {
             duration: payload.duration ?? null,
             channel_info: payload.channel_info || null,
             final_agent_variables: finalVariables,
-            transcript_turns: transcript.length
+            transcript_turns: transcript.length,
+            research_successful: successful,
+            completion_reason: completion.completionReason,
+            meaningful_response_keys: completion.meaningfulResponseKeys
           }),
           execution.run_contact_id,
           execution.attempt_cycle_id,
@@ -372,13 +364,13 @@ export async function recordSarvamOutboundResult(payload) {
       `,
       [
         execution.run_contact_id,
-        successful ? "COMPLETED" : "FAILED",
-        successful ? "SUCCESS_COMPLETE" : "PENDING",
+        completion.contactAttemptStatus,
+        completion.finalStatus,
         retryEligible,
         successful,
         callId,
         normalizedStatus,
-        payload.failure_reason || providerStatus
+        payload.failure_reason || completion.completionReason
       ]
     );
 
@@ -464,7 +456,10 @@ export async function recordSarvamOutboundResult(payload) {
       iterationFinalized,
       transcriptTurns: transcript.length,
       responseVariables: Object.keys(finalVariables)
-        .filter((key) => !TECHNICAL_VARIABLES.has(key)).length
+        .filter((key) => !TECHNICAL_VARIABLES.has(key)).length,
+      researchSuccessful: successful,
+      completionReason: completion.completionReason,
+      meaningfulResponseKeys: completion.meaningfulResponseKeys
     };
   } catch (error) {
     await db.query("ROLLBACK");

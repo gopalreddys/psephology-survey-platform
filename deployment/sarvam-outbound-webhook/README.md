@@ -7,6 +7,12 @@ variables. Demo-voter responses are retained for verification in
 `calls.response_variables` only; they are not inserted into analytical
 `survey_responses`.
 
+A provider `connected` result is connectivity evidence, not automatic survey
+success. The callback records `SUCCESS_COMPLETE` only when the agent disposition
+is not an incomplete/refusal outcome and at least one configured questionnaire
+output contains meaningful evidence. A connected greeting-only call is stored
+as `CONNECTED_INCOMPLETE`, remains `PENDING`, and is eligible for a later Run.
+
 Sarvam only sends a result when the create-call request contains
 `webhook_config.url`. The installer makes `src/clients/sarvam.js` use
 `SARVAM_OUTBOUND_WEBHOOK_URL` by default.
@@ -18,6 +24,7 @@ Run from the UI repository on the API server:
 ```bash
 cd /opt/psephology-survey-ui/psephology
 git pull --ff-only origin main
+node deployment/sarvam-outbound-webhook/test-call-completion-policy.js
 
 sudo systemctl stop psephology-api.service
 
@@ -28,6 +35,7 @@ cd /opt/sarvam-voice-analytics
 node --check src/clients/sarvam.js
 node --check src/routes/sarvam-outbound-webhook.routes.js
 node --check src/repositories/sarvam-outbound-webhook.repository.js
+node --check src/repositories/call-completion-policy.js
 node --check src/db/finalize-resolved-runs.js
 node --check src/server.js
 node src/db/migrate-sarvam-outbound-webhook.js
@@ -134,6 +142,23 @@ sudo bash -c '
 The utility retrieves the authoritative Sarvam attempt and transcript and
 passes them through the same idempotent callback processor. It can be safely
 re-run with the same attempt ID.
+
+## Correct a callback processed under the legacy connectivity-only rule
+
+The guarded utility below targets one provider attempt, computes the same
+evidence policy used by new callbacks and refuses to modify a call that is not
+both connected and evidence-incomplete. It is read-only unless `--apply` is
+provided:
+
+```bash
+cd /opt/sarvam-voice-analytics
+node src/db/reclassify-connected-incomplete-call.js PROVIDER_ATTEMPT_ID
+node src/db/reclassify-connected-incomplete-call.js PROVIDER_ATTEMPT_ID --apply
+```
+
+The correction preserves the callback, transcript and response variables. It
+changes only the operational classification, clears that call as the contact's
+successful evidence and makes the voter eligible for a later Run.
 
 ## Finalize Runs completed before automatic roll-up was installed
 
