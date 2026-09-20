@@ -23,7 +23,7 @@ const sourceAgent = {
   app_version: 1,
   connection_id: input.connectionId,
   outbound_phone_number: input.outboundPhoneNumber,
-  is_enabled: false
+  is_enabled: true
 };
 
 function harness(agent, inserted = true) {
@@ -52,9 +52,11 @@ const actor = { id: "admin-id", role_code: "ADMIN" };
   const result = await edit(sourceAgent.id, input, actor);
   assert.equal(result.createdVersion, true);
   assert.equal(result.agent.id, "new-id");
-  assert.equal(statements.some((item) => item.sql.includes("UPDATE sarvam_voice_agents")), false);
+  const supersede = statements.find((item) => item.sql.includes("id <> $2"));
+  assert.ok(supersede, "older versions must be superseded after a new version is created");
+  assert.deepEqual(supersede.params, [input.appId, "new-id"]);
   const insert = statements.find((item) => item.sql.includes("INSERT INTO sarvam_voice_agents"));
-  assert.equal(insert.params[8], false, "a disabled source must not be re-enabled");
+  assert.equal(insert.params[8].includes("previous_catalog_id"), true);
   assert.equal(statements.some((item) => item.sql === "COMMIT"), true);
 }
 

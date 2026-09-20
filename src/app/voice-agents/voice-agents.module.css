@@ -37,8 +37,11 @@
 .panelHeader h2 { margin: 6px 0; color: #402a31; font-size: 25px; }
 .panelHeader > strong { color: #657386; white-space: nowrap; }
 .list { display: grid; gap: 12px; padding: 20px 22px 24px; background: #fffafb; }
+.agentGroup { overflow: hidden; border: 1px solid #e1e7eb; border-radius: 14px; background: #fff; }
 .agentCard, .readyCard { display: grid; grid-template-columns: auto minmax(220px,1.4fr) minmax(170px,.8fr) minmax(170px,.75fr) auto auto auto; align-items: center; gap: 16px; border: 1px solid #e1e7eb; border-radius: 14px; background: #fff; padding: 16px; }
+.agentGroup > .agentCard, .agentGroup > .readyCard { border: 0; border-radius: 0; }
 .readyCard { border-color: #b9ded7; }
+.agentGroup:has(.readyCard) { border-color: #b9ded7; }
 .agentIcon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #e9fbf7; color: #168c7f; }
 .identity { display: grid; gap: 3px; min-width: 0; }
 .identity > span { color: #34445a; font-weight: 800; }
@@ -56,6 +59,19 @@
 .attention { background: #fff5df; color: #a16b14; }
 .editButton { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; border: 1px solid #b9ded7; border-radius: 9px; background: #fff; padding: 0 10px; color: #168c7f; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .editButton:hover { background: #eafaf6; }
+.versionHistory { border-top: 1px solid #e8efed; background: #f8fbfa; }
+.versionHistory summary { display: flex; align-items: center; gap: 7px; padding: 12px 17px; color: #607187; font-size: 12px; font-weight: 800; cursor: pointer; list-style: none; }
+.versionHistory summary::-webkit-details-marker { display: none; }
+.versionHistory summary::after { margin-left: auto; content: "+"; color: #168c7f; font-size: 18px; font-weight: 500; }
+.versionHistory[open] summary::after { content: "−"; }
+.historyList { display: grid; gap: 1px; border-top: 1px solid #e8efed; background: #e8efed; }
+.historyRow { display: grid; grid-template-columns: 110px minmax(130px,.7fr) minmax(180px,1.2fr) auto minmax(150px,.8fr); align-items: center; gap: 15px; background: #fff; padding: 11px 17px; color: #7d8994; font-size: 11px; }
+.historyRow strong { color: #48596b; font-size: 12px; }
+.historyRow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.historyRow em { justify-self: start; border-radius: 999px; padding: 5px 8px; font-style: normal; font-weight: 800; }
+.historyRow small { color: #8b747b; }
+.inUse { background: #eafaf6; color: #168c7f; }
+.historical { background: #f1edf0; color: #786d72; }
 .empty { display: grid; place-items: center; gap: 8px; min-height: 220px; padding: 32px; color: #8b97a5; text-align: center; }
 .empty svg { color: #d36578; }
 .empty strong { color: #465568; }
@@ -63,5 +79,5 @@
 .contract { display: flex; align-items: center; gap: 12px; margin-top: 20px; border: 1px solid #bfe6df; border-radius: 14px; background: #f0fbf8; padding: 16px 18px; color: #168c7f; }
 .contract div { display: grid; gap: 3px; }
 .contract span { color: #657b79; font-size: 13px; }
-@media (max-width: 1180px) { .registrationForm { grid-template-columns: repeat(2,minmax(0,1fr)); } .agentCard, .readyCard { grid-template-columns: auto 1fr 1fr; } .category { grid-column: 2; } .toggle, .ready, .attention, .editButton { grid-column: 3; justify-self: start; } }
-@media (max-width: 800px) { .page { padding: 28px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .headerActions { width: 100%; flex-direction: column; } .headerActions button { width: 100%; } .registrationForm { grid-template-columns: 1fr; } .registrationFooter { align-items: stretch; flex-direction: column; } .formActions { width: 100%; } .formActions button { flex: 1; } .metrics { grid-template-columns: 1fr 1fr; } .agentCard, .readyCard { grid-template-columns: auto 1fr; } .telephony, .category, .toggle, .ready, .attention, .editButton { grid-column: 2; } .panelHeader { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 1180px) { .registrationForm { grid-template-columns: repeat(2,minmax(0,1fr)); } .agentCard, .readyCard { grid-template-columns: auto 1fr 1fr; } .category { grid-column: 2; } .toggle, .ready, .attention, .editButton { grid-column: 3; justify-self: start; } .historyRow { grid-template-columns: 90px 1fr 1.4fr; } .historyRow em, .historyRow small { grid-column: auto; } }
+@media (max-width: 800px) { .page { padding: 28px 18px 48px; } .header { align-items: flex-start; flex-direction: column; } .headerActions { width: 100%; flex-direction: column; } .headerActions button { width: 100%; } .registrationForm { grid-template-columns: 1fr; } .registrationFooter { align-items: stretch; flex-direction: column; } .formActions { width: 100%; } .formActions button { flex: 1; } .metrics { grid-template-columns: 1fr 1fr; } .agentCard, .readyCard { grid-template-columns: auto 1fr; } .telephony, .category, .toggle, .ready, .attention, .editButton { grid-column: 2; } .panelHeader { align-items: flex-start; flex-direction: column; } .historyRow { grid-template-columns: 1fr; gap: 5px; } }

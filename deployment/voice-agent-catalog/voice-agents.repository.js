@@ -22,13 +22,29 @@ function firstConnection(deployment) {
   };
 }
 
+function currentVersionSql(alias = "agent") {
+  return `NOT EXISTS (
+    SELECT 1
+    FROM sarvam_voice_agents newer
+    WHERE newer.app_id = ${alias}.app_id
+      AND newer.is_enabled = TRUE
+      AND (
+        newer.app_version > ${alias}.app_version
+        OR (newer.app_version = ${alias}.app_version AND newer.updated_at > ${alias}.updated_at)
+        OR (newer.app_version = ${alias}.app_version AND newer.updated_at = ${alias}.updated_at
+          AND newer.id::text > ${alias}.id::text)
+      )
+  )`;
+}
+
 function selectableSql(alias = "agent") {
   return `LOWER(${alias}.provider_status) = 'active'
     AND LOWER(${alias}.channel_direction) IN ('outbound', 'both')
     AND ${alias}.usage_category IS NOT NULL
     AND ${alias}.is_enabled = TRUE
     AND ${alias}.connection_id IS NOT NULL
-    AND ${alias}.outbound_phone_number IS NOT NULL`;
+    AND ${alias}.outbound_phone_number IS NOT NULL
+    AND ${currentVersionSql(alias)}`;
 }
 
 export async function listVoiceAgents({ selectableOnly = false } = {}) {
@@ -38,6 +54,24 @@ export async function listVoiceAgents({ selectableOnly = false } = {}) {
       agent.provider_name, agent.description, agent.channel_direction,
       agent.provider_status, agent.connection_id, agent.outbound_phone_number,
       agent.catalog_source, agent.usage_category, agent.is_enabled, agent.last_synced_at,
+      (${currentVersionSql("agent")}) AS is_current,
+      (
+        SELECT COUNT(*)::int
+        FROM program_iterations iteration
+        WHERE iteration.voice_agent_id = agent.id
+      ) AS iteration_usage_count,
+      (
+        SELECT COUNT(*)::int
+        FROM program_iterations iteration
+        WHERE iteration.voice_agent_id = agent.id
+          AND UPPER(COALESCE(iteration.status, 'DRAFT')) IN ('COMPLETED', 'LOCKED', 'ARCHIVED')
+      ) AS completed_iteration_count,
+      (
+        SELECT COUNT(*)::int
+        FROM program_iterations iteration
+        WHERE iteration.voice_agent_id = agent.id
+          AND UPPER(COALESCE(iteration.status, 'DRAFT')) NOT IN ('COMPLETED', 'LOCKED', 'ARCHIVED', 'CANCELLED')
+      ) AS active_iteration_count,
       (${selectableSql("agent")}) AS is_selectable
     FROM sarvam_voice_agents agent
     ${selectableOnly ? `WHERE ${selectableSql("agent")}` : ""}
@@ -123,28 +157,43 @@ export async function registerVoiceAgent(input, actor) {
     .digest("hex").slice(0, 32);
   const providerDeploymentId = `MANUAL:${fingerprint}`;
   const db = await getDb();
-  const result = await db.query(`
-    INSERT INTO sarvam_voice_agents (
-      provider_deployment_id, app_id, app_version, provider_name, description,
-      channel_direction, provider_status, connection_id, outbound_phone_number,
-      catalog_source, usage_category, is_enabled, provider_payload,
-      categorized_by_user_id, categorized_at, last_synced_at, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,'outbound','active',$6,$7,'MANUAL_AGENT_APP',$8,TRUE,$9::jsonb,$10,NOW(),NOW(),NOW())
-    ON CONFLICT (provider_deployment_id) DO UPDATE SET
-      provider_name = EXCLUDED.provider_name,
-      description = EXCLUDED.description,
-      usage_category = EXCLUDED.usage_category,
-      is_enabled = TRUE,
-      provider_status = 'active',
-      catalog_source = 'MANUAL_AGENT_APP',
-      provider_payload = EXCLUDED.provider_payload,
-      categorized_by_user_id = EXCLUDED.categorized_by_user_id,
-      categorized_at = NOW(), last_synced_at = NOW(), updated_at = NOW()
-    RETURNING *
-  `, [providerDeploymentId, appId, appVersion, providerName,
-    String(input.description || "").trim() || null, connectionId, phoneNumber, category,
-    JSON.stringify({ catalog_source: "MANUAL_AGENT_APP" }), actor.id]);
-  return result.rows[0];
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(`
+      INSERT INTO sarvam_voice_agents (
+        provider_deployment_id, app_id, app_version, provider_name, description,
+        channel_direction, provider_status, connection_id, outbound_phone_number,
+        catalog_source, usage_category, is_enabled, provider_payload,
+        categorized_by_user_id, categorized_at, last_synced_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,'outbound','active',$6,$7,'MANUAL_AGENT_APP',$8,TRUE,$9::jsonb,$10,NOW(),NOW(),NOW())
+      ON CONFLICT (provider_deployment_id) DO UPDATE SET
+        provider_name = EXCLUDED.provider_name,
+        description = EXCLUDED.description,
+        usage_category = EXCLUDED.usage_category,
+        is_enabled = TRUE,
+        provider_status = 'active',
+        catalog_source = 'MANUAL_AGENT_APP',
+        provider_payload = EXCLUDED.provider_payload,
+        categorized_by_user_id = EXCLUDED.categorized_by_user_id,
+        categorized_at = NOW(), last_synced_at = NOW(), updated_at = NOW()
+      RETURNING *
+    `, [providerDeploymentId, appId, appVersion, providerName,
+      String(input.description || "").trim() || null, connectionId, phoneNumber, category,
+      JSON.stringify({ catalog_source: "MANUAL_AGENT_APP" }), actor.id]);
+    await client.query(`
+      UPDATE sarvam_voice_agents
+      SET is_enabled = FALSE, updated_at = NOW()
+      WHERE app_id = $1 AND id <> $2 AND is_enabled = TRUE
+    `, [appId, result.rows[0].id]);
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function editManualVoiceAgent(id, input, actor) {
@@ -203,15 +252,20 @@ export async function editManualVoiceAgent(id, input, actor) {
           channel_direction, provider_status, connection_id, outbound_phone_number,
           catalog_source, usage_category, is_enabled, provider_payload,
           categorized_by_user_id, categorized_at, last_synced_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,'outbound','active',$6,$7,'MANUAL_AGENT_APP',$8,$9,$10::jsonb,$11,NOW(),NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,'outbound','active',$6,$7,'MANUAL_AGENT_APP',$8,TRUE,$9::jsonb,$10,NOW(),NOW(),NOW())
         ON CONFLICT (provider_deployment_id) DO NOTHING
         RETURNING *
       `, [`MANUAL:${fingerprint}`, appId, appVersion, providerName, description,
-        connectionId, phoneNumber, category, source.is_enabled,
+        connectionId, phoneNumber, category,
         JSON.stringify({ catalog_source: "MANUAL_AGENT_APP", previous_catalog_id: source.id }), actor.id]);
       if (!result.rowCount) {
         throw errorWithStatus("This App version and connection are already registered. Select the existing catalog entry", 409);
       }
+      await client.query(`
+        UPDATE sarvam_voice_agents
+        SET is_enabled = FALSE, updated_at = NOW()
+        WHERE app_id = $1 AND id <> $2 AND is_enabled = TRUE
+      `, [appId, result.rows[0].id]);
     }
     await client.query("COMMIT");
     return { agent: result.rows[0], createdVersion: configChanged };
@@ -234,18 +288,38 @@ export async function classifyVoiceAgent(id, input, actor) {
     throw errorWithStatus("Voice-agent category is invalid", 400);
   }
   const db = await getDb();
-  const result = await db.query(`
-    UPDATE sarvam_voice_agents
-    SET usage_category = $2,
-      is_enabled = COALESCE($3::boolean, is_enabled),
-      categorized_by_user_id = $4,
-      categorized_at = NOW(),
-      updated_at = NOW()
-    WHERE id = $1
-    RETURNING *
-  `, [id, category, typeof input.isEnabled === "boolean" ? input.isEnabled : null, actor.id]);
-  if (!result.rowCount) throw errorWithStatus("Voice agent not found", 404);
-  return result.rows[0];
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const target = await client.query(
+      "SELECT id, app_id FROM sarvam_voice_agents WHERE id = $1 FOR UPDATE", [id]
+    );
+    if (!target.rowCount) throw errorWithStatus("Voice agent not found", 404);
+    if (input.isEnabled === true) {
+      await client.query(`
+        UPDATE sarvam_voice_agents
+        SET is_enabled = FALSE, updated_at = NOW()
+        WHERE app_id = $1 AND id <> $2 AND is_enabled = TRUE
+      `, [target.rows[0].app_id, id]);
+    }
+    const result = await client.query(`
+      UPDATE sarvam_voice_agents
+      SET usage_category = $2,
+        is_enabled = COALESCE($3::boolean, is_enabled),
+        categorized_by_user_id = $4,
+        categorized_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `, [id, category, typeof input.isEnabled === "boolean" ? input.isEnabled : null, actor.id]);
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function getVoiceAgentForSelection(client, id) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, CheckCircle2, CloudDownload, Pencil, PhoneCall, Plus, ShieldCheck, Tags, X } from "lucide-react";
+import { Bot, CheckCircle2, CloudDownload, History, Pencil, PhoneCall, Plus, ShieldCheck, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -23,8 +23,18 @@ type VoiceAgent = {
   catalog_source: "SARVAM_DEPLOYMENT_API" | "MANUAL_AGENT_APP";
   usage_category: Category | null;
   is_enabled: boolean;
+  is_current: boolean;
   is_selectable: boolean;
+  iteration_usage_count: number;
+  completed_iteration_count: number;
+  active_iteration_count: number;
   last_synced_at: string;
+};
+
+type VoiceAgentGroup = {
+  appId: string;
+  current: VoiceAgent;
+  history: VoiceAgent[];
 };
 
 const categories: { value: Category; label: string }[] = [
@@ -68,14 +78,31 @@ export default function VoiceAgentsPage() {
     return function () { cancelled = true; };
   }, [user]);
 
+  const agentGroups = useMemo<VoiceAgentGroup[]>(function () {
+    const grouped = new Map<string, VoiceAgent[]>();
+    agents.forEach(function (agent) {
+      grouped.set(agent.app_id, [...(grouped.get(agent.app_id) || []), agent]);
+    });
+    return Array.from(grouped.entries()).map(function ([appId, versions]) {
+      const ordered = [...versions].sort(function (left, right) {
+        if (left.is_current !== right.is_current) return left.is_current ? -1 : 1;
+        if (left.is_enabled !== right.is_enabled) return left.is_enabled ? -1 : 1;
+        return Number(right.app_version) - Number(left.app_version);
+      });
+      return { appId, current: ordered[0], history: ordered.slice(1) };
+    }).sort(function (left, right) {
+      return (left.current.provider_name || left.appId).localeCompare(right.current.provider_name || right.appId);
+    });
+  }, [agents]);
+
   const metrics = useMemo(function () {
     return {
-      synchronized: agents.length,
-      categorized: agents.filter(function (agent) { return Boolean(agent.usage_category); }).length,
-      selectable: agents.filter(function (agent) { return agent.is_selectable; }).length,
-      attention: agents.filter(function (agent) { return !agent.is_selectable; }).length
+      agentApps: agentGroups.length,
+      history: Math.max(0, agents.length - agentGroups.length),
+      selectable: agentGroups.filter(function (group) { return group.current.is_selectable; }).length,
+      attention: agentGroups.filter(function (group) { return !group.current.is_selectable; }).length
     };
-  }, [agents]);
+  }, [agents, agentGroups]);
 
   function startRegistration() {
     setEditingAgent(null);
@@ -136,7 +163,7 @@ export default function VoiceAgentsPage() {
       const saved = editingAgent ? result.agent : result;
       const successMessage = editingAgent
         ? result.createdVersion
-          ? `${saved.provider_name} version ${saved.app_version} was added as a separate catalog entry. Existing iterations remain on their saved agent version. Disable the older entry if it should no longer be selectable for new iterations.`
+          ? `${saved.provider_name} version ${saved.app_version} is now current. Earlier versions moved to read-only history; existing iterations remain on their saved version.`
           : `${saved.provider_name} details updated. Existing iteration snapshots remain unchanged.`
         : `${saved.provider_name} registered and ready for iteration assignment.`;
       setTone("success");
@@ -163,18 +190,9 @@ export default function VoiceAgentsPage() {
         method: "PATCH",
         body: JSON.stringify(changes)
       });
-      setAgents(function (current) {
-        return current.map(function (item) {
-          if (item.id !== agent.id) return item;
-          const next = { ...item, ...updated };
-          next.is_selectable = next.provider_status.toLowerCase() === "active"
-            && ["outbound", "both"].includes(next.channel_direction.toLowerCase())
-            && Boolean(next.usage_category && next.connection_id && next.outbound_phone_number && next.is_enabled);
-          return next;
-        });
-      });
+      setAgents(await apiFetch("/api/voice-agents"));
       setTone("success");
-      setMessage(`${agent.provider_name || agent.app_id} classification saved.`);
+      setMessage(inputMessageForUpdate(agent, changes, updated));
     } catch (error) {
       setTone("error");
       setMessage(error instanceof Error ? error.message : "Unable to update voice agent");
@@ -189,14 +207,14 @@ export default function VoiceAgentsPage() {
 
   return <AppShell><div className={styles.page}>
     <header className={styles.header}>
-      <div><span>AI CONVERSATION OPERATIONS</span><h1>Voice Agents</h1><p>Maintain every approved Sarvam Agent App, committed version and outbound connection that Campaign Managers may select for an iteration.</p></div>
+      <div><span>AI CONVERSATION OPERATIONS</span><h1>Voice Agents</h1><p>Maintain one current configuration for each Sarvam Agent App while preserving used versions as read-only operational history.</p></div>
       <div className={styles.headerActions}><button type="button" className={styles.secondaryAction} onClick={startRegistration}><Plus size={17} />Register Agent App</button><button type="button" onClick={synchronize} disabled={syncing}><CloudDownload size={17} />{syncing ? "Synchronizing…" : "Sync Deployments"}</button></div>
     </header>
 
     {message && <FeedbackMessage message={message} tone={tone} />}
 
     {showRegistration && <section className={styles.registrationPanel}>
-      <div className={styles.registrationHeader}><div><span>OUTBOUND AGENT APP</span><h2>{editingAgent ? `Edit ${editingAgent.provider_name || editingAgent.app_id}` : "Register callable Sarvam configuration"}</h2><p>{editingAgent ? "Update the catalog after committing the change in Sarvam. A new version or outbound connection creates a separate entry; existing iterations keep their original snapshot." : "Copy these values from the committed Sarvam agent and its outbound telephony connection."}</p></div><button type="button" aria-label="Close agent form" onClick={closeEditor}><X size={18} /></button></div>
+      <div className={styles.registrationHeader}><div><span>OUTBOUND AGENT APP</span><h2>{editingAgent ? `Edit ${editingAgent.provider_name || editingAgent.app_id}` : "Register callable Sarvam configuration"}</h2><p>{editingAgent ? "After a committed version or telephony change, the new configuration becomes current. Prior versions remain available only in history for audit." : "Copy these values from the committed Sarvam agent and its outbound telephony connection."}</p></div><button type="button" aria-label="Close agent form" onClick={closeEditor}><X size={18} /></button></div>
       <form onSubmit={saveAgent} className={styles.registrationForm}>
         <Field label="Agent display name *"><input value={registration.providerName} onChange={function (event) { setRegistration({ ...registration, providerName: event.target.value }); }} placeholder="Telangana Urban Male Agent" required /></Field>
         <Field label="Audience category *"><select value={registration.usageCategory} onChange={function (event) { setRegistration({ ...registration, usageCategory: event.target.value as Category | "" }); }} required><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></Field>
@@ -205,29 +223,49 @@ export default function VoiceAgentsPage() {
         <Field label="Connection ID *"><input value={registration.connectionId} onChange={function (event) { setRegistration({ ...registration, connectionId: event.target.value }); }} placeholder="Exotel-Sarv-…" required /></Field>
         <Field label="Outbound phone number *"><input value={registration.outboundPhoneNumber} onChange={function (event) { setRegistration({ ...registration, outboundPhoneNumber: event.target.value }); }} placeholder="+9180…" required /></Field>
         <Field label="Operational note"><input value={registration.description} onChange={function (event) { setRegistration({ ...registration, description: event.target.value }); }} placeholder="Telugu urban research voice" /></Field>
-        <div className={styles.registrationFooter}><span>{editingAgent ? "App ID is fixed. Version and connection changes never retarget existing iterations or runs." : "Register each Sarvam Agent App once. Saving makes it selectable for new iterations."}</span><div className={styles.formActions}><button type="button" className={styles.cancelButton} onClick={closeEditor}>Cancel</button><button type="submit" disabled={registering}>{registering ? "Saving…" : editingAgent ? "Save Agent" : "Register Agent"}</button></div></div>
+        <div className={styles.registrationFooter}><span>{editingAgent ? "App ID is fixed. Existing iterations retain their frozen version; only future iterations receive the new current version." : "Register each Sarvam Agent App once. Saving makes it selectable for new iterations."}</span><div className={styles.formActions}><button type="button" className={styles.cancelButton} onClick={closeEditor}>Cancel</button><button type="submit" disabled={registering}>{registering ? "Saving…" : editingAgent ? "Save as Current" : "Register Agent"}</button></div></div>
       </form>
     </section>}
 
     <section className={styles.metrics}>
-      <Metric icon={<CloudDownload size={20} />} label="Synchronized" value={metrics.synchronized} />
-      <Metric icon={<Tags size={20} />} label="Categorized" value={metrics.categorized} />
-      <Metric icon={<CheckCircle2 size={20} />} label="Iteration ready" value={metrics.selectable} />
+      <Metric icon={<Bot size={20} />} label="Agent Apps" value={metrics.agentApps} />
+      <Metric icon={<History size={20} />} label="Historical versions" value={metrics.history} />
+      <Metric icon={<CheckCircle2 size={20} />} label="Current and ready" value={metrics.selectable} />
       <Metric icon={<ShieldCheck size={20} />} label="Needs attention" value={metrics.attention} />
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHeader}><div><span>APPROVED SARVAM CATALOG</span><h2>Available voice agents</h2><p>Only active outbound agents with a category and complete telephony configuration appear during iteration creation.</p></div><strong>{agents.length} agents</strong></div>
-      {loading ? <div className={styles.empty}>Loading voice-agent catalog…</div> : !agents.length ? <div className={styles.empty}><Bot size={28} /><strong>No callable Sarvam agents registered</strong><span>Register the Agent App ID, committed version and outbound connection used for calling.</span><button type="button" onClick={startRegistration}>Register first agent</button></div> : <div className={styles.list}>
-        {agents.map(function (agent) {
-          return <article key={agent.id} className={agent.is_selectable ? styles.readyCard : styles.agentCard}>
-            <div className={styles.agentIcon}><Bot size={20} /></div>
-            <div className={styles.identity}><span>{agent.provider_name || "Unnamed Sarvam agent"}</span><strong>{agent.app_id}</strong><small>Version {agent.app_version} · {agent.catalog_source === "MANUAL_AGENT_APP" ? "Agent App" : "Deployment API"}</small>{agent.description && <p>{agent.description}</p>}</div>
-            <div className={styles.telephony}><span><PhoneCall size={14} />{agent.channel_direction}</span><small>{agent.outbound_phone_number || "No outbound number"}</small><small>{agent.connection_id || "No connection id"}</small></div>
-            <label className={styles.category}><span>Audience category</span><select value={agent.usage_category || ""} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { usageCategory: event.target.value as Category | "" }); }}><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></label>
-            <label className={styles.toggle}><input type="checkbox" checked={agent.is_enabled} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { isEnabled: event.target.checked }); }} /><span>Enabled</span></label>
-            <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Iteration ready" : "Not selectable"}</em>
-            {agent.catalog_source === "MANUAL_AGENT_APP" && <button type="button" className={styles.editButton} onClick={function () { startEditing(agent); }}><Pencil size={15} />Edit</button>}
+      <div className={styles.panelHeader}><div><span>APPROVED SARVAM CATALOG</span><h2>Current voice agents</h2><p>Each App ID appears once. Earlier versions are retained below the current configuration only when operational history requires them.</p></div><strong>{agentGroups.length} apps · {agents.length} versions</strong></div>
+      {loading ? <div className={styles.empty}>Loading voice-agent catalog…</div> : !agentGroups.length ? <div className={styles.empty}><Bot size={28} /><strong>No callable Sarvam agents registered</strong><span>Register the Agent App ID, committed version and outbound connection used for calling.</span><button type="button" onClick={startRegistration}>Register first agent</button></div> : <div className={styles.list}>
+        {agentGroups.map(function (group) {
+          const agent = group.current;
+          return <article key={group.appId} className={styles.agentGroup}>
+            <div className={agent.is_selectable ? styles.readyCard : styles.agentCard}>
+              <div className={styles.agentIcon}><Bot size={20} /></div>
+              <div className={styles.identity}><span>{agent.provider_name || "Unnamed Sarvam agent"}</span><strong>{agent.app_id}</strong><small>Current version {agent.app_version} · {agent.catalog_source === "MANUAL_AGENT_APP" ? "Agent App" : "Deployment API"}</small>{agent.description && <p>{agent.description}</p>}</div>
+              <div className={styles.telephony}><span><PhoneCall size={14} />{agent.channel_direction}</span><small>{agent.outbound_phone_number || "No outbound number"}</small><small>{agent.connection_id || "No connection id"}</small></div>
+              <label className={styles.category}><span>Audience category</span><select value={agent.usage_category || ""} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { usageCategory: event.target.value as Category | "" }); }}><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></label>
+              <label className={styles.toggle}><input type="checkbox" checked={agent.is_enabled} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { isEnabled: event.target.checked }); }} /><span>Enabled</span></label>
+              <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Current · ready" : "Not selectable"}</em>
+              {agent.catalog_source === "MANUAL_AGENT_APP" && <button type="button" className={styles.editButton} onClick={function () { startEditing(agent); }}><Pencil size={15} />Edit current</button>}
+            </div>
+            {group.history.length > 0 && <details className={styles.versionHistory}>
+              <summary><History size={15} />Version history ({group.history.length})</summary>
+              <div className={styles.historyList}>{group.history.map(function (version) {
+                const usageLabel = version.active_iteration_count > 0
+                  ? `${version.active_iteration_count} active iteration${version.active_iteration_count === 1 ? "" : "s"}`
+                  : version.iteration_usage_count > 0
+                    ? `${version.iteration_usage_count} completed/historical iteration${version.iteration_usage_count === 1 ? "" : "s"}`
+                    : "Never used";
+                return <div key={version.id} className={styles.historyRow}>
+                  <strong>Version {version.app_version}</strong>
+                  <span>{version.outbound_phone_number || "No outbound number"}</span>
+                  <span>{version.connection_id || "No connection id"}</span>
+                  <em className={version.active_iteration_count > 0 ? styles.inUse : styles.historical}>{version.active_iteration_count > 0 ? "In use" : "Historical"}</em>
+                  <small>{usageLabel}</small>
+                </div>;
+              })}</div>
+            </details>}
           </article>;
         })}
       </div>}
@@ -243,4 +281,14 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className={styles.field}><span>{label}</span>{children}</label>;
+}
+
+function inputMessageForUpdate(agent: VoiceAgent, changes: { usageCategory?: Category | ""; isEnabled?: boolean }, updated: VoiceAgent) {
+  if (changes.isEnabled === true) {
+    return `${agent.provider_name || agent.app_id} version ${updated.app_version} is current. Other versions are retained only in history.`;
+  }
+  if (changes.isEnabled === false) {
+    return `${agent.provider_name || agent.app_id} is disabled for future iteration selection. Existing iterations are unchanged.`;
+  }
+  return `${agent.provider_name || agent.app_id} classification saved.`;
 }
