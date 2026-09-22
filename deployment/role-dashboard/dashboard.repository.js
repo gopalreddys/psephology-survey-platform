@@ -79,6 +79,7 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows) {
       status: row.status,
       pendingContacts: count(row.pending_contacts),
       retryEligibleContacts: count(row.retry_eligible_contacts),
+      successfulContacts: count(row.successful_contacts),
       callAttempts: count(row.call_attempts),
       awaitingCallbacks: count(row.awaiting_callbacks),
       staleCallbacks: count(row.stale_callbacks),
@@ -108,6 +109,7 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows) {
     runsClosed: runs.filter((run) => CLOSED_RUNS.has(run.status)).length,
     pendingContacts: runs.reduce((total, run) => total + run.pendingContacts, 0),
     retryEligibleContacts: runs.reduce((total, run) => total + run.retryEligibleContacts, 0),
+    successfulContacts: runs.reduce((total, run) => total + run.successfulContacts, 0),
     callAttempts: runs.reduce((total, run) => total + run.callAttempts, 0),
     awaitingCallbacks: runs.reduce((total, run) => total + run.awaitingCallbacks, 0),
     staleCallbacks: runs.reduce((total, run) => total + run.staleCallbacks, 0),
@@ -201,10 +203,71 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows) {
     }
   }
 
+  const orderedActions = sortActions(actions);
+  const evidenceExceptions = summary.staleCallbacks +
+    summary.missingTranscripts + summary.missingResponses;
+  const roleBrief = (() => {
+    if (actor.role_code === "CAMPAIGNER") {
+      const attentionCount = summary.runsReady + summary.retryEligibleContacts +
+        summary.staleCallbacks;
+      return {
+        eyebrow: "EXECUTION RESPONSIBILITY",
+        title: attentionCount > 0 ? "Calls require your attention" : "Allocated work is under control",
+        status: summary.staleCallbacks > 0 ? "ATTENTION_REQUIRED" :
+          attentionCount > 0 ? "ACTION_AVAILABLE" : "ON_TRACK",
+        description: "Review only your allocated recipients, launch approved Runs, and follow up retry-eligible contacts. Research interpretation remains with the Campaign Manager.",
+        responsibility: `${summary.runsReady} ready Run${summary.runsReady === 1 ? "" : "s"} · ${summary.pendingContacts} pending contact${summary.pendingContacts === 1 ? "" : "s"}`,
+        boundary: "You can execute allocated work; you cannot view portfolio-level research findings.",
+        nextHref: orderedActions[0]?.href || "/calls",
+        nextLabel: orderedActions[0]?.title || "Review call activity"
+      };
+    }
+    if (actor.role_code === "CAMPAIGN_MANAGER") {
+      const openIterations = Math.max(summary.iterationsVisible - summary.iterationsCompleted, 0);
+      return {
+        eyebrow: "RESEARCH OWNERSHIP",
+        title: openIterations > 0 ? "Move assigned research toward completion" : "Assigned research is ready for review",
+        status: evidenceExceptions > 0 ? "ATTENTION_REQUIRED" :
+          openIterations > 0 ? "IN_PROGRESS" : "REVIEW_READY",
+        description: "Own Iteration planning, monitor execution quality, and interpret evidence before campaign closeout.",
+        responsibility: `${openIterations} open Iteration${openIterations === 1 ? "" : "s"} · ${summary.successfulContacts} successful contact outcome${summary.successfulContacts === 1 ? "" : "s"}`,
+        boundary: "Use Analytics for directional research decisions; demo samples are not vote forecasts.",
+        nextHref: orderedActions[0]?.href || "/analytics",
+        nextLabel: orderedActions[0]?.title || "Review assigned analytics"
+      };
+    }
+    if (actor.role_code === "ADMIN") {
+      return {
+        eyebrow: "CAMPAIGN ADMINISTRATION",
+        title: summary.campaignsWithoutManager > 0 ? "Resolve campaign ownership" : "Campaign controls are in place",
+        status: summary.campaignsWithoutManager > 0 || evidenceExceptions > 0 ?
+          "ATTENTION_REQUIRED" : "ON_TRACK",
+        description: "Maintain campaign setup, manager assignment, execution readiness, and evidence completeness within your administrative scope.",
+        responsibility: `${summary.campaignsWithoutManager} ownership gap${summary.campaignsWithoutManager === 1 ? "" : "s"} · ${summary.runsReady + summary.runsRunning} active Run${summary.runsReady + summary.runsRunning === 1 ? "" : "s"}`,
+        boundary: "Administration governs access and readiness; Campaign Managers own research interpretation.",
+        nextHref: orderedActions[0]?.href || "/campaigns",
+        nextLabel: orderedActions[0]?.title || "Review campaign administration"
+      };
+    }
+    return {
+      eyebrow: "PLATFORM GOVERNANCE",
+      title: summary.campaignsWithoutManager > 0 || evidenceExceptions > 0 ?
+        "Portfolio exceptions need review" : "Visible portfolio is operationally healthy",
+      status: summary.campaignsWithoutManager > 0 || evidenceExceptions > 0 ?
+        "ATTENTION_REQUIRED" : "ON_TRACK",
+      description: "Monitor ownership, lifecycle progress, service evidence, and governance exceptions across the visible platform portfolio.",
+      responsibility: `${summary.campaignsVisible} visible Campaign${summary.campaignsVisible === 1 ? "" : "s"} · ${evidenceExceptions} evidence exception${evidenceExceptions === 1 ? "" : "s"}`,
+      boundary: "Govern platform health and access without treating directional survey evidence as electoral prediction.",
+      nextHref: orderedActions[0]?.href || "/analytics",
+      nextLabel: orderedActions[0]?.title || "Review portfolio analytics"
+    };
+  })();
+
   return {
     role: actor.role_code,
+    roleBrief,
     summary,
-    actions: sortActions(actions),
+    actions: orderedActions,
     campaigns: campaigns
       .sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt))
       .slice(0, 8)
@@ -278,7 +341,10 @@ export async function getRoleDashboard(actor) {
       SELECT contact.run_id,
         COUNT(*) FILTER (WHERE contact.attempt_status = 'PENDING')::int AS pending_contacts,
         COUNT(*) FILTER (WHERE contact.retry_eligible = TRUE
-          AND contact.retry_exhausted = FALSE)::int AS retry_eligible_contacts
+          AND contact.retry_exhausted = FALSE)::int AS retry_eligible_contacts,
+        COUNT(*) FILTER (WHERE contact.final_status IN (
+          'SUCCESS_PULSE', 'SUCCESS_COMPLETE', 'SUCCESS_SUBSTANTIAL'
+        ))::int AS successful_contacts
       FROM campaign_run_contacts contact
       JOIN campaign_runs selected_run ON selected_run.id = contact.run_id
       JOIN scoped_iterations scoped ON scoped.id = selected_run.iteration_id
@@ -315,6 +381,7 @@ export async function getRoleDashboard(actor) {
       run.status, run.updated_at,
       COALESCE(contact.pending_contacts, 0)::int AS pending_contacts,
       COALESCE(contact.retry_eligible_contacts, 0)::int AS retry_eligible_contacts,
+      COALESCE(contact.successful_contacts, 0)::int AS successful_contacts,
       COALESCE(execution.call_attempts, 0)::int AS call_attempts,
       COALESCE(execution.awaiting_callbacks, 0)::int AS awaiting_callbacks,
       COALESCE(execution.stale_callbacks, 0)::int AS stale_callbacks,

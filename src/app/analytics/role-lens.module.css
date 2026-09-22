@@ -1,0 +1,75 @@
+.roleLens {
+  display: grid;
+  grid-template-columns: minmax(260px, .72fr) minmax(0, 1.28fr);
+  gap: 24px;
+  margin: 0 0 20px;
+  padding: 25px;
+  border: 1px solid #d9eae6;
+  border-radius: 24px;
+  background: linear-gradient(120deg, #f2fbf9, #fff 72%);
+}
+
+.roleLensIntro {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.roleLensIntro > span {
+  color: #168779;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .16em;
+}
+
+.roleLensIntro h2 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.roleLensIntro p {
+  margin: 0;
+  color: #7b7777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lensGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lensGrid article {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 16px;
+  border: 1px solid #dbe9e6;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .86);
+}
+
+.lensGrid span {
+  color: #7b8b87;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.lensGrid strong {
+  color: #167f72;
+  font-size: 22px;
+}
+
+.lensGrid p {
+  margin: 0;
+  color: #81787a;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 950px) {
+  .roleLens { grid-template-columns: 1fr; }
+  .lensGrid { grid-template-columns: 1fr; }
+}

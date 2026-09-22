@@ -22,9 +22,10 @@ import {
 
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useCurrentUser, type PlatformRole } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./analytics.module.css";
+import roleStyles from "./role-lens.module.css";
 
 type Questionnaire = {
   id: string;
@@ -113,12 +114,82 @@ type AnalyticsResponse = {
   generatedAt: string;
 };
 
+type AnalyticsSummary = AnalyticsResponse["summary"];
+type MetricDefinition = {
+  icon: typeof Activity; label: string; value: string; detail: string;
+};
+type LensItem = { label: string; value: string; detail: string };
+
 function count(value: number) {
   return Number(value || 0).toLocaleString();
 }
 
 function pct(value: number) {
   return `${Number(value || 0).toFixed(1)}%`;
+}
+
+function analyticsCopy(role: PlatformRole) {
+  if (role === "SUPER_ADMIN") return {
+    eyebrow: "PLATFORM RESEARCH GOVERNANCE",
+    title: "Portfolio intelligence",
+    description: "Review lifecycle completion and evidence integrity across every Campaign visible to platform governance."
+  };
+  if (role === "ADMIN") return {
+    eyebrow: "ADMINISTRATIVE RESEARCH ASSURANCE",
+    title: "Campaign evidence oversight",
+    description: "Verify that administered Campaigns are progressing with complete callbacks, transcripts, and structured responses."
+  };
+  return {
+    eyebrow: "CAMPAIGN RESEARCH INTELLIGENCE",
+    title: "Assigned campaign analysis",
+    description: "Interpret respondent coverage and Iteration evidence for the Campaigns assigned to you."
+  };
+}
+
+function analyticsMetrics(role: PlatformRole, summary: AnalyticsSummary): MetricDefinition[] {
+  if (role === "CAMPAIGN_MANAGER") return [
+    { icon: BarChart3, label: "Assigned Campaigns", value: count(summary.campaignCount), detail: `${count(summary.completedCampaignCount)} completed` },
+    { icon: ClipboardCheck, label: "Iteration progress", value: `${count(summary.completedIterationCount)}/${count(summary.iterationCount)}`, detail: `${count(summary.closedRunCount)}/${count(summary.runCount)} Runs closed` },
+    { icon: Target, label: "Respondent coverage", value: pct(summary.successfulCoveragePct), detail: `${count(summary.successfulVoters)}/${count(summary.selectedVoters)} successful` },
+    { icon: MessageSquareText, label: "Analysis evidence", value: pct(Math.min(summary.transcriptCoveragePct, summary.responseCoveragePct)), detail: "Lowest transcript/response coverage" }
+  ];
+  if (role === "ADMIN") return [
+    { icon: BarChart3, label: "Administered Campaigns", value: count(summary.campaignCount), detail: `${count(summary.completedCampaignCount)} completed` },
+    { icon: ClipboardCheck, label: "Lifecycle closure", value: `${count(summary.closedRunCount)}/${count(summary.runCount)}`, detail: `${count(summary.completedIterationCount)}/${count(summary.iterationCount)} Iterations complete` },
+    { icon: Gauge, label: "Callback reconciliation", value: pct(summary.callbackCoveragePct), detail: `${count(summary.callbacksReceived)}/${count(summary.callAttempts)} attempts` },
+    { icon: MessageSquareText, label: "Evidence retained", value: pct(Math.min(summary.transcriptCoveragePct, summary.responseCoveragePct)), detail: "Lowest transcript/response coverage" }
+  ];
+  return [
+    { icon: BarChart3, label: "Platform Campaigns", value: count(summary.campaignCount), detail: `${count(summary.completedCampaignCount)} completed` },
+    { icon: ClipboardCheck, label: "Lifecycle governance", value: `${count(summary.completedIterationCount)}/${count(summary.iterationCount)}`, detail: `${count(summary.closedRunCount)}/${count(summary.runCount)} Runs closed` },
+    { icon: Gauge, label: "Provider assurance", value: pct(summary.callbackCoveragePct), detail: `${count(summary.callbacksReceived)}/${count(summary.callAttempts)} callbacks` },
+    { icon: ShieldCheck, label: "Evidence integrity", value: pct(Math.min(summary.transcriptCoveragePct, summary.responseCoveragePct)), detail: "Lowest retained-evidence coverage" }
+  ];
+}
+
+function decisionLens(role: PlatformRole, summary: AnalyticsSummary): LensItem[] {
+  const iterationProgress = summary.iterationCount
+    ? (summary.completedIterationCount / summary.iterationCount) * 100 : 0;
+  const evidenceReadiness = Math.min(
+    summary.callbackCoveragePct,
+    summary.transcriptCoveragePct,
+    summary.responseCoveragePct
+  );
+  if (role === "SUPER_ADMIN") return [
+    { label: "PORTFOLIO CLOSURE", value: pct(iterationProgress), detail: "Share of visible Iterations operationally completed." },
+    { label: "EVIDENCE FLOOR", value: pct(evidenceReadiness), detail: "Lowest of callback, transcript, and response coverage." },
+    { label: "GOVERNANCE VIEW", value: count(summary.campaignCount), detail: "Non-archived Campaigns visible under platform scope." }
+  ];
+  if (role === "ADMIN") return [
+    { label: "DELIVERY PROGRESS", value: pct(iterationProgress), detail: "Iteration completion across administered Campaigns." },
+    { label: "DATA ASSURANCE", value: pct(evidenceReadiness), detail: "Minimum evidence coverage to investigate before sign-off." },
+    { label: "OPEN ITERATIONS", value: count(Math.max(summary.iterationCount - summary.completedIterationCount, 0)), detail: "Iterations still requiring operational completion." }
+  ];
+  return [
+    { label: "RESEARCH COVERAGE", value: pct(summary.successfulCoveragePct), detail: "Selected respondents with a successful survey outcome." },
+    { label: "ANALYSIS READINESS", value: pct(evidenceReadiness), detail: "Minimum retained evidence supporting interpretation." },
+    { label: "OPEN ITERATIONS", value: count(Math.max(summary.iterationCount - summary.completedIterationCount, 0)), detail: "Assigned Iterations still moving through execution." }
+  ];
 }
 
 function dateTime(value: string | null) {
@@ -242,15 +313,19 @@ export default function AnalyticsPage() {
   }
 
   const summary = data?.summary;
+  const role = user?.role.code || "CAMPAIGN_MANAGER";
+  const copy = analyticsCopy(role);
+  const roleMetrics = summary ? analyticsMetrics(role, summary) : [];
+  const lens = summary ? decisionLens(role, summary) : [];
 
   return (
     <AppShell>
       <main className={styles.page}>
         <header className={styles.hero}>
           <div>
-            <span>RESEARCH INTELLIGENCE</span>
-            <h1>Analytics</h1>
-            <p>Move from Campaign portfolio health to Iteration evidence and question-level findings.</p>
+            <span>{copy.eyebrow}</span>
+            <h1>{copy.title}</h1>
+            <p>{copy.description}</p>
           </div>
           <button type="button" disabled={refreshing} onClick={function () { void loadAnalytics(true); }}>
             <RefreshCw size={16} className={refreshing ? styles.spin : ""} />
@@ -263,30 +338,18 @@ export default function AnalyticsPage() {
         {data && (
           <>
             <section className={styles.metrics}>
-              <Metric
-                icon={BarChart3}
-                label="Campaigns"
-                value={count(summary?.campaignCount || 0)}
-                detail={`${count(summary?.completedCampaignCount || 0)} completed`}
-              />
-              <Metric
-                icon={ClipboardCheck}
-                label="Iterations"
-                value={`${count(summary?.completedIterationCount || 0)}/${count(summary?.iterationCount || 0)}`}
-                detail={`${count(summary?.closedRunCount || 0)}/${count(summary?.runCount || 0)} Runs closed`}
-              />
-              <Metric
-                icon={Target}
-                label="Successful coverage"
-                value={pct(summary?.successfulCoveragePct || 0)}
-                detail={`${count(summary?.successfulVoters || 0)}/${count(summary?.selectedVoters || 0)} voters`}
-              />
-              <Metric
-                icon={MessageSquareText}
-                label="Transcripts"
-                value={pct(summary?.transcriptCoveragePct || 0)}
-                detail={`${count(summary?.transcriptsCaptured || 0)} captured`}
-              />
+              {roleMetrics.map(function (metric) { return <Metric key={metric.label} {...metric} />; })}
+            </section>
+
+            <section className={roleStyles.roleLens}>
+              <div className={roleStyles.roleLensIntro}>
+                <span>YOUR DECISION LENS</span>
+                <h2>{role === "SUPER_ADMIN" ? "Governance signals" : role === "ADMIN" ? "Administrative assurance" : "Campaign research signals"}</h2>
+                <p>{role === "CAMPAIGN_MANAGER"
+                  ? "Use these signals to decide whether execution is sufficient for directional interpretation and which Iteration needs attention."
+                  : "Use these signals to identify lifecycle or evidence exceptions; detailed research interpretation remains in Campaign analysis."}</p>
+              </div>
+              <div className={roleStyles.lensGrid}>{lens.map(function (item) { return <article key={item.label}><span>{item.label}</span><strong>{item.value}</strong><p>{item.detail}</p></article>; })}</div>
             </section>
 
             <section className={styles.quality}>

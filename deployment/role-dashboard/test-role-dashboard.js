@@ -18,10 +18,16 @@ assert.match(repository, /permitted\.status <> 'REASSIGNED'/);
 assert.match(repository, /stale_callbacks/);
 assert.match(repository, /missing_transcripts/);
 assert.match(repository, /missing_responses/);
+assert.match(repository, /successful_contacts/);
+assert.match(repository, /roleBrief/);
+assert.match(repository, /EXECUTION RESPONSIBILITY/);
+assert.match(repository, /RESEARCH OWNERSHIP/);
+assert.match(repository, /CAMPAIGN ADMINISTRATION/);
+assert.match(repository, /PLATFORM GOVERNANCE/);
 assert.match(repository, /iteration\.runs\.length >= 3/);
 assert.match(repository, /run\.number === Math\.max\(\.\.\.iteration\.runs/);
 assert.doesNotMatch(repository, /phone_number|interaction_transcript\s+AS/);
 assert.match(installer, /ROLE_DASHBOARD_V1/);
 assert.match(installer, /\.bak-role-dashboard-/);
 
-console.log("Role Dashboard scope, exception and installer checks passed.");
+console.log("Role Dashboard scope, role brief, exception and installer checks passed.");

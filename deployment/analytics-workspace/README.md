@@ -16,6 +16,13 @@ The overview reports survey coverage and evidence completeness independently:
 - transcript coverage for connected calls;
 - structured response coverage for connected calls.
 
+The Analytics landing page applies a role-specific decision lens without changing data scope:
+
+- Super Admin receives portfolio lifecycle and evidence-governance signals.
+- Admin receives delivery progress and data-assurance signals for administered Campaigns.
+- Campaign Manager receives respondent coverage and analysis-readiness signals for assigned Campaigns.
+- Campaigner remains excluded from portfolio Analytics and uses the execution Dashboard instead.
+
 Phase 1 strategic Campaign analysis adds:
 
 - a directional/demo validity banner;

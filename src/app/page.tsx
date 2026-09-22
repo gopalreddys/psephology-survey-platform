@@ -17,9 +17,13 @@ type Summary = {
   campaignsVisible: number; campaignsCompleted: number; campaignsWithoutManager: number;
   iterationsVisible: number; iterationsCompleted: number;
   runsReady: number; runsRunning: number; runsClosed: number;
-  pendingContacts: number; retryEligibleContacts: number;
+  pendingContacts: number; retryEligibleContacts: number; successfulContacts: number;
   callAttempts: number; awaitingCallbacks: number; staleCallbacks: number;
   connectedCalls: number; missingTranscripts: number; missingResponses: number;
+};
+type RoleBrief = {
+  eyebrow: string; title: string; status: string; description: string;
+  responsibility: string; boundary: string; nextHref: string; nextLabel: string;
 };
 type Action = {
   kind: string; priority: number; title: string; detail: string;
@@ -36,7 +40,7 @@ type Campaign = {
   iterations: Iteration[];
 };
 type Dashboard = {
-  role: PlatformRole; summary: Summary; actions: Action[];
+  role: PlatformRole; roleBrief?: RoleBrief; summary: Summary; actions: Action[];
   campaigns: Campaign[]; generatedAt: string;
 };
 type Metric = {
@@ -76,11 +80,35 @@ function metricsFor(role: PlatformRole, s: Summary): Metric[] {
     { label: "Active Runs", value: count(s.runsReady + s.runsRunning), detail: `${count(s.runsClosed)} closed`, icon: PhoneCall },
     { label: "Evidence gaps", value: count(s.missingTranscripts + s.missingResponses), detail: "Transcript and response exceptions", icon: AlertTriangle }
   ];
+  if (role === "ADMIN") return [
+    { label: "Managed Campaigns", value: count(s.campaignsVisible), detail: `${count(s.campaignsCompleted)} completed`, icon: Megaphone },
+    { label: "Ownership gaps", value: count(s.campaignsWithoutManager), detail: "Campaigns awaiting a manager", icon: Users },
+    { label: "Execution queue", value: count(s.runsReady + s.runsRunning), detail: `${count(s.pendingContacts)} pending contacts`, icon: PhoneCall },
+    { label: "Evidence exceptions", value: count(s.staleCallbacks + s.missingTranscripts + s.missingResponses), detail: "Delayed or incomplete records", icon: AlertTriangle }
+  ];
   return [
-    { label: "Visible Campaigns", value: count(s.campaignsVisible), detail: `${count(s.campaignsCompleted)} completed`, icon: Megaphone },
-    { label: "Manager gaps", value: count(s.campaignsWithoutManager), detail: "Campaigns awaiting ownership", icon: Users },
-    { label: "Active Runs", value: count(s.runsReady + s.runsRunning), detail: `${count(s.runsClosed)} closed`, icon: PhoneCall },
-    { label: "Delayed callbacks", value: count(s.staleCallbacks), detail: `${count(s.awaitingCallbacks)} awaiting in total`, icon: Clock3 }
+    { label: "Portfolio Campaigns", value: count(s.campaignsVisible), detail: `${count(s.campaignsCompleted)} completed`, icon: Megaphone },
+    { label: "Governance gaps", value: count(s.campaignsWithoutManager), detail: "Campaigns without ownership", icon: ShieldCheck },
+    { label: "Platform activity", value: count(s.runsReady + s.runsRunning), detail: `${count(s.callAttempts)} call attempts`, icon: PhoneCall },
+    { label: "Evidence exceptions", value: count(s.staleCallbacks + s.missingTranscripts + s.missingResponses), detail: `${count(s.staleCallbacks)} delayed callbacks`, icon: AlertTriangle }
+  ];
+}
+
+function flowItems(role: PlatformRole, s: Summary) {
+  if (role === "CAMPAIGNER") return [
+    ["Runs ready", s.runsReady], ["Pending contacts", s.pendingContacts],
+    ["Retry eligible", s.retryEligibleContacts], ["Call attempts", s.callAttempts],
+    ["Connected calls", s.connectedCalls], ["Awaiting callbacks", s.awaitingCallbacks]
+  ];
+  if (role === "CAMPAIGN_MANAGER") return [
+    ["Iterations complete", s.iterationsCompleted], ["Successful outcomes", s.successfulContacts],
+    ["Connected calls", s.connectedCalls], ["Awaiting callbacks", s.awaitingCallbacks],
+    ["Missing transcripts", s.missingTranscripts], ["Missing responses", s.missingResponses]
+  ];
+  return [
+    ["Runs ready", s.runsReady], ["Runs running", s.runsRunning],
+    ["Call attempts", s.callAttempts], ["Connected calls", s.connectedCalls],
+    ["Missing transcripts", s.missingTranscripts], ["Missing responses", s.missingResponses]
   ];
 }
 
@@ -131,6 +159,18 @@ export default function Home() {
     {error && <FeedbackMessage tone="error" message={error} />}
     {loading ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={23} />Loading your Dashboard…</div> : data && <>
       <div className={styles.scope}><ShieldCheck size={15} />These figures reflect only Campaigns and Iterations visible to your role. No demo result is presented as a vote forecast.</div>
+      {data.roleBrief && <section className={styles.roleBrief} data-status={data.roleBrief.status}>
+        <div className={styles.roleBriefMain}>
+          <span>{data.roleBrief.eyebrow}</span>
+          <div className={styles.roleTitle}><h2>{data.roleBrief.title}</h2><strong>{data.roleBrief.status.replaceAll("_", " ")}</strong></div>
+          <p>{data.roleBrief.description}</p>
+        </div>
+        <div className={styles.roleBriefDetail}>
+          <div><span>YOUR CURRENT SCOPE</span><strong>{data.roleBrief.responsibility}</strong></div>
+          <div><span>DECISION BOUNDARY</span><p>{data.roleBrief.boundary}</p></div>
+          <Link href={data.roleBrief.nextHref}>{data.roleBrief.nextLabel}<ArrowRight size={16} /></Link>
+        </div>
+      </section>}
       <section className={styles.metrics} aria-label="Operational summary">
         {metrics.map(function (metric) { const Icon = metric.icon; return <article key={metric.label} className={styles.metric}><div className={styles.metricIcon}><Icon size={18} /></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></article>; })}
       </section>
@@ -140,14 +180,9 @@ export default function Home() {
           {!data.actions.length ? <div className={styles.empty}><CheckCircle2 size={24} /><strong>No action flags in your visible work</strong><p>This reflects only Dashboard checks; review Campaigns and Calls for full detail.</p></div> : <div className={styles.actions}>{data.actions.map(function (item, index) { return <Link href={item.href} key={`${item.kind}-${item.href}-${index}`} className={styles.action}><div className={styles.actionIcon} data-urgent={item.priority >= 90}>{item.priority >= 90 ? <AlertTriangle size={18} /> : <ArrowRight size={18} />}</div><div><span>{actionLabel(item.kind)}{item.campaignName ? ` · ${item.campaignName}` : ""}</span><strong>{item.title}</strong><p>{item.detail}</p></div><ArrowRight size={17} /></Link>; })}</div>}
         </section>
         <section className={styles.panel}>
-          <div className={styles.panelHead}><div><span>RESEARCH FLOW</span><h2>Execution and evidence</h2></div></div>
+          <div className={styles.panelHead}><div><span>{role === "CAMPAIGNER" ? "EXECUTION FLOW" : "RESEARCH FLOW"}</span><h2>{role === "CAMPAIGNER" ? "My call workload" : role === "CAMPAIGN_MANAGER" ? "Coverage and evidence" : "Execution and evidence"}</h2></div></div>
           <div className={styles.flowGrid}>
-            <div><span>Runs ready</span><strong>{count(summary?.runsReady || 0)}</strong></div>
-            <div><span>Runs running</span><strong>{count(summary?.runsRunning || 0)}</strong></div>
-            <div><span>Call attempts</span><strong>{count(summary?.callAttempts || 0)}</strong></div>
-            <div><span>Connected calls</span><strong>{count(summary?.connectedCalls || 0)}</strong></div>
-            <div><span>Missing transcripts</span><strong>{count(summary?.missingTranscripts || 0)}</strong></div>
-            <div><span>Missing responses</span><strong>{count(summary?.missingResponses || 0)}</strong></div>
+            {role && summary && flowItems(role, summary).map(function ([label, value]) { return <div key={label}><span>{label}</span><strong>{count(Number(value))}</strong></div>; })}
           </div>
           <div className={styles.quickLinks}>
             <Link href="/campaigns"><Megaphone size={16} />Campaigns <ArrowRight size={15} /></Link>

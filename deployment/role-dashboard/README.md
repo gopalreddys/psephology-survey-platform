@@ -9,6 +9,13 @@ Replaces the fixed demo homepage metrics with read-only, role-scoped operational
 
 The Dashboard never launches calls or changes lifecycle state. It does not infer vote share from demo respondents.
 
+Each role receives a distinct operating brief and decision boundary:
+
+- Super Admin sees platform governance, ownership and evidence exceptions.
+- Admin sees campaign administration, assignment readiness and operational exceptions.
+- Campaign Manager sees research completion, successful outcomes and evidence readiness.
+- Campaigner sees only their execution queue, pending/retry contacts and callback follow-up.
+
 Install on the API host:
 
 ```bash
