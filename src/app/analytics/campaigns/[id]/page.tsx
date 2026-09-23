@@ -101,7 +101,23 @@ export default function StrategicCampaignAnalyticsPage() {
       if (gender) query.set("gender", gender);
       if (ageBand) query.set("ageBand", ageBand);
       if (mandal) query.set("mandal", mandal);
-      setData(await apiFetch(`/api/analytics/campaigns/${campaignId}${query.size ? `?${query.toString()}` : ""}`));
+      const response = await apiFetch(`/api/analytics/campaigns/${campaignId}${query.size ? `?${query.toString()}` : ""}`) as StrategicResponse;
+      response.options.filters ||= { genders: [], ageBands: [], mandals: [] };
+      response.segment ||= {
+        filters: { gender: null, ageBand: null, mandal: null },
+        respondentBase: response.validity.latestRespondentBase,
+        minimumBase: 5,
+        suppressed: false
+      };
+      response.issueAnalysis.developmentPriorities ||= [];
+      response.issueAnalysis.desiredChanges ||= [];
+      response.partyLeanIndex ||= {
+        value: null,
+        answered: 0,
+        scale: 5,
+        basis: "Direct respondent rating only"
+      };
+      setData(response);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Analysis"); }
     finally { setLoading(false); setRefreshing(false); }
   }, [ageBand, campaignId, gender, iterationId, mandal, runId]);
