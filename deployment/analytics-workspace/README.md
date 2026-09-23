@@ -54,6 +54,14 @@ The selected Iteration now includes a concise decision dashboard with:
 - an aggregate five-star party-strength index only when a direct neutral 1–5
   questionnaire response is available.
 
+The Campaign view also presents a transparent five-point aggregate campaign
+rating. It combines available campaign-level output distributions for direct
+neutral rating, unaided BRS attention, perceived BRS issue leadership and
+candidate-perception balance. The card shows its component coverage, confidence,
+respondent-observation base and contributing components. The composite is
+directional research evidence, not vote intention, and no participant rating or
+participant-to-band mapping is created or retained.
+
 Party attention is not labelled as vote intention. Predictive output remains
 disabled while the evidence is a small/demo cohort without a measured outcome,
 sampling weights, and out-of-sample validation. The platform never produces an

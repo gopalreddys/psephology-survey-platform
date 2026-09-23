@@ -550,6 +550,118 @@ function shareOf(items, label) {
   return number(items.find((item) => item.value === label)?.percentage);
 }
 
+function clamp(value, minimum, maximum) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function fivePointBand(value) {
+  if (value === null) return "Not measured";
+  if (value < 1.8) return "Very low";
+  if (value < 2.6) return "Low";
+  if (value < 3.4) return "Uncertain";
+  if (value < 4.2) return "Moderate";
+  return "High";
+}
+
+function aggregateCampaignRating(records, iterationCount) {
+  const components = [];
+  const direct = directFivePointIndex(records);
+  if (direct.value !== null) {
+    components.push({
+      key: "DIRECT_RATING",
+      label: "Direct neutral party-strength rating",
+      value: direct.value,
+      weight: 4,
+      answered: direct.answered
+    });
+  }
+
+  const partyAttention = derivedDistribution(records, (record) =>
+    classifyParty(record.response_variables?.party_salience_unaided)
+  );
+  const partyAttentionAnswered = partyAttention.reduce(
+    (total, item) => total + item.respondents,
+    0
+  );
+  if (partyAttentionAnswered) {
+    components.push({
+      key: "PARTY_ATTENTION",
+      label: "Unaided BRS attention",
+      value: Number((1 + (4 * shareOf(partyAttention, "BRS") / 100)).toFixed(2)),
+      weight: 2,
+      answered: partyAttentionAnswered
+    });
+  }
+
+  const issueLeadership = derivedDistribution(records, (record) =>
+    classifyParty(record.response_variables?.perceived_issue_leader_aided)
+  );
+  const issueLeadershipAnswered = issueLeadership.reduce(
+    (total, item) => total + item.respondents,
+    0
+  );
+  if (issueLeadershipAnswered) {
+    components.push({
+      key: "ISSUE_LEADERSHIP",
+      label: "BRS issue-leadership perception",
+      value: Number((1 + (4 * shareOf(issueLeadership, "BRS") / 100)).toFixed(2)),
+      weight: 3,
+      answered: issueLeadershipAnswered
+    });
+  }
+
+  const candidatePerception = derivedDistribution(records, candidateSentiment);
+  const candidateAnswered = candidatePerception.reduce(
+    (total, item) => total + item.respondents,
+    0
+  );
+  if (candidateAnswered) {
+    const sentimentScore = candidatePerception.reduce((total, item) => {
+      const score = item.value === "Positive" ? 5
+        : item.value === "Negative" ? 1
+          : 3;
+      return total + (score * item.respondents);
+    }, 0) / candidateAnswered;
+    components.push({
+      key: "CANDIDATE_PERCEPTION",
+      label: "Candidate perception balance",
+      value: Number(sentimentScore.toFixed(2)),
+      weight: 2,
+      answered: candidateAnswered
+    });
+  }
+
+  const weight = components.reduce((total, component) => total + component.weight, 0);
+  const value = weight
+    ? Number(clamp(
+        components.reduce(
+          (total, component) => total + (component.value * component.weight),
+          0
+        ) / weight,
+        1,
+        5
+      ).toFixed(1))
+    : null;
+  const componentCoverage = Number(((components.length / 4) * 100).toFixed(1));
+  const confidence = records.length >= 100 && componentCoverage >= 75
+    ? "High"
+    : records.length >= 30 && componentCoverage >= 50
+      ? "Moderate"
+      : "Directional";
+
+  return {
+    value,
+    scale: 5,
+    band: fivePointBand(value),
+    confidence,
+    componentCoverage,
+    respondentObservations: records.length,
+    iterationCount,
+    components,
+    basis: "Aggregate output-variable composite; not individual vote intention"
+  };
+}
+
 function buildIterationDashboard(records, {
   issuePriority,
   partySalience,
@@ -954,6 +1066,13 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const segmentSuppressed = hasDemographicFilter
     && filteredRecords.length < MINIMUM_SEGMENT_BASE;
   const selectedRecords = segmentSuppressed ? [] : filteredRecords;
+  const campaignRatingRecords = completed.flatMap((iteration) =>
+    latestRespondents(records, iteration.id)
+  );
+  const campaignRating = aggregateCampaignRating(
+    campaignRatingRecords,
+    completed.length
+  );
   const performance = questionPerformance(selectedRecords);
   const issuePriority = distribution(selectedRecords, "graduate_issue_priority", classifyIssue);
   const candidateAwareness = distribution(selectedRecords, "veeresh_awareness", classifyAwareness);
@@ -1099,6 +1218,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       associations
     },
     iterationDashboard,
+    campaignRating,
     partyLeanIndex,
     transcriptAnalysis: {
       transcriptRespondents: selectedRecords.filter((record) =>

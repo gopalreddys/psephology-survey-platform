@@ -36,6 +36,59 @@
   background: #fff;
 }
 
+.campaignRating {
+  display: grid;
+  grid-template-columns: minmax(220px, .9fr) minmax(320px, 1.25fr);
+  gap: 18px 24px;
+  margin-bottom: 16px;
+  padding: 20px;
+  border: 1px solid #bfe0d9;
+  border-radius: 19px;
+  background: linear-gradient(135deg, #fff 0%, #f2fbf9 54%, #fff8f9 100%);
+}
+
+.campaignRatingLead > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #168b7d;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+
+.campaignRatingLead h3 { margin: 0 0 10px; font-size: 22px; }
+.campaignRatingLead p { margin: 10px 0 0; color: #6e6266; font-size: 11px; line-height: 1.5; }
+
+.campaignRatingEvidence {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.campaignRatingEvidence > div,
+.ratingComponents > div {
+  padding: 11px;
+  border: 1px solid #e0ebe8;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .9);
+}
+
+.campaignRatingEvidence span,
+.ratingComponents span { display: block; color: #7d6c71; font-size: 9px; font-weight: 750; }
+.campaignRatingEvidence strong { display: block; margin-top: 5px; color: #168b7d; font-size: 17px; }
+.campaignRatingEvidence small,
+.ratingComponents small { display: block; margin-top: 3px; color: #97878b; font-size: 9px; }
+
+.ratingComponents {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.ratingComponents strong { display: block; margin-top: 5px; color: #594249; font-size: 14px; }
+.ratingComponents > p { margin: 0; color: #7d6c71; font-size: 11px; }
+
 .ratingCard h3 { margin: 0 0 14px; font-size: 15px; }
 .ratingCard p { margin: 12px 0 0; color: #7d6c71; font-size: 11px; line-height: 1.5; }
 .emptyStars { color: #d9cbce; font-size: 31px; letter-spacing: 4px; }
@@ -43,6 +96,12 @@
 .stars i { color: #d9cbce; font-size: 24px; font-style: normal; }
 .stars i[data-filled="true"] { color: #e0a34b; }
 .stars strong { margin-left: 7px; color: #594249; }
+
+@media (max-width: 980px) {
+  .campaignRating { grid-template-columns: 1fr; }
+  .campaignRatingEvidence,
+  .ratingComponents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 .methodNote {
   display: flex;

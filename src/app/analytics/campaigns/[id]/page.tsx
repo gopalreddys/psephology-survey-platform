@@ -17,6 +17,17 @@ type Distribution = { value: string; respondents: number; percentage: number };
 type RunSummary = { id: string; iterationId: string; number: number; status: string; callAttempts: number; connectedCalls: number; transcriptCoveragePct: number; responseCoveragePct: number };
 type AnalysisIteration = { id: string; number: number; name: string; connectedRespondents: number; runs: RunSummary[] };
 type CampaignOption = { id: string; code: string; name: string };
+type CampaignRating = {
+  value: number | null;
+  scale: number;
+  band: string;
+  confidence: string;
+  componentCoverage: number;
+  respondentObservations: number;
+  iterationCount: number;
+  components: Array<{ key: string; label: string; value: number; weight: number; answered: number }>;
+  basis: string;
+};
 type StrategicResponse = {
   campaign: { id: string; code: string; name: string; targetName: string; surveyStage: string };
   scope: {
@@ -32,6 +43,7 @@ type StrategicResponse = {
   latestIteration: AnalysisIteration | null;
   issueAnalysis: { priorities: Distribution[]; developmentPriorities: Distribution[]; desiredChanges: Distribution[] };
   iterationDashboard: { respondentBase: number; candidateSentiment: Distribution[]; incumbentSentiment: Distribution[]; partyAttention: Distribution[]; perceivedIssueLeadership: Distribution[] };
+  campaignRating: CampaignRating;
   partyLeanIndex: { value: number | null; answered: number; scale: number; basis: string };
   findings: Array<{ type: string; title: string; evidence: string; caution: string }>;
   generatedAt: string;
@@ -68,6 +80,35 @@ function FiveStarIndex({ index }: { index: StrategicResponse["partyLeanIndex"] }
   return (
     <article className={intelligenceStyles.ratingCard}><span>DIRECT PARTY-STRENGTH MEASURE</span><h3>Aggregate five-star index</h3>
       {index.value === null ? <><div className={intelligenceStyles.emptyStars}>☆☆☆☆☆</div><p>Not measured in this questionnaire. Add a neutral 1–5 party-strength question to a future Iteration to populate this index.</p></> : <><div className={intelligenceStyles.stars} aria-label={`${index.value} out of 5 stars`}>{Array.from({ length: 5 }, (_, item) => <i key={item} data-filled={item + 1 <= Math.round(index.value || 0)}>★</i>)}<strong>{index.value}/5</strong></div><p>{index.answered} direct answers · {index.basis}. This is an aggregate cohort measure, never an individual voter score.</p></>}
+    </article>
+  );
+}
+
+function CampaignAggregateRating({ rating }: { rating: CampaignRating }) {
+  return (
+    <article className={intelligenceStyles.campaignRating}>
+      <div className={intelligenceStyles.campaignRatingLead}>
+        <span>CAMPAIGN-LEVEL AGGREGATE RATING</span>
+        <h3>{rating.band}</h3>
+        {rating.value === null
+          ? <div className={intelligenceStyles.emptyStars}>☆☆☆☆☆</div>
+          : <div className={intelligenceStyles.stars} aria-label={`${rating.value} out of 5 stars`}>
+              {Array.from({ length: 5 }, (_, item) => <i key={item} data-filled={item + 1 <= Math.round(rating.value || 0)}>★</i>)}
+              <strong>{rating.value}/5</strong>
+            </div>}
+        <p>{rating.basis}.</p>
+      </div>
+      <div className={intelligenceStyles.campaignRatingEvidence}>
+        <div><span>Confidence</span><strong>{rating.confidence}</strong></div>
+        <div><span>Output coverage</span><strong>{pct(rating.componentCoverage)}</strong></div>
+        <div><span>Evidence base</span><strong>{rating.respondentObservations}</strong><small>respondent observations</small></div>
+        <div><span>Iterations</span><strong>{rating.iterationCount}</strong><small>completed</small></div>
+      </div>
+      <div className={intelligenceStyles.ratingComponents}>
+        {!rating.components.length
+          ? <p>No eligible campaign-level output variables are available.</p>
+          : rating.components.map((component) => <div key={component.key}><span>{component.label}</span><strong>{component.value.toFixed(1)}/5</strong><small>{component.answered} answers</small></div>)}
+      </div>
     </article>
   );
 }
@@ -117,6 +158,17 @@ export default function StrategicCampaignAnalyticsPage() {
         scale: 5,
         basis: "Direct respondent rating only"
       };
+      response.campaignRating ||= {
+        value: null,
+        scale: 5,
+        band: "Not measured",
+        confidence: "Directional",
+        componentCoverage: 0,
+        respondentObservations: 0,
+        iterationCount: 0,
+        components: [],
+        basis: "Aggregate output-variable composite; not individual vote intention"
+      };
       setData(response);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Analysis"); }
     finally { setLoading(false); setRefreshing(false); }
@@ -153,6 +205,7 @@ export default function StrategicCampaignAnalyticsPage() {
           {data.scope.operations && <section className={scopeStyles.scopeMetrics} aria-label="Selected analysis scope"><article><PhoneCall size={18} /><span>Attempts</span><strong>{data.scope.operations.callAttempts}</strong></article><article><Activity size={18} /><span>Connected</span><strong>{data.scope.operations.connectedCalls}</strong></article><article><FileQuestion size={18} /><span>Responses</span><strong>{pct(data.scope.operations.responseCoveragePct)}</strong></article><article><Target size={18} /><span>Filtered base</span><strong>{data.segment.respondentBase}</strong></article></section>}
 
           <section className={intelligenceStyles.dashboardSection}><div className={styles.sectionHead}><div><span>DECISION SUMMARY</span><h2>Signals needed for the next Iteration</h2></div><p>{data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.segment.respondentBase} deduplicated respondents` : "No Iteration evidence available"}</p></div>
+            <CampaignAggregateRating rating={data.campaignRating} />
             <div className={intelligenceStyles.decisionGrid}>
               <DonutChart title="Party attention" subtitle="PARTY LEAN PROXY" items={data.iterationDashboard.partyAttention} empty="No unaided party signal was captured." />
               <DonutChart title="Candidate perception" subtitle="CANDIDATE LEAN" items={data.iterationDashboard.candidateSentiment} empty="No classifiable candidate perception was captured." />
