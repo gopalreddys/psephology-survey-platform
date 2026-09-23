@@ -116,9 +116,9 @@ export async function dispatchVoterDemoCall({
       "Introduce yourself as an AI assistant, state that this is a demonstration call, confirm that it is a convenient time, ask up to three neutral questions about local civic priorities, and thank the participant.",
     knowledge_context: "",
     probe_context:
-      "Ask at most one short, neutral follow-up when clarification is useful.",
+      "Do not probe a complete answer. Ask at most one short, neutral clarification only when the response cannot be coded.",
     agent_style_context:
-      "Be transparent that you are an AI assistant. Be respectful, concise, neutral, and end immediately if the participant asks to stop."
+      "Be transparent that you are an AI assistant. Be respectful, concise, neutral, and end immediately if the participant asks to stop. After each answer, acknowledge in two to five words and immediately ask the next question. Never repeat, paraphrase, summarize, interpret, praise, or debate the participant's answer."
   };
 
   let providerResponse;

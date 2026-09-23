@@ -25,6 +25,11 @@ assert.match(repository, /Run results support execution-quality and retry-cohort
 assert.match(repository, /latestRespondents\(records, selectedIteration\.id, selectedRun\?\.id/);
 assert.match(repository, /roleAwareness/);
 assert.match(repository, /incumbentAssessment/);
+assert.match(repository, /buildIterationDashboard/);
+assert.match(repository, /candidateSentiment/);
+assert.match(repository, /partyAttention/);
+assert.match(repository, /predictiveAssessment/);
+assert.match(repository, /Do not infer individual vote choice/);
 assert.match(routes, /req\.query\.iterationId/);
 assert.match(routes, /req\.query\.runId/);
 assert.match(routes, /requireRole\(\["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"\]\)/);

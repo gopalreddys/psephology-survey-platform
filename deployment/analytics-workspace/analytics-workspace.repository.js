@@ -390,6 +390,173 @@ function distribution(records, key, classifier = null) {
     }));
 }
 
+function derivedDistribution(records, derive) {
+  const values = new Map();
+  for (const record of records) {
+    const display = derive(record);
+    if (!display) continue;
+    const normalized = display.toLowerCase();
+    const current = values.get(normalized) || { value: display, respondents: 0 };
+    current.respondents += 1;
+    values.set(normalized, current);
+  }
+  const answered = Array.from(values.values()).reduce(
+    (total, item) => total + item.respondents,
+    0
+  );
+  return Array.from(values.values())
+    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value))
+    .map((item) => ({
+      ...item,
+      percentage: percentage(item.respondents, answered)
+    }));
+}
+
+function classifySentiment(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/not enough|don.?t know|do not know|can.?t say|cannot say|no opinion|not aware|not heard|unaware|prefer not|unclear|unknown/.test(text)) {
+    return "Can't say";
+  }
+  if (/very poor|poor|negative|bad|dissatisf|disappoint|not good|unfavour|unfavor|weak/.test(text)) {
+    return "Negative";
+  }
+  if (/neither|neutral|mixed|average|no difference|okay|moderate/.test(text)) {
+    return "Neutral";
+  }
+  if (/very good|good|positive|favour|favor|satisf|impress|excellent|strong/.test(text)) {
+    return "Positive";
+  }
+  return "Can't say";
+}
+
+function classifyFit(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/very closely|somewhat closely|strong fit|good fit/.test(text)) return "Positive";
+  if (/not very closely|not at all|poor fit/.test(text)) return "Negative";
+  if (/neutral|mixed|average/.test(text)) return "Neutral";
+  return "Can't say";
+}
+
+function candidateSentiment(record) {
+  const variables = record.response_variables || {};
+  if (validAnswer(variables.veeresh_impression)) {
+    return classifySentiment(variables.veeresh_impression);
+  }
+  if (validAnswer(variables.veeresh_criterion_fit)) {
+    return classifyFit(variables.veeresh_criterion_fit);
+  }
+  if (validAnswer(variables.veeresh_awareness)) {
+    return "Can't say";
+  }
+  return null;
+}
+
+function classifyParty(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/\bbrs\b|bharat rashtra|telangana rashtra/.test(text)) return "BRS";
+  if (/\bbjp\b|bharatiya janata/.test(text)) return "BJP";
+  if (/congress|\binc\b/.test(text)) return "Congress";
+  if (/communist|\bcpi\b|\bcpm\b|left part/.test(text)) return "Left parties";
+  if (/independent|graduate group/.test(text)) return "Independent or graduate group";
+  if (/none|not enough|don.?t know|do not know|no idea|prefer not/.test(text)) return "None / can't say";
+  return "Other";
+}
+
+function classifyInfluence(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/not enough|don.?t know|do not know|not sure|prefer not|unclear/.test(text)) return "Can't say";
+  if (/\bno\b|none|not influenc|did not|hasn.?t|haven.?t/.test(text)) return "No influence stated";
+  if (/\byes\b|influenc|shaped|association|union|student|teacher|graduate group/.test(text)) return "Influence stated";
+  return "Can't say";
+}
+
+function shareOf(items, label) {
+  return number(items.find((item) => item.value === label)?.percentage);
+}
+
+function buildIterationDashboard(records, {
+  issuePriority,
+  partySalience,
+  issueLeader,
+  incumbentAssessment,
+  associationInfluence,
+  averageAnswerCoveragePct,
+  demoRespondents
+}) {
+  const candidateSentimentDistribution = derivedDistribution(records, candidateSentiment);
+  const issueSentiment = distribution(records, "issue_sentiment", classifySentiment);
+  const incumbentSentiment = derivedDistribution(records, (record) =>
+    classifySentiment(record.response_variables?.incumbent_assessment)
+  );
+  const associationInfluenceSignal = derivedDistribution(records, (record) =>
+    classifyInfluence(record.response_variables?.association_influence)
+  );
+  const fitSentiment = derivedDistribution(records, (record) =>
+    classifyFit(record.response_variables?.veeresh_criterion_fit)
+  );
+  const topIssue = issuePriority[0] || null;
+  const topParty = partySalience[0] || null;
+  const topIssueLeader = issueLeader[0] || null;
+  const respondentBase = records.length;
+  const reasons = [];
+
+  if (respondentBase < 100) reasons.push("A minimum analytical base has not been reached.");
+  if (demoRespondents > 0) reasons.push("The evidence includes controlled demo respondents.");
+  reasons.push("The questionnaire does not measure a verified vote-choice outcome.");
+  reasons.push("No sampling weights or out-of-sample validation are available.");
+
+  return {
+    respondentBase,
+    candidateSentiment: candidateSentimentDistribution,
+    candidateFit: fitSentiment,
+    issueSentiment,
+    incumbentSentiment: incumbentSentiment.length ? incumbentSentiment : incumbentAssessment,
+    partyAttention: partySalience,
+    perceivedIssueLeadership: issueLeader,
+    associationInfluence: associationInfluenceSignal.length
+      ? associationInfluenceSignal
+      : associationInfluence,
+    headlineMetrics: [
+      {
+        label: "Candidate positive",
+        value: shareOf(candidateSentimentDistribution, "Positive"),
+        detail: "Positive share of classified candidate perception answers"
+      },
+      {
+        label: "Candidate can't say",
+        value: shareOf(candidateSentimentDistribution, "Can't say"),
+        detail: "Insufficient candidate knowledge or no classifiable view"
+      },
+      {
+        label: "Association influence",
+        value: shareOf(associationInfluenceSignal, "Influence stated"),
+        detail: "Respondents explicitly reporting group influence"
+      },
+      {
+        label: "Answer completeness",
+        value: averageAnswerCoveragePct,
+        detail: "Average coverage across answered questionnaire variables"
+      }
+    ],
+    leadingSignals: {
+      issue: topIssue,
+      partyAttention: topParty,
+      issueLeader: topIssueLeader
+    },
+    predictiveAssessment: {
+      status: "NOT_READY",
+      label: "Descriptive and directional only",
+      reasons,
+      permittedUse: "Compare aggregate Iteration signals and improve questionnaire design.",
+      prohibitedUse: "Do not infer individual vote choice, persuasion likelihood or constituency vote share."
+    }
+  };
+}
+
 function latestRespondents(records, iterationId, runId = null) {
   const respondents = new Map();
   for (const record of records) {
@@ -712,8 +879,8 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const roleAwareness = distribution(selectedRecords, "mlc_role_awareness");
   const incumbentAwareness = distribution(selectedRecords, "incumbent_awareness");
   const incumbentAssessment = distribution(selectedRecords, "incumbent_assessment");
-  const partySalience = distribution(selectedRecords, "party_salience_unaided");
-  const issueLeader = distribution(selectedRecords, "perceived_issue_leader_aided");
+  const partySalience = distribution(selectedRecords, "party_salience_unaided", classifyParty);
+  const issueLeader = distribution(selectedRecords, "perceived_issue_leader_aided", classifyParty);
   const associationInfluence = distribution(selectedRecords, "association_influence");
   const associations = distribution(selectedRecords, "association_named");
   const themes = transcriptThemes(selectedRecords);
@@ -722,6 +889,15 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const averageAnswerCoveragePct = answeredQuestions.length
     ? Number((answeredQuestions.reduce((total, question) => total + question.answeredPct, 0) / answeredQuestions.length).toFixed(1))
     : 0;
+  const iterationDashboard = buildIterationDashboard(selectedRecords, {
+    issuePriority,
+    partySalience,
+    issueLeader,
+    incumbentAssessment,
+    associationInfluence,
+    averageAnswerCoveragePct,
+    demoRespondents
+  });
   const comparison = campaignAnalysis.comparison
     ? {
         previousIteration: campaignAnalysis.comparison.previousIteration,
@@ -820,6 +996,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       associationInfluence,
       associations
     },
+    iterationDashboard,
     transcriptAnalysis: {
       transcriptRespondents: selectedRecords.filter((record) =>
         Boolean(transcriptText(record.interaction_transcript))

@@ -42,6 +42,20 @@ The strategic workspace supports an explicit Campaign → Iteration → Run hier
 - The selected scope reports attempts, connections, successful outcomes, duration, callback coverage, transcript coverage and structured-response coverage.
 - Institutional awareness, incumbent assessment, candidate criteria and association influence are retained beside the original issue, candidate and party signals.
 
+The selected Iteration now includes a visual intelligence dashboard with:
+
+- candidate perception grouped as Positive, Neutral, Negative or Can't say;
+- candidate criterion-fit and incumbent-assessment distributions;
+- unaided party-attention and aided issue-leadership signals;
+- association influence and issue-sentiment signals;
+- answer-completeness and respondent-base context;
+- an explicit predictive-readiness guard.
+
+Party attention is not labelled as vote intention. Predictive output remains
+disabled while the evidence is a small/demo cohort without a measured outcome,
+sampling weights, and out-of-sample validation. The platform never produces an
+individual voter political-propensity score.
+
 Install on the API host:
 
 ```bash

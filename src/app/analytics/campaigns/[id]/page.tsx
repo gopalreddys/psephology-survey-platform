@@ -26,11 +26,42 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./strategic.module.css";
 import scopeStyles from "./scope.module.css";
+import intelligenceStyles from "./intelligence.module.css";
 
 type Distribution = {
   value: string;
   respondents: number;
   percentage: number;
+};
+
+type DashboardMetric = {
+  label: string;
+  value: number;
+  detail: string;
+};
+
+type IterationDashboard = {
+  respondentBase: number;
+  candidateSentiment: Distribution[];
+  candidateFit: Distribution[];
+  issueSentiment: Distribution[];
+  incumbentSentiment: Distribution[];
+  partyAttention: Distribution[];
+  perceivedIssueLeadership: Distribution[];
+  associationInfluence: Distribution[];
+  headlineMetrics: DashboardMetric[];
+  leadingSignals: {
+    issue: Distribution | null;
+    partyAttention: Distribution | null;
+    issueLeader: Distribution | null;
+  };
+  predictiveAssessment: {
+    status: "NOT_READY" | "READY";
+    label: string;
+    reasons: string[];
+    permittedUse: string;
+    prohibitedUse: string;
+  };
 };
 
 type QuestionPerformance = {
@@ -157,6 +188,7 @@ type StrategicResponse = {
     associationInfluence: Distribution[];
     associations: Distribution[];
   };
+  iterationDashboard: IterationDashboard;
   transcriptAnalysis: {
     transcriptRespondents: number;
     themes: Array<{
@@ -206,6 +238,42 @@ function DistributionList({ items, empty }: { items: Distribution[]; empty: stri
         );
       })}
     </div>
+  );
+}
+
+const CHART_COLORS = ["#168b7d", "#d75b72", "#e0a34b", "#6b79b9", "#9b7ab8", "#879692"];
+
+function DonutChart({ title, items, empty }: {
+  title: string;
+  items: Distribution[];
+  empty: string;
+}) {
+  if (!items.length) return (
+    <article className={intelligenceStyles.chartCard}>
+      <h3>{title}</h3>
+      <div className={styles.noSignal}>{empty}</div>
+    </article>
+  );
+  let cursor = 0;
+  const stops = items.map(function (item, index) {
+    const start = cursor;
+    cursor += item.percentage;
+    return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`;
+  });
+  return (
+    <article className={intelligenceStyles.chartCard}>
+      <h3>{title}</h3>
+      <div className={intelligenceStyles.donutLayout}>
+        <div className={intelligenceStyles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}>
+          <div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div>
+        </div>
+        <div className={intelligenceStyles.legend}>
+          {items.slice(0, 6).map(function (item, index) {
+            return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div>;
+          })}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -413,6 +481,46 @@ export default function StrategicCampaignAnalyticsPage() {
                   })}
                 </div>
               )}
+            </section>
+
+            <section className={intelligenceStyles.dashboardSection}>
+              <div className={styles.sectionHead}>
+                <div><span>ITERATION INTELLIGENCE</span><h2>Perception and influence dashboard</h2></div>
+                <p>{data.latestIteration
+                  ? `Iteration ${data.latestIteration.number} · ${data.iterationDashboard.respondentBase} deduplicated connected respondents`
+                  : "Select an Iteration with connected response evidence."}</p>
+              </div>
+              <div className={intelligenceStyles.dashboardMetrics}>
+                {data.iterationDashboard.headlineMetrics.map(function (metric) {
+                  return <article key={metric.label}><span>{metric.label}</span><strong>{pct(metric.value)}</strong><p>{metric.detail}</p></article>;
+                })}
+              </div>
+              <div className={intelligenceStyles.chartGrid}>
+                <DonutChart title="Candidate perception" items={data.iterationDashboard.candidateSentiment} empty="No classifiable candidate perception is available." />
+                <DonutChart title="Candidate criterion fit" items={data.iterationDashboard.candidateFit} empty="No candidate-fit answer is available." />
+                <DonutChart title="Association influence" items={data.iterationDashboard.associationInfluence} empty="No association-influence answer is available." />
+                <DonutChart title="Incumbent assessment" items={data.iterationDashboard.incumbentSentiment} empty="No incumbent-assessment answer is available." />
+              </div>
+              <div className={intelligenceStyles.landscapeGrid}>
+                <SignalCard eyebrow="PARTY LANDSCAPE" title="Unaided attention signal">
+                  <DistributionList items={data.iterationDashboard.partyAttention} empty="No party or independent group was named unaided." />
+                  <p className={intelligenceStyles.signalCaution}>Observed attention to graduates’ concerns—not vote intention or a voter-level party label.</p>
+                </SignalCard>
+                <SignalCard eyebrow="ISSUE LEADERSHIP" title="Aided perceived effectiveness">
+                  <DistributionList items={data.iterationDashboard.perceivedIssueLeadership} empty="No aided issue-leadership answer is available." />
+                  <p className={intelligenceStyles.signalCaution}>Measures perceived issue leadership after balanced options were read.</p>
+                </SignalCard>
+                <SignalCard eyebrow="ISSUE SENTIMENT" title="Concern tone">
+                  <DistributionList items={data.iterationDashboard.issueSentiment} empty="No structured issue-sentiment output was captured." />
+                  <p className={intelligenceStyles.signalCaution}>Deterministic grouping of the stored issue-sentiment output.</p>
+                </SignalCard>
+              </div>
+              <div className={intelligenceStyles.predictiveGuard} data-status={data.iterationDashboard.predictiveAssessment.status}>
+                <div><ShieldAlert size={21} /><span>PREDICTIVE READINESS</span><strong>{data.iterationDashboard.predictiveAssessment.label}</strong></div>
+                <ul>{data.iterationDashboard.predictiveAssessment.reasons.map(function (reason) { return <li key={reason}>{reason}</li>; })}</ul>
+                <p><strong>Appropriate:</strong> {data.iterationDashboard.predictiveAssessment.permittedUse}</p>
+                <p><strong>Not appropriate:</strong> {data.iterationDashboard.predictiveAssessment.prohibitedUse}</p>
+              </div>
             </section>
 
             <section className={styles.signalsSection}>
