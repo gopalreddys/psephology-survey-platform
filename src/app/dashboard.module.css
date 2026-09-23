@@ -87,6 +87,79 @@
 .metric strong { font-size: 29px; line-height: 1.1; }
 .metric small { color: #a18c91; }
 
+.intelligencePanel {
+  margin-bottom: 20px;
+  padding: 24px;
+  border: 1px solid #cfe7e2;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #f4fcfa, #fff 42%, #fff8f9);
+}
+.intelligenceHead { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+.intelligenceHead > div:first-child > span,
+.chartHead > span,
+.ratingSummary > span { color: #168b7d; font-size: 10px; font-weight: 850; letter-spacing: .14em; }
+.intelligenceHead h2 { margin: 6px 0; font-size: 25px; }
+.intelligenceHead p { max-width: 720px; margin: 0; color: #7d6c71; font-size: 12px; line-height: 1.45; }
+.intelligenceFilters { display: grid; grid-template-columns: repeat(2, minmax(170px, 1fr)); gap: 10px; min-width: 430px; }
+.intelligenceFilters label { display: grid; gap: 5px; color: #78676c; font-size: 10px; font-weight: 800; }
+.intelligenceFilters select { min-width: 0; padding: 10px 12px; border: 1px solid #d6e6e2; border-radius: 10px; background: #fff; color: #4d3d42; }
+.intelligenceSummary { display: grid; grid-template-columns: .8fr 1fr 1.2fr; gap: 13px; }
+.reportGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 13px; }
+.ratingSummary,
+.chartCard,
+.heatmapCard { padding: 17px; border: 1px solid #dce9e6; border-radius: 17px; background: rgba(255,255,255,.92); }
+.ratingSummary { display: grid; align-content: center; }
+.ratingSummary > strong { margin: 8px 0 3px; font-size: 31px; }
+.ratingSummary > div { display: flex; gap: 3px; }
+.ratingSummary i { color: #d9cbce; font-size: 23px; font-style: normal; }
+.ratingSummary i[data-filled="true"] { color: #e0a34b; }
+.ratingSummary small,
+.chartHead small { color: #917f84; font-size: 10px; }
+.chartHead h3 { margin: 5px 0; font-size: 16px; }
+.chartCard > p { margin: 10px 0 0; color: #857378; font-size: 9px; line-height: 1.4; }
+.donutWrap { display: grid; grid-template-columns: 105px 1fr; align-items: center; gap: 12px; margin-top: 12px; }
+.donut { display: grid; place-items: center; width: 100px; aspect-ratio: 1; border-radius: 50%; }
+.donut > div { display: grid; place-items: center; width: 70%; aspect-ratio: 1; border-radius: 50%; background: #fff; }
+.donut strong { font-size: 20px; }
+.donut span { color: #8e7d82; font-size: 8px; text-transform: uppercase; }
+.legend { display: grid; gap: 6px; }
+.legend > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; font-size: 9px; }
+.legend i { width: 8px; height: 8px; border-radius: 50%; }
+.segmentBars,
+.issueBars { display: grid; gap: 10px; margin-top: 14px; }
+.segmentRow > div:first-child { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 3px 8px; }
+.segmentRow span,
+.issueBars span { color: #59494e; font-size: 11px; font-weight: 750; }
+.segmentRow small { color: #9a888d; font-size: 8px; }
+.segmentRow strong,
+.issueBars strong { color: #168b7d; font-size: 9px; }
+.segmentRow > div:last-child,
+.issueBars > div > div:last-child { height: 6px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: #e9efed; }
+.segmentRow i,
+.issueBars i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#1c9b89,#7acaba); }
+.issueBars > div > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.trendChart { display: flex; align-items: flex-end; gap: 13px; min-height: 120px; margin-top: 10px; }
+.trendChart > div { display: grid; flex: 1; gap: 4px; text-align: center; }
+.trendChart > div > div { position: relative; display: flex; align-items: flex-end; justify-content: center; height: 86px; border-radius: 8px 8px 3px 3px; background: #eef5f3; }
+.trendChart i { display: block; width: 72%; border-radius: 6px 6px 2px 2px; background: linear-gradient(#d75b72,#f0a1b0); }
+.trendChart strong { position: absolute; top: 5px; font-size: 10px; }
+.trendChart span { font-size: 9px; font-weight: 750; }
+.trendChart small { color: #99878c; font-size: 8px; }
+.heatmapCard { margin-top: 13px; overflow-x: auto; }
+.heatmap { display: grid; min-width: 680px; gap: 5px; margin-top: 13px; }
+.heatmapHeader,
+.heatmapRow { display: grid; grid-template-columns: minmax(190px, 1.3fr) repeat(4, 1fr); gap: 5px; align-items: stretch; }
+.heatmapHeader span,
+.heatmapHeader strong { padding: 7px; color: #78666c; font-size: 9px; text-align: center; }
+.heatmapHeader span { text-align: left; }
+.heatmapRow > span { display: grid; padding: 8px; font-size: 10px; font-weight: 750; }
+.heatmapRow > span small { color: #9b898e; font-size: 8px; font-weight: 500; }
+.heatmapRow i { display: grid; place-items: center; min-height: 39px; border-radius: 7px; color: #48383d; font-size: 9px; font-style: normal; font-weight: 800; }
+.heatmapRow i[data-suppressed="true"] { color: #aa949a; }
+.chartEmpty { display: grid; place-items: center; min-height: 90px; color: #9a858b; font-size: 11px; text-align: center; }
+.intelligenceSuppressed { display: flex; align-items: flex-start; gap: 10px; padding: 18px; border-radius: 13px; background: #fff1f3; color: #9d4659; }
+.intelligenceSuppressed p { margin: 4px 0 0; font-size: 11px; }
+
 .contentGrid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px; margin-bottom: 20px; }
 .panel { min-width: 0; border-radius: 23px; overflow: hidden; }
 .panelHead { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 23px 24px; border-bottom: 1px solid #f1e6e8; }
@@ -148,6 +221,11 @@
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .roleBrief { grid-template-columns: 1fr; }
   .roleBriefDetail { padding-top: 18px; padding-left: 0; border-top: 1px solid #d8ebe7; border-left: 0; }
+  .intelligenceHead { flex-direction: column; }
+  .intelligenceFilters { min-width: 0; }
+  .intelligenceSummary,
+  .reportGrid { grid-template-columns: 1fr 1fr; }
+  .ratingSummary { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .page { padding: 15px; }
@@ -158,4 +236,9 @@
   .campaignFlow { grid-template-columns: repeat(2, 1fr); }
   .iterations a { grid-template-columns: 1fr auto; }
   .iterations a small { grid-column: 1 / -1; text-align: left; }
+  .intelligencePanel { padding: 16px; }
+  .intelligenceFilters,
+  .intelligenceSummary,
+  .reportGrid { grid-template-columns: 1fr; }
+  .ratingSummary { grid-column: auto; }
 }

@@ -11,7 +11,10 @@ router.get(
   requireRole(["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"]),
   async function (req, res) {
     try {
-      return res.json(await getRoleDashboard(req.platformUser));
+      return res.json(await getRoleDashboard(req.platformUser, {
+        campaignId: req.query.campaignId || "",
+        mandal: req.query.mandal || ""
+      }));
     } catch (error) {
       console.error("Unable to load role Dashboard:", error);
       return res.status(error.statusCode || 500).json({

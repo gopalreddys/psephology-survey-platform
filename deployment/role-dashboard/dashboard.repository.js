@@ -3,6 +3,7 @@ import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js
 
 const ROLES = new Set(["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"]);
 const CLOSED_RUNS = new Set(["COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"]);
+const MINIMUM_REPORTING_BASE = 5;
 
 function campaignScope(actor) {
   if (actor.role_code === "CAMPAIGNER") {
@@ -34,6 +35,229 @@ function count(value) {
   return Number(value || 0);
 }
 
+function percentage(value, total) {
+  if (!total) return 0;
+  return Number(((count(value) / count(total)) * 100).toFixed(1));
+}
+
+function scalarText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (["number", "boolean"].includes(typeof value)) return String(value);
+  if (Array.isArray(value)) return value.map(scalarText).filter(Boolean).join(", ");
+  return "";
+}
+
+function normalizeGender(value) {
+  const text = scalarText(value).toLowerCase();
+  if (/^(f|female|woman)$/.test(text)) return "Female";
+  if (/^(m|male|man)$/.test(text)) return "Male";
+  if (!text) return "Unknown";
+  return "Other / self-described";
+}
+
+function ageBand(value) {
+  const age = Number(value);
+  if (!Number.isFinite(age) || age < 18) return "Unknown";
+  if (age < 30) return "18–29";
+  if (age < 40) return "30–39";
+  if (age < 50) return "40–49";
+  return "50+";
+}
+
+function normalizeMandal(value) {
+  return scalarText(value) || "Unknown";
+}
+
+function classifySentiment(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/not enough|don.?t know|do not know|can.?t say|cannot say|no opinion|not aware|not heard|unaware|prefer not|unclear|unknown/.test(text)) return "Uncertain";
+  if (/very poor|poor|negative|bad|dissatisf|disappoint|not good|unfavour|unfavor|weak|not very closely|not at all|poor fit/.test(text)) return "Negative";
+  if (/neither|neutral|mixed|average|no difference|okay|moderate/.test(text)) return "Neutral";
+  if (/very good|good|positive|favour|favor|satisf|impress|excellent|strong|very closely|somewhat closely|strong fit|good fit/.test(text)) return "Positive";
+  return "Uncertain";
+}
+
+function respondentSentiment(record) {
+  const variables = record.response_variables || {};
+  for (const key of [
+    "veeresh_impression", "veeresh_criterion_fit", "candidate_sentiment",
+    "incumbent_assessment", "issue_sentiment"
+  ]) {
+    const sentiment = classifySentiment(variables[key]);
+    if (sentiment) return sentiment;
+  }
+  return null;
+}
+
+function classifyIssue(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/job|employment|unemploy|recruit|career|ఉద్యోగ/.test(text)) return "Employment and jobs";
+  if (/education|college|university|student|teacher|fee|scholarship|విద్య/.test(text)) return "Education and universities";
+  if (/skill|training|internship/.test(text)) return "Skills and professional development";
+  if (/represent|voice|access|available|leadership/.test(text)) return "Representation and accessibility";
+  if (/road|water|transport|traffic|infrastructure/.test(text)) return "Civic services and infrastructure";
+  return "Other recorded priorities";
+}
+
+function distribution(records, derive) {
+  const values = new Map();
+  for (const record of records) {
+    const label = derive(record);
+    if (!label) continue;
+    values.set(label, count(values.get(label)) + 1);
+  }
+  const answered = Array.from(values.values()).reduce((total, value) => total + value, 0);
+  return Array.from(values.entries())
+    .map(([value, respondents]) => ({
+      value,
+      respondents,
+      percentage: percentage(respondents, answered)
+    }))
+    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value));
+}
+
+function segmentedSentiment(records, deriveSegment, order = []) {
+  const segments = new Map();
+  for (const record of records) {
+    const segment = deriveSegment(record);
+    const current = segments.get(segment) || [];
+    current.push(record);
+    segments.set(segment, current);
+  }
+  return Array.from(segments.entries())
+    .map(([label, items]) => {
+      const sentiment = distribution(items, respondentSentiment);
+      return {
+        label,
+        base: items.length,
+        suppressed: items.length < MINIMUM_REPORTING_BASE,
+        sentiment: items.length < MINIMUM_REPORTING_BASE ? [] : sentiment,
+        positivePct: items.length < MINIMUM_REPORTING_BASE
+          ? null
+          : percentage(
+              sentiment.find((item) => item.value === "Positive")?.respondents,
+              sentiment.reduce((total, item) => total + item.respondents, 0)
+            )
+      };
+    })
+    .sort((left, right) => {
+      const leftIndex = order.indexOf(left.label);
+      const rightIndex = order.indexOf(right.label);
+      if (leftIndex >= 0 || rightIndex >= 0) {
+        return (leftIndex < 0 ? 999 : leftIndex) - (rightIndex < 0 ? 999 : rightIndex);
+      }
+      return left.label.localeCompare(right.label);
+    });
+}
+
+function iterationRating(records) {
+  const sentiment = distribution(records, respondentSentiment);
+  const answered = sentiment.reduce((total, item) => total + item.respondents, 0);
+  if (!answered) return null;
+  const score = sentiment.reduce((total, item) => {
+    const value = item.value === "Positive" ? 5
+      : item.value === "Negative" ? 1
+        : 3;
+    return total + (value * item.respondents);
+  }, 0) / answered;
+  return Number(score.toFixed(1));
+}
+
+function trendDirection(points) {
+  if (points.length < 2) return "Insufficient history";
+  const change = points.at(-1).value - points[0].value;
+  if (change > 0.25) return "Improving";
+  if (change < -0.25) return "Declining";
+  return "Stable";
+}
+
+function nextIterationProjection(points) {
+  if (points.length < 2) return null;
+  const changes = points.slice(1).map((point, index) =>
+    point.value - points[index].value
+  );
+  const averageChange = changes.reduce((total, value) => total + value, 0) / changes.length;
+  return Number(Math.min(Math.max(points.at(-1).value + averageChange, 1), 5).toFixed(1));
+}
+
+function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRows, selection) {
+  if (actor.role_code === "CAMPAIGNER") return null;
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === selection.campaignId)
+    || campaigns.find((campaign) => evidenceRows.some((record) => record.campaign_id === campaign.id))
+    || campaigns[0]
+    || null;
+  if (!selectedCampaign) return null;
+
+  const campaignRecords = evidenceRows.filter((record) => record.campaign_id === selectedCampaign.id);
+  const mandals = Array.from(new Set(campaignRecords.map((record) => normalizeMandal(record.mandal_name)))).sort();
+  const selectedMandal = mandals.includes(selection.mandal) ? selection.mandal : "";
+  const records = selectedMandal
+    ? campaignRecords.filter((record) => normalizeMandal(record.mandal_name) === selectedMandal)
+    : campaignRecords;
+  const suppressed = Boolean(selectedMandal) && records.length < MINIMUM_REPORTING_BASE;
+  const reportable = suppressed ? [] : records;
+  const sentiment = distribution(reportable, respondentSentiment);
+  const issues = distribution(reportable, (record) => {
+    const variables = record.response_variables || {};
+    return classifyIssue(
+      variables.graduate_issue_priority || variables.development_priority ||
+      variables.priority_development || variables.desired_change || variables.expected_change
+    );
+  }).slice(0, 6);
+  const campaignIterations = iterationRows
+    .filter((iteration) => iteration.campaign_id === selectedCampaign.id)
+    .sort((left, right) => count(left.iteration_number) - count(right.iteration_number));
+  const trend = campaignIterations.map((iteration) => {
+    const iterationRecords = campaignRecords.filter((record) => record.iteration_id === iteration.id);
+    return {
+      iterationId: iteration.id,
+      iterationNumber: count(iteration.iteration_number),
+      iterationName: iteration.iteration_name,
+      base: iterationRecords.length,
+      value: iterationRating(iterationRecords)
+    };
+  }).filter((point) => point.value !== null);
+  const rating = iterationRating(reportable);
+  const confidence = reportable.length >= 100 ? "High"
+    : reportable.length >= 30 ? "Moderate"
+      : "Directional";
+  const predictiveConfidence = trend.length >= 3 && reportable.length >= 100
+    ? "High"
+    : trend.length >= 2 && reportable.length >= 30
+      ? "Moderate"
+      : "Directional";
+
+  return {
+    campaign: { id: selectedCampaign.id, name: selectedCampaign.name, code: selectedCampaign.code },
+    filters: { mandals, selectedMandal },
+    minimumBase: MINIMUM_REPORTING_BASE,
+    respondentBase: suppressed ? null : reportable.length,
+    suppressed,
+    rating: {
+      value: rating,
+      scale: 5,
+      confidence,
+      basis: "Aggregate sentiment across recorded campaign output variables"
+    },
+    sentiment,
+    issues,
+    age: segmentedSentiment(reportable, (record) => ageBand(record.age), ["18–29", "30–39", "40–49", "50+", "Unknown"]),
+    gender: segmentedSentiment(reportable, (record) => normalizeGender(record.gender), ["Female", "Male", "Other / self-described", "Unknown"]),
+    mandalHeatmap: segmentedSentiment(campaignRecords, (record) => normalizeMandal(record.mandal_name)),
+    predictive: {
+      status: "DIRECTIONAL",
+      direction: trendDirection(trend),
+      points: trend,
+      projectedNextRating: nextIterationProjection(trend),
+      confidence: predictiveConfidence,
+      statement: "Aggregate iteration trend; not an election forecast or participant-level prediction."
+    }
+  };
+}
+
 function action(kind, priority, title, detail, href, campaignName = null) {
   return { kind, priority, title, detail, href, campaignName };
 }
@@ -44,7 +268,7 @@ function sortActions(items) {
   ).slice(0, 12);
 }
 
-function buildDashboard(actor, campaignRows, iterationRows, runRows) {
+function buildDashboard(actor, campaignRows, iterationRows, runRows, evidenceRows, selection) {
   const campaigns = campaignRows.map((row) => ({
     id: row.id,
     name: row.campaign_name,
@@ -313,11 +537,18 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows) {
           }))
         };
       }),
+    intelligence: buildDashboardIntelligence(
+      actor,
+      campaigns,
+      iterationRows,
+      evidenceRows,
+      selection
+    ),
     generatedAt: new Date().toISOString()
   };
 }
 
-export async function getRoleDashboard(actor) {
+export async function getRoleDashboard(actor, selection = {}) {
   if (!ROLES.has(actor.role_code)) {
     const error = new Error("Role is not permitted to view the Dashboard");
     error.statusCode = 403;
@@ -414,10 +645,47 @@ export async function getRoleDashboard(actor) {
     ORDER BY run.updated_at DESC
   `, scope.values);
 
-  const [campaigns, iterations, runs] = await Promise.all([
+  const evidencePromise = actor.role_code === "CAMPAIGNER"
+    ? Promise.resolve({ rows: [] })
+    : db.query(`
+      WITH scoped_campaigns AS (
+        SELECT campaign.id
+        FROM campaigns campaign
+        WHERE campaign.status <> 'ARCHIVED' AND ${scope.sql}
+      ), evidence AS (
+        SELECT DISTINCT ON (
+          link.campaign_id,
+          call_record.iteration_id,
+          COALESCE(call_record.voter_id, call_record.id)
+        ) link.campaign_id, call_record.iteration_id, call_record.voter_id,
+          voter.gender, voter.age, voter.mandal_name_source AS mandal_name,
+          call_record.response_variables, call_record.updated_at
+        FROM campaign_iteration_links link
+        JOIN scoped_campaigns campaign ON campaign.id = link.campaign_id
+        JOIN calls call_record ON call_record.iteration_id = link.iteration_id
+        LEFT JOIN voter_master voter ON voter.id = call_record.voter_id
+        WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+          AND jsonb_typeof(call_record.response_variables) = 'object'
+          AND call_record.response_variables <> '{}'::jsonb
+        ORDER BY link.campaign_id, call_record.iteration_id,
+          COALESCE(call_record.voter_id, call_record.id),
+          call_record.updated_at DESC NULLS LAST
+      )
+      SELECT * FROM evidence
+    `, scope.values);
+
+  const [campaigns, iterations, runs, evidence] = await Promise.all([
     campaignsPromise,
     iterationsPromise,
-    runsPromise
+    runsPromise,
+    evidencePromise
   ]);
-  return buildDashboard(actor, campaigns.rows, iterations.rows, runs.rows);
+  return buildDashboard(
+    actor,
+    campaigns.rows,
+    iterations.rows,
+    runs.rows,
+    evidence.rows,
+    selection
+  );
 }

@@ -21,6 +21,23 @@ Each role receives a distinct operating brief and decision boundary:
 - Campaign Manager sees research completion, successful outcomes and evidence readiness.
 - Campaigner sees only their execution queue, pending/retry contacts and callback follow-up.
 
+For Super Admin, Admin and Campaign Manager roles, the Dashboard additionally
+provides an executive campaign-intelligence layer:
+
+- campaign and Mandal selectors;
+- aggregate five-point campaign sentiment rating;
+- positive, neutral, negative and uncertain sentiment distribution;
+- non-overlapping age cohorts: 18–29, 30–39, 40–49 and 50+;
+- gender-level aggregate reporting;
+- Mandal sentiment heatmap with suppression below five respondents;
+- issue-priority chart; and
+- aggregate Iteration trend, next-Iteration projection and confidence label.
+
+Analysis remains the detailed evidence workspace for questionnaire performance,
+Run/Iteration diagnosis and interpretation. Dashboard visualizations are concise
+monitoring signals. They do not create participant-level predictions or election
+forecasts.
+
 Install on the API host:
 
 ```bash

@@ -41,9 +41,30 @@ type Campaign = {
   evidenceExceptions: number; connectionRatePct: number; evidenceReadyPct: number;
   iterations: Iteration[];
 };
+type Distribution = { value: string; respondents: number; percentage: number };
+type Segment = {
+  label: string; base: number; suppressed: boolean;
+  sentiment: Distribution[]; positivePct: number | null;
+};
+type DashboardIntelligence = {
+  campaign: { id: string; name: string; code: string };
+  filters: { mandals: string[]; selectedMandal: string };
+  minimumBase: number; respondentBase: number | null; suppressed: boolean;
+  rating: { value: number | null; scale: number; confidence: string; basis: string };
+  sentiment: Distribution[];
+  issues: Distribution[];
+  age: Segment[];
+  gender: Segment[];
+  mandalHeatmap: Segment[];
+  predictive: {
+    status: string; direction: string; confidence: string; statement: string;
+    projectedNextRating: number | null;
+    points: Array<{ iterationId: string; iterationNumber: number; iterationName: string; base: number; value: number }>;
+  };
+};
 type Dashboard = {
   role: PlatformRole; roleBrief?: RoleBrief; summary: Summary; actions: Action[];
-  campaigns: Campaign[]; generatedAt: string;
+  campaigns: Campaign[]; intelligence: DashboardIntelligence | null; generatedAt: string;
 };
 type Metric = {
   label: string; value: string; detail: string; icon: typeof BarChart3;
@@ -127,21 +148,64 @@ function actionLabel(kind: string) {
   }
 }
 
+const CHART_COLORS = ["#168b7d", "#d75b72", "#e0a34b", "#6b79b9", "#9b7ab8"];
+
+function DashboardDonut({ items }: { items: Distribution[] }) {
+  if (!items.length) return <div className={styles.chartEmpty}>No classified sentiment is available.</div>;
+  let cursor = 0;
+  const stops = items.map(function (item, index) {
+    const start = cursor;
+    cursor += item.percentage;
+    return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`;
+  });
+  return <div className={styles.donutWrap}>
+    <div className={styles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}><div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div></div>
+    <div className={styles.legend}>{items.map(function (item, index) { return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{item.percentage.toFixed(1)}%</strong></div>; })}</div>
+  </div>;
+}
+
+function SegmentBars({ items }: { items: Segment[] }) {
+  if (!items.length) return <div className={styles.chartEmpty}>No demographic evidence is available.</div>;
+  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><small>{item.suppressed ? `Below n=${item.base}` : `${item.base} respondents`}</small><strong>{item.positivePct === null ? "Withheld" : `${item.positivePct.toFixed(1)}% positive`}</strong></div><div><i style={{ width: `${item.positivePct || 0}%` }} /></div></div>)}</div>;
+}
+
+function MandalHeatmap({ items }: { items: Segment[] }) {
+  const labels = ["Positive", "Neutral", "Negative", "Uncertain"];
+  if (!items.length) return <div className={styles.chartEmpty}>No Mandal evidence is available.</div>;
+  return <div className={styles.heatmap}>
+    <div className={styles.heatmapHeader}><span>Mandal</span>{labels.map((label) => <strong key={label}>{label}</strong>)}</div>
+    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{item.base} responses</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage || 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
+  </div>;
+}
+
+function TrendChart({ intelligence }: { intelligence: DashboardIntelligence }) {
+  const points = intelligence.predictive.points;
+  if (!points.length) return <div className={styles.chartEmpty}>Complete an Iteration with classified outputs to establish a trend.</div>;
+  return <div className={styles.trendChart}>{points.map((point) => <div key={point.iterationId}><div><i style={{ height: `${Math.max((point.value / 5) * 100, 4)}%` }} /><strong>{point.value.toFixed(1)}</strong></div><span>Iteration {point.iterationNumber}</span><small>n={point.base}</small></div>)}</div>;
+}
+
 export default function Home() {
   const { user } = useCurrentUser();
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [campaignId, setCampaignId] = useState("");
+  const [mandal, setMandal] = useState("");
 
   const loadDashboard = useCallback(async function (refresh = false) {
     if (refresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
-    try { setData(await apiFetch("/api/dashboard") as Dashboard); }
+    try {
+      const query = new URLSearchParams();
+      if (campaignId) query.set("campaignId", campaignId);
+      if (mandal) query.set("mandal", mandal);
+      setData(await apiFetch(`/api/dashboard${query.size ? `?${query.toString()}` : ""}`) as Dashboard);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Dashboard"); }
     finally { setLoading(false); setRefreshing(false); }
-  }, []);
+  }, [campaignId, mandal]);
 
   useEffect(function () {
     if (!user) return;
@@ -176,6 +240,25 @@ export default function Home() {
       <section className={styles.metrics} aria-label="Operational summary">
         {metrics.map(function (metric) { const Icon = metric.icon; return <article key={metric.label} className={styles.metric}><div className={styles.metricIcon}><Icon size={18} /></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></article>; })}
       </section>
+      {role !== "CAMPAIGNER" && data.intelligence && <section className={styles.intelligencePanel}>
+        <div className={styles.intelligenceHead}><div><span>EXECUTIVE CAMPAIGN DASHBOARD</span><h2>Sentiment, demographics and geography</h2><p>Dashboard monitors concise aggregate signals. Analysis explains the underlying questions, Runs, evidence gaps and interpretation.</p></div><div className={styles.intelligenceFilters}>
+          <label><span>Campaign</span><select value={campaignId || data.intelligence.campaign.id} onChange={function (event) { setCampaignId(event.target.value); setMandal(""); }}>{data.campaigns.map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select></label>
+          <label><span>Mandal</span><select value={mandal} onChange={(event) => setMandal(event.target.value)}><option value="">All Mandals</option>{data.intelligence.filters.mandals.map((value) => <option key={value}>{value}</option>)}</select></label>
+        </div></div>
+        {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Filtered result withheld</strong><p>This Mandal has fewer than {data.intelligence.minimumBase} respondents. Choose All Mandals or a larger segment.</p></div></div> : <>
+          <div className={styles.intelligenceSummary}>
+            <article className={styles.ratingSummary}><span>AGGREGATE CAMPAIGN RATING</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} confidence · {data.intelligence.respondentBase || 0} respondent observations</small></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>SENTIMENT</span><h3>Recorded sentiment mix</h3></div><DashboardDonut items={data.intelligence.sentiment} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGGREGATE PREDICTIVE OUTLOOK</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? "More iteration history required" : `Next-Iteration projection ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence} confidence</small></div><TrendChart intelligence={data.intelligence} /><p>{data.intelligence.predictive.statement}</p></article>
+          </div>
+          <div className={styles.reportGrid}>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>Sentiment by age group</h3><small>Non-overlapping bands</small></div><SegmentBars items={data.intelligence.age} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>GENDER REPORT</span><h3>Sentiment by gender</h3></div><SegmentBars items={data.intelligence.gender} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><div className={styles.issueBars}>{data.intelligence.issues.length ? data.intelligence.issues.map((issue) => <div key={issue.value}><div><span>{issue.value}</span><strong>{issue.percentage.toFixed(1)}%</strong></div><div><i style={{ width: `${issue.percentage}%` }} /></div></div>) : <div className={styles.chartEmpty}>No issue priority is available.</div>}</div></article>
+          </div>
+          <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>Aggregate sentiment intensity by Mandal</h3><small>Cells are withheld below n={data.intelligence.minimumBase}</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /></article>
+        </>}
+      </section>}
       <div className={styles.contentGrid}>
         <section className={styles.panel}>
           <div className={styles.panelHead}><div><span>PRIORITY QUEUE</span><h2>What needs attention</h2></div><strong>{data.actions.length} item{data.actions.length === 1 ? "" : "s"}</strong></div>
