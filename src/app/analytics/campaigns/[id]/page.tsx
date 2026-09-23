@@ -3,22 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import {
-  Activity,
-  AlertTriangle,
-  ArrowLeft,
-  BarChart3,
-  ChevronRight,
-  FileQuestion,
-  Lightbulb,
-  LoaderCircle,
-  MessageSquareText,
-  PhoneCall,
-  RefreshCw,
-  ShieldAlert,
-  Target,
-  TrendingUp
-} from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, FileQuestion, LoaderCircle, PhoneCall, RefreshCw, ShieldAlert, Target } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
@@ -28,269 +13,61 @@ import styles from "./strategic.module.css";
 import scopeStyles from "./scope.module.css";
 import intelligenceStyles from "./intelligence.module.css";
 
-type Distribution = {
-  value: string;
-  respondents: number;
-  percentage: number;
-};
-
-type DashboardMetric = {
-  label: string;
-  value: number;
-  detail: string;
-};
-
-type IterationDashboard = {
-  respondentBase: number;
-  candidateSentiment: Distribution[];
-  candidateFit: Distribution[];
-  issueSentiment: Distribution[];
-  incumbentSentiment: Distribution[];
-  partyAttention: Distribution[];
-  perceivedIssueLeadership: Distribution[];
-  associationInfluence: Distribution[];
-  headlineMetrics: DashboardMetric[];
-  leadingSignals: {
-    issue: Distribution | null;
-    partyAttention: Distribution | null;
-    issueLeader: Distribution | null;
-  };
-  predictiveAssessment: {
-    status: "NOT_READY" | "READY";
-    label: string;
-    reasons: string[];
-    permittedUse: string;
-    prohibitedUse: string;
-  };
-};
-
-type QuestionPerformance = {
-  code: string;
-  label: string;
-  section: string;
-  required: boolean;
-  outputVariables: string[];
-  answered: number;
-  missing: number;
-  answeredPct: number;
-  structured: boolean;
-  distribution: Distribution[];
-  qualitativeAnswers: string[];
-};
-
-type IterationSummary = {
-  id: string;
-  number: number;
-  name: string;
-  connectedRespondents: number;
-};
-
-type RunSummary = {
-  id: string;
-  iterationId: string;
-  number: number;
-  name: string;
-  status: string;
-  selectedVoters: number;
-  successfulVoters: number;
-  retryEligibleVoters: number;
-  callAttempts: number;
-  callbacksReceived: number;
-  connectedCalls: number;
-  transcriptsCaptured: number;
-  responsesCaptured: number;
-  averageDurationSeconds: number;
-  callbackCoveragePct: number;
-  transcriptCoveragePct: number;
-  responseCoveragePct: number;
-};
-
-type AnalysisIteration = IterationSummary & {
-  status: string;
-  completed: boolean;
-  runs: RunSummary[];
-};
-
+type Distribution = { value: string; respondents: number; percentage: number };
+type RunSummary = { id: string; iterationId: string; number: number; status: string; callAttempts: number; connectedCalls: number; transcriptCoveragePct: number; responseCoveragePct: number };
+type AnalysisIteration = { id: string; number: number; name: string; connectedRespondents: number; runs: RunSummary[] };
 type CampaignOption = { id: string; code: string; name: string };
-
 type StrategicResponse = {
-  campaign: {
-    id: string;
-    code: string;
-    name: string;
-    targetName: string;
-    surveyStage: string;
-    status: string;
-  };
+  campaign: { id: string; code: string; name: string; targetName: string; surveyStage: string };
   scope: {
     level: "CAMPAIGN" | "ITERATION" | "RUN";
-    iteration: IterationSummary | null;
+    iteration: AnalysisIteration | null;
     run: RunSummary | null;
-    operations: null | {
-      selectedVoters: number;
-      successfulVoters: number;
-      callAttempts: number;
-      callbacksReceived: number;
-      connectedCalls: number;
-      transcriptsCaptured: number;
-      responsesCaptured: number;
-      averageDurationSeconds: number;
-      callbackCoveragePct: number;
-      transcriptCoveragePct: number;
-      responseCoveragePct: number;
-    };
+    operations: null | { callAttempts: number; connectedCalls: number; transcriptCoveragePct: number; responseCoveragePct: number };
     interpretation: string;
   };
-  options: { iterations: AnalysisIteration[] };
-  validity: {
-    analysisMode: string;
-    representative: boolean;
-    predictiveReady: boolean;
-    directionalOnly: boolean;
-    questionnaireCompatible: boolean;
-    minimumRespondentBase: number;
-    latestRespondentBase: number;
-    latestDemoRespondents: number;
-    averageAnswerCoveragePct: number;
-    researchDesign: string;
-    warnings: string[];
-  };
-  latestIteration: IterationSummary | null;
-  comparison: null | {
-    previousIteration: IterationSummary;
-    latestIteration: IterationSummary;
-    movements: Array<{
-      key: string;
-      label: string;
-      respondentBases: Array<{ iterationId: string; respondents: number }>;
-      largestShift: {
-        value: string;
-        previousPercentage: number;
-        latestPercentage: number;
-        shiftPercentagePoints: number;
-      };
-    }>;
-  };
-  questionPerformance: QuestionPerformance[];
-  issueAnalysis: { priorities: Distribution[] };
-  candidateAnalysis: {
-    awareness: Distribution[];
-    criterionFit: Distribution[];
-    impression: Distribution[];
-    preferredCriterion: Distribution[];
-  };
-  partyAndInstitutionalAnalysis: {
-    roleAwareness: Distribution[];
-    incumbentAwareness: Distribution[];
-    incumbentAssessment: Distribution[];
-    unaidedPartySalience: Distribution[];
-    aidedIssueLeader: Distribution[];
-    associationInfluence: Distribution[];
-    associations: Distribution[];
-  };
-  iterationDashboard: IterationDashboard;
-  transcriptAnalysis: {
-    transcriptRespondents: number;
-    themes: Array<{
-      key: string;
-      label: string;
-      respondents: number;
-      mentions: number;
-      evidence: Array<{
-        executionId: string | null;
-        iterationId: string;
-        iterationNumber: number;
-        snippet: string;
-      }>;
-    }>;
-  };
-  findings: Array<{
-    type: string;
-    title: string;
-    evidence: string;
-    caution: string;
-  }>;
+  options: { iterations: AnalysisIteration[]; filters: { genders: string[]; ageBands: string[]; mandals: string[] } };
+  segment: { filters: { gender: string | null; ageBand: string | null; mandal: string | null }; respondentBase: number | null; minimumBase: number; suppressed: boolean };
+  validity: { latestRespondentBase: number; averageAnswerCoveragePct: number; warnings: string[] };
+  latestIteration: AnalysisIteration | null;
+  issueAnalysis: { priorities: Distribution[]; developmentPriorities: Distribution[]; desiredChanges: Distribution[] };
+  iterationDashboard: { respondentBase: number; candidateSentiment: Distribution[]; incumbentSentiment: Distribution[]; partyAttention: Distribution[]; perceivedIssueLeadership: Distribution[] };
+  partyLeanIndex: { value: number | null; answered: number; scale: number; basis: string };
+  findings: Array<{ type: string; title: string; evidence: string; caution: string }>;
   generatedAt: string;
 };
 
-function pct(value: number) {
-  return `${Number(value || 0).toFixed(1)}%`;
-}
-
-function label(value: string) {
-  return String(value || "")
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function DistributionList({ items, empty }: { items: Distribution[]; empty: string }) {
-  if (!items.length) return <div className={styles.noSignal}>{empty}</div>;
-  return (
-    <div className={styles.distribution}>
-      {items.slice(0, 7).map(function (item) {
-        return (
-          <div key={item.value} className={styles.distributionRow}>
-            <div><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div>
-            <div className={styles.bar}><i style={{ width: `${Math.min(item.percentage, 100)}%` }} /></div>
-            <small>{item.respondents} respondent{item.respondents === 1 ? "" : "s"}</small>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+function pct(value: number) { return `${Number(value || 0).toFixed(1)}%`; }
 
 const CHART_COLORS = ["#168b7d", "#d75b72", "#e0a34b", "#6b79b9", "#9b7ab8", "#879692"];
 
-function DonutChart({ title, items, empty }: {
-  title: string;
-  items: Distribution[];
-  empty: string;
-}) {
-  if (!items.length) return (
-    <article className={intelligenceStyles.chartCard}>
-      <h3>{title}</h3>
-      <div className={styles.noSignal}>{empty}</div>
-    </article>
-  );
+function DonutChart({ title, subtitle, items, empty }: { title: string; subtitle: string; items: Distribution[]; empty: string }) {
+  if (!items.length) return <article className={intelligenceStyles.chartCard}><span className={intelligenceStyles.cardEyebrow}>{subtitle}</span><h3>{title}</h3><div className={styles.noSignal}>{empty}</div></article>;
   let cursor = 0;
-  const stops = items.map(function (item, index) {
-    const start = cursor;
-    cursor += item.percentage;
-    return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`;
-  });
+  const stops = items.map(function (item, index) { const start = cursor; cursor += item.percentage; return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`; });
   return (
     <article className={intelligenceStyles.chartCard}>
-      <h3>{title}</h3>
+      <span className={intelligenceStyles.cardEyebrow}>{subtitle}</span><h3>{title}</h3>
       <div className={intelligenceStyles.donutLayout}>
-        <div className={intelligenceStyles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}>
-          <div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div>
-        </div>
-        <div className={intelligenceStyles.legend}>
-          {items.slice(0, 6).map(function (item, index) {
-            return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div>;
-          })}
-        </div>
+        <div className={intelligenceStyles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}><div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div></div>
+        <div className={intelligenceStyles.legend}>{items.slice(0, 6).map(function (item, index) { return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div>; })}</div>
       </div>
     </article>
   );
 }
 
-function SignalCard({
-  eyebrow,
-  title,
-  children
-}: {
-  eyebrow: string;
-  title: string;
-  children: React.ReactNode;
-}) {
+function DistributionCard({ eyebrow, title, items, empty }: { eyebrow: string; title: string; items: Distribution[]; empty: string }) {
   return (
-    <article className={styles.signalCard}>
-      <span>{eyebrow}</span>
-      <h3>{title}</h3>
-      {children}
+    <article className={styles.signalCard}><span>{eyebrow}</span><h3>{title}</h3>
+      {!items.length ? <div className={styles.noSignal}>{empty}</div> : <div className={styles.distribution}>{items.slice(0, 6).map(function (item) { return <div key={item.value} className={styles.distributionRow}><div><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div><div className={styles.bar}><i style={{ width: `${Math.min(item.percentage, 100)}%` }} /></div><small>{item.respondents} answer{item.respondents === 1 ? "" : "s"}</small></div>; })}</div>}
+    </article>
+  );
+}
+
+function FiveStarIndex({ index }: { index: StrategicResponse["partyLeanIndex"] }) {
+  return (
+    <article className={intelligenceStyles.ratingCard}><span>DIRECT PARTY-STRENGTH MEASURE</span><h3>Aggregate five-star index</h3>
+      {index.value === null ? <><div className={intelligenceStyles.emptyStars}>☆☆☆☆☆</div><p>Not measured in this questionnaire. Add a neutral 1–5 party-strength question to a future Iteration to populate this index.</p></> : <><div className={intelligenceStyles.stars} aria-label={`${index.value} out of 5 stars`}>{Array.from({ length: 5 }, (_, item) => <i key={item} data-filled={item + 1 <= Math.round(index.value || 0)}>★</i>)}<strong>{index.value}/5</strong></div><p>{index.answered} direct answers · {index.basis}. This is an aggregate cohort measure, never an individual voter score.</p></>}
     </article>
   );
 }
@@ -304,364 +81,81 @@ export default function StrategicCampaignAnalyticsPage() {
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [iterationId, setIterationId] = useState("");
   const [runId, setRunId] = useState("");
+  const [gender, setGender] = useState("");
+  const [ageBand, setAgeBand] = useState("");
+  const [mandal, setMandal] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(function () { const query = new URLSearchParams(window.location.search); setIterationId(query.get("iterationId") || ""); setRunId(query.get("runId") || ""); }, []);
+
   const loadStrategic = useCallback(async function (refresh = false) {
     if (!campaignId) return;
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
+    if (refresh) setRefreshing(true); else setLoading(true);
     setError(null);
     try {
       const query = new URLSearchParams();
       if (iterationId) query.set("iterationId", iterationId);
       if (runId) query.set("runId", runId);
-      const suffix = query.size ? `?${query.toString()}` : "";
-      setData(await apiFetch(`/api/analytics/campaigns/${campaignId}${suffix}`));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to load strategic Analytics");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [campaignId, iterationId, runId]);
+      if (gender) query.set("gender", gender);
+      if (ageBand) query.set("ageBand", ageBand);
+      if (mandal) query.set("mandal", mandal);
+      setData(await apiFetch(`/api/analytics/campaigns/${campaignId}${query.size ? `?${query.toString()}` : ""}`));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Analysis"); }
+    finally { setLoading(false); setRefreshing(false); }
+  }, [ageBand, campaignId, gender, iterationId, mandal, runId]);
 
-  useEffect(function () {
-    if (!user || !campaignId) return;
-    const timer = window.setTimeout(function () {
-      void loadStrategic();
-    }, 0);
-    return function () { window.clearTimeout(timer); };
-  }, [campaignId, loadStrategic, user]);
+  useEffect(function () { if (!user || !campaignId) return; const timer = window.setTimeout(function () { void loadStrategic(); }, 0); return function () { window.clearTimeout(timer); }; }, [campaignId, loadStrategic, user]);
+  useEffect(function () { if (!user) return; void apiFetch("/api/analytics").then(function (workspace) { const result = workspace as { campaigns: CampaignOption[] }; setCampaigns(result.campaigns.map((campaign) => ({ id: campaign.id, code: campaign.code, name: campaign.name }))); }).catch(function () { setCampaigns([]); }); }, [user]);
 
-  useEffect(function () {
-    if (!user) return;
-    void apiFetch("/api/analytics").then(function (workspace) {
-      const result = workspace as { campaigns: CampaignOption[] };
-      setCampaigns(result.campaigns.map((campaign) => ({
-        id: campaign.id,
-        code: campaign.code,
-        name: campaign.name
-      })));
-    }).catch(function () {
-      setCampaigns([]);
-    });
-  }, [user]);
+  function resetSegments() { setGender(""); setAgeBand(""); setMandal(""); }
 
-  if (loading) {
-    return (
-      <AppShell>
-        <main className={styles.loading}><LoaderCircle className={styles.spin} />Preparing Phase 1 strategic analysis…</main>
-      </AppShell>
-    );
-  }
+  if (loading) return <AppShell><main className={styles.loading}><LoaderCircle className={styles.spin} />Preparing decision analysis…</main></AppShell>;
 
   return (
-    <AppShell>
-      <main className={styles.page}>
-        <div className={styles.backRow}>
-          <Link href="/analytics"><ArrowLeft size={15} />Back to Analytics</Link>
-        </div>
+    <AppShell><main className={styles.page}>
+      <div className={styles.backRow}><Link href="/analytics"><ArrowLeft size={15} />Back to Analysis</Link></div>
+      {error && <FeedbackMessage tone="error" message={error} />}
+      {data && <>
+        <header className={styles.hero}><div><span>PSEPHOLOGY ANALYSIS</span><h1>{data.campaign.name}</h1><p>{data.campaign.code} · {data.campaign.targetName} · {data.campaign.surveyStage} survey</p></div><div className={styles.heroActions}><button type="button" disabled={refreshing} onClick={function () { void loadStrategic(true); }}><RefreshCw size={15} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button></div></header>
 
-        {error && <FeedbackMessage tone="error" message={error} />}
+        <section className={scopeStyles.scopeSelector}><div className={scopeStyles.scopeIntro}><span>ANALYSIS SCOPE</span><h2>Campaign → Iteration → Run</h2><p>{data.scope.interpretation}</p></div><div className={scopeStyles.scopeControls}>
+          <label><span>Campaign</span><select value={campaignId} onChange={(event) => router.push(`/analytics/campaigns/${event.target.value}`)}>{campaigns.length === 0 && <option value={campaignId}>{data.campaign.name}</option>}{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.code}</option>)}</select></label>
+          <label><span>Iteration</span><select value={iterationId} onChange={function (event) { setIterationId(event.target.value); setRunId(""); resetSegments(); }}><option value="">Latest completed Iteration</option>{data.options.iterations.map((iteration) => <option key={iteration.id} value={iteration.id}>Iteration {iteration.number} · {iteration.name}</option>)}</select></label>
+          <label><span>Run</span><select value={runId} disabled={!iterationId} onChange={function (event) { setRunId(event.target.value); resetSegments(); }}><option value="">All Runs · deduplicated</option>{(data.options.iterations.find((iteration) => iteration.id === iterationId)?.runs || []).map((run) => <option key={run.id} value={run.id}>Run {run.number} · {run.status}</option>)}</select></label>
+        </div></section>
 
-        {data && (
-          <>
-            <header className={styles.hero}>
-              <div>
-                <span>STRATEGIC ANALYTICS · PHASE 1</span>
-                <h1>{data.campaign.name}</h1>
-                <p>{data.campaign.code} · {data.campaign.targetName} · {data.campaign.surveyStage} survey</p>
-              </div>
-              <div className={styles.heroActions}>
-                <Link href={`/campaigns/${campaignId}/analysis`}>Comparative Analysis</Link>
-                <button type="button" disabled={refreshing} onClick={function () { void loadStrategic(true); }}>
-                  <RefreshCw size={15} className={refreshing ? styles.spin : ""} />
-                  {refreshing ? "Refreshing…" : "Refresh"}
-                </button>
-              </div>
-            </header>
+        <section className={scopeStyles.segmentFilters}><div><span>COHORT FILTERS</span><strong>Aggregate respondent view</strong><small>Age bands do not overlap; results below n={data.segment.minimumBase} are withheld.</small></div>
+          <label><span>Gender</span><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">All genders</option>{data.options.filters.genders.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label><span>Age</span><select value={ageBand} onChange={(event) => setAgeBand(event.target.value)}><option value="">All ages</option>{data.options.filters.ageBands.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label><span>Mandal</span><select value={mandal} onChange={(event) => setMandal(event.target.value)}><option value="">All mandals</option>{data.options.filters.mandals.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <button type="button" onClick={resetSegments} disabled={!gender && !ageBand && !mandal}>Clear</button>
+        </section>
 
-            <section className={scopeStyles.scopeSelector}>
-              <div className={scopeStyles.scopeIntro}>
-                <span>ANALYSIS SCOPE</span>
-                <h2>Campaign → Iteration → Run</h2>
-                <p>{data.scope.interpretation}</p>
-              </div>
-              <div className={scopeStyles.scopeControls}>
-                <label>
-                  <span>Campaign</span>
-                  <select value={campaignId} onChange={function (event) {
-                    router.push(`/analytics/campaigns/${event.target.value}`);
-                  }}>
-                    {campaigns.length === 0 && <option value={campaignId}>{data.campaign.name}</option>}
-                    {campaigns.map(function (campaign) {
-                      return <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.code}</option>;
-                    })}
-                  </select>
-                </label>
-                <label>
-                  <span>Iteration</span>
-                  <select value={iterationId} onChange={function (event) {
-                    setIterationId(event.target.value);
-                    setRunId("");
-                  }}>
-                    <option value="">Campaign overview</option>
-                    {data.options.iterations.map(function (iteration) {
-                      return <option key={iteration.id} value={iteration.id}>Iteration {iteration.number} · {iteration.name}</option>;
-                    })}
-                  </select>
-                </label>
-                <label>
-                  <span>Run</span>
-                  <select value={runId} disabled={!iterationId} onChange={function (event) {
-                    setRunId(event.target.value);
-                  }}>
-                    <option value="">All Runs · deduplicated</option>
-                    {(data.options.iterations.find((iteration) => iteration.id === iterationId)?.runs || []).map(function (run) {
-                      return <option key={run.id} value={run.id}>Run {run.number} · {run.status}</option>;
-                    })}
-                  </select>
-                </label>
-              </div>
-            </section>
+        {data.segment.suppressed ? <section className={scopeStyles.suppressed}><ShieldAlert size={23} /><div><strong>Segment results withheld</strong><p>The selected cohort is below the minimum reporting base of {data.segment.minimumBase}. Broaden one or more filters.</p></div></section> : <>
+          {data.scope.operations && <section className={scopeStyles.scopeMetrics} aria-label="Selected analysis scope"><article><PhoneCall size={18} /><span>Attempts</span><strong>{data.scope.operations.callAttempts}</strong></article><article><Activity size={18} /><span>Connected</span><strong>{data.scope.operations.connectedCalls}</strong></article><article><FileQuestion size={18} /><span>Responses</span><strong>{pct(data.scope.operations.responseCoveragePct)}</strong></article><article><Target size={18} /><span>Filtered base</span><strong>{data.segment.respondentBase}</strong></article></section>}
 
-            {data.scope.operations && (
-              <section className={scopeStyles.scopeMetrics} aria-label="Selected analysis scope">
-                <article><PhoneCall size={18} /><span>Attempts</span><strong>{data.scope.operations.callAttempts}</strong></article>
-                <article><Activity size={18} /><span>Connected</span><strong>{data.scope.operations.connectedCalls}</strong></article>
-                <article><MessageSquareText size={18} /><span>Transcripts</span><strong>{pct(data.scope.operations.transcriptCoveragePct)}</strong></article>
-                <article><FileQuestion size={18} /><span>Responses</span><strong>{pct(data.scope.operations.responseCoveragePct)}</strong></article>
-                <article><Target size={18} /><span>Successful</span><strong>{data.scope.operations.successfulVoters}</strong></article>
-                <article><Activity size={18} /><span>Avg duration</span><strong>{Math.round(data.scope.operations.averageDurationSeconds)}s</strong></article>
-              </section>
-            )}
+          <section className={intelligenceStyles.dashboardSection}><div className={styles.sectionHead}><div><span>DECISION SUMMARY</span><h2>Signals needed for the next Iteration</h2></div><p>{data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.segment.respondentBase} deduplicated respondents` : "No Iteration evidence available"}</p></div>
+            <div className={intelligenceStyles.decisionGrid}>
+              <DonutChart title="Party attention" subtitle="PARTY LEAN PROXY" items={data.iterationDashboard.partyAttention} empty="No unaided party signal was captured." />
+              <DonutChart title="Candidate perception" subtitle="CANDIDATE LEAN" items={data.iterationDashboard.candidateSentiment} empty="No classifiable candidate perception was captured." />
+              <DonutChart title="Perceived issue leadership" subtitle="LEADERSHIP LEAN" items={data.iterationDashboard.perceivedIssueLeadership} empty="No leadership signal was captured." />
+              <DonutChart title="Incumbent assessment" subtitle="LEADERSHIP PERFORMANCE" items={data.iterationDashboard.incumbentSentiment} empty="No incumbent assessment was captured." />
+              <DistributionCard eyebrow="ISSUES" title="Priority issues" items={data.issueAnalysis.priorities} empty="No issue priority was captured." />
+              <DistributionCard eyebrow="DEVELOPMENT" title="Development priorities" items={data.issueAnalysis.developmentPriorities} empty="No development priority was captured." />
+              <DistributionCard eyebrow="CHANGE" title="Changes voters want" items={data.issueAnalysis.desiredChanges} empty="No desired-change output was captured." />
+              <FiveStarIndex index={data.partyLeanIndex} />
+            </div>
+            <p className={intelligenceStyles.methodNote}><ShieldAlert size={15} />Party attention is an unaided aggregate signal, not declared vote intention. The five-star index is shown only from a direct neutral rating question and is never used to score or target an individual voter.</p>
+          </section>
 
-            <section className={styles.validity}>
-              <div className={styles.validityLead}>
-                <ShieldAlert size={26} />
-                <div>
-                  <span>RESEARCH VALIDITY</span>
-                  <h2>Directional demo evidence</h2>
-                  <p>Use these findings to validate the research workflow and refine the next questionnaire—not to estimate constituency vote share.</p>
-                </div>
-              </div>
-              <div className={styles.validityMetrics}>
-                <div><strong>{data.validity.latestRespondentBase}</strong><span>Latest respondent base</span></div>
-                <div><strong>{data.validity.latestDemoRespondents}</strong><span>Demo respondents</span></div>
-                <div><strong>{pct(data.validity.averageAnswerCoveragePct)}</strong><span>Average answer coverage</span></div>
-                <div><strong>{label(data.validity.researchDesign)}</strong><span>Research design</span></div>
-              </div>
-              <div className={styles.warnings}>
-                {data.validity.warnings.map(function (warning) {
-                  return <p key={warning}><AlertTriangle size={14} />{warning}</p>;
-                })}
-              </div>
-            </section>
+          <section className={styles.findingsSection}><div className={styles.sectionHead}><div><span>WHAT TO DO NEXT</span><h2>Evidence-qualified findings</h2></div><p>Use these summaries to choose the next research question, not to target individual voters.</p></div>{!data.findings.length ? <div className={styles.noSignal}>No decision finding can be generated from the current evidence.</div> : <div className={styles.findings}>{data.findings.slice(0, 4).map((finding) => <article key={`${finding.type}-${finding.title}`}><div><Target size={17} /><span>{finding.type}</span></div><h3>{finding.title}</h3><strong>{finding.evidence}</strong><p>{finding.caution}</p></article>)}</div>}</section>
+        </>}
 
-            <section className={styles.findingsSection}>
-              <div className={styles.sectionHead}>
-                <div><span>DECISION BRIEF</span><h2>Evidence-qualified findings</h2></div>
-                <p>Automated summaries retain the respondent base and limitation beside every finding.</p>
-              </div>
-              {!data.findings.length ? (
-                <div className={styles.noSignal}>No finding cards can be generated from the current respondent evidence.</div>
-              ) : (
-                <div className={styles.findings}>
-                  {data.findings.map(function (finding) {
-                    return (
-                      <article key={`${finding.type}-${finding.title}`}>
-                        <div><Lightbulb size={17} /><span>{finding.type}</span></div>
-                        <h3>{finding.title}</h3>
-                        <strong>{finding.evidence}</strong>
-                        <p>{finding.caution}</p>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className={intelligenceStyles.dashboardSection}>
-              <div className={styles.sectionHead}>
-                <div><span>ITERATION INTELLIGENCE</span><h2>Perception and influence dashboard</h2></div>
-                <p>{data.latestIteration
-                  ? `Iteration ${data.latestIteration.number} · ${data.iterationDashboard.respondentBase} deduplicated connected respondents`
-                  : "Select an Iteration with connected response evidence."}</p>
-              </div>
-              <div className={intelligenceStyles.dashboardMetrics}>
-                {data.iterationDashboard.headlineMetrics.map(function (metric) {
-                  return <article key={metric.label}><span>{metric.label}</span><strong>{pct(metric.value)}</strong><p>{metric.detail}</p></article>;
-                })}
-              </div>
-              <div className={intelligenceStyles.chartGrid}>
-                <DonutChart title="Candidate perception" items={data.iterationDashboard.candidateSentiment} empty="No classifiable candidate perception is available." />
-                <DonutChart title="Candidate criterion fit" items={data.iterationDashboard.candidateFit} empty="No candidate-fit answer is available." />
-                <DonutChart title="Association influence" items={data.iterationDashboard.associationInfluence} empty="No association-influence answer is available." />
-                <DonutChart title="Incumbent assessment" items={data.iterationDashboard.incumbentSentiment} empty="No incumbent-assessment answer is available." />
-              </div>
-              <div className={intelligenceStyles.landscapeGrid}>
-                <SignalCard eyebrow="PARTY LANDSCAPE" title="Unaided attention signal">
-                  <DistributionList items={data.iterationDashboard.partyAttention} empty="No party or independent group was named unaided." />
-                  <p className={intelligenceStyles.signalCaution}>Observed attention to graduates’ concerns—not vote intention or a voter-level party label.</p>
-                </SignalCard>
-                <SignalCard eyebrow="ISSUE LEADERSHIP" title="Aided perceived effectiveness">
-                  <DistributionList items={data.iterationDashboard.perceivedIssueLeadership} empty="No aided issue-leadership answer is available." />
-                  <p className={intelligenceStyles.signalCaution}>Measures perceived issue leadership after balanced options were read.</p>
-                </SignalCard>
-                <SignalCard eyebrow="ISSUE SENTIMENT" title="Concern tone">
-                  <DistributionList items={data.iterationDashboard.issueSentiment} empty="No structured issue-sentiment output was captured." />
-                  <p className={intelligenceStyles.signalCaution}>Deterministic grouping of the stored issue-sentiment output.</p>
-                </SignalCard>
-              </div>
-              <div className={intelligenceStyles.predictiveGuard} data-status={data.iterationDashboard.predictiveAssessment.status}>
-                <div><ShieldAlert size={21} /><span>PREDICTIVE READINESS</span><strong>{data.iterationDashboard.predictiveAssessment.label}</strong></div>
-                <ul>{data.iterationDashboard.predictiveAssessment.reasons.map(function (reason) { return <li key={reason}>{reason}</li>; })}</ul>
-                <p><strong>Appropriate:</strong> {data.iterationDashboard.predictiveAssessment.permittedUse}</p>
-                <p><strong>Not appropriate:</strong> {data.iterationDashboard.predictiveAssessment.prohibitedUse}</p>
-              </div>
-            </section>
-
-            <section className={styles.signalsSection}>
-              <div className={styles.sectionHead}>
-                <div><span>{data.scope.level} EVIDENCE</span><h2>Strategic signal explorer</h2></div>
-                <p>{data.scope.run
-                  ? `Iteration ${data.scope.iteration?.number} · Run ${data.scope.run.number}`
-                  : data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.latestIteration.name}` : "No Iteration evidence available"}</p>
-              </div>
-              <div className={styles.signals}>
-                <SignalCard eyebrow="ISSUES" title="Graduate issue priority">
-                  <DistributionList items={data.issueAnalysis.priorities} empty="No coded issue-priority answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="CANDIDATE" title="Veeresh prior awareness">
-                  <DistributionList items={data.candidateAnalysis.awareness} empty="No candidate-awareness answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="CANDIDATE" title="Criterion fit">
-                  <DistributionList items={data.candidateAnalysis.criterionFit} empty="No candidate criterion-fit answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="CANDIDATE" title="Preferred candidate quality">
-                  <DistributionList items={data.candidateAnalysis.preferredCriterion} empty="No preferred-candidate criterion is available." />
-                </SignalCard>
-                <SignalCard eyebrow="INSTITUTION" title="MLC role awareness">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.roleAwareness} empty="No MLC role-awareness answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="INSTITUTION" title="Incumbent awareness">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.incumbentAwareness} empty="No incumbent-awareness answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="INSTITUTION" title="Incumbent assessment">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.incumbentAssessment} empty="No incumbent-assessment answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="PARTIES" title="Unaided party salience">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.unaidedPartySalience} empty="No unaided party-salience answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="PARTIES" title="Aided issue leadership">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.aidedIssueLeader} empty="No aided issue-leadership answer is available." />
-                </SignalCard>
-                <SignalCard eyebrow="INSTITUTIONS" title="Associations named">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.associations} empty="No student, teacher or graduate association was recorded." />
-                </SignalCard>
-                <SignalCard eyebrow="INSTITUTIONS" title="Association influence">
-                  <DistributionList items={data.partyAndInstitutionalAnalysis.associationInfluence} empty="No association-influence answer is available." />
-                </SignalCard>
-              </div>
-            </section>
-
-            <section className={styles.movementSection}>
-              <div className={styles.sectionHead}>
-                <div><span>WAVE MOVEMENT</span><h2>Iteration-to-Iteration change</h2></div>
-                <p>Only shared, structured variables are compared.</p>
-              </div>
-              {!data.comparison ? (
-                <div className={styles.noSignal}>Two completed, comparable Iterations are required before movement can be assessed.</div>
-              ) : !data.comparison.movements.length ? (
-                <div className={styles.noSignal}>No shared structured response variable has a comparable respondent base.</div>
-              ) : (
-                <div className={styles.movements}>
-                  {data.comparison.movements.map(function (movement) {
-                    const shift = movement.largestShift.shiftPercentagePoints;
-                    return (
-                      <article key={movement.key}>
-                        <div>
-                          <TrendingUp size={16} />
-                          <span>{movement.label}</span>
-                          <em data-direction={shift > 0 ? "up" : shift < 0 ? "down" : "flat"}>{shift > 0 ? "+" : ""}{shift.toFixed(1)} pp</em>
-                        </div>
-                        <strong>{movement.largestShift.value}</strong>
-                        <p>{pct(movement.largestShift.previousPercentage)} → {pct(movement.largestShift.latestPercentage)}</p>
-                        <small>Bases: {movement.respondentBases.map((base) => base.respondents).join(" → ")}</small>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className={styles.questionSection}>
-              <div className={styles.sectionHead}>
-                <div><span>QUESTIONNAIRE QUALITY</span><h2>Answer and missing-data performance</h2></div>
-                <p>Low coverage indicates wording, conditional logic or agent probing that should be reviewed.</p>
-              </div>
-              {!data.questionPerformance.length ? (
-                <div className={styles.noSignal}>No structured response variables were captured for the latest Iteration.</div>
-              ) : (
-                <div className={styles.questionTable}>
-                  <div className={styles.questionHeader}><span>Question</span><span>Section</span><span>Answered</span><span>Missing</span><span>Coverage</span></div>
-                  {data.questionPerformance.map(function (question) {
-                    return (
-                      <div className={styles.questionRow} key={question.code}>
-                        <div><strong>{question.label}</strong><small>{question.code}{question.required ? " · Required" : " · Conditional"}</small></div>
-                        <span>{question.section}</span>
-                        <strong>{question.answered}</strong>
-                        <strong>{question.missing}</strong>
-                        <div className={styles.coverage}><strong>{pct(question.answeredPct)}</strong><div><i style={{ width: `${Math.min(question.answeredPct, 100)}%` }} /></div></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <section className={styles.transcriptSection}>
-              <div className={styles.sectionHead}>
-                <div><span>TRANSCRIPT INTELLIGENCE</span><h2>Recurring evidence themes</h2></div>
-                <p>{data.transcriptAnalysis.transcriptRespondents} respondent transcripts contributed to this deterministic theme scan.</p>
-              </div>
-              {!data.transcriptAnalysis.themes.length ? (
-                <div className={styles.noSignal}>No configured theme was detected in the available transcripts.</div>
-              ) : (
-                <div className={styles.themes}>
-                  {data.transcriptAnalysis.themes.map(function (theme) {
-                    return (
-                      <article key={theme.key}>
-                        <header><div><MessageSquareText size={17} /><strong>{theme.label}</strong></div><span>{theme.respondents} respondents · {theme.mentions} mentions</span></header>
-                        <div className={styles.evidence}>
-                          {theme.evidence.map(function (item, index) {
-                            const content = <><q>{item.snippet}</q><span>Iteration {item.iterationNumber} · Review evidence <ChevronRight size={13} /></span></>;
-                            return item.executionId ? (
-                              <Link key={`${theme.key}-${item.executionId}-${index}`} href={`/calls?executionId=${item.executionId}&iterationId=${item.iterationId}`}>{content}</Link>
-                            ) : (
-                              <div key={`${theme.key}-${item.iterationId}-${index}`}>{content}</div>
-                            );
-                          })}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            <nav className={styles.nextLinks}>
-              <Link href={`/campaigns/${campaignId}/analysis`}><BarChart3 size={17} /><span><strong>Comparative Analysis</strong><small>Inspect question-level movement and readiness safeguards.</small></span><ChevronRight /></Link>
-              {data.latestIteration && <Link href={`/iterations/${data.latestIteration.id}/analysis`}><Target size={17} /><span><strong>Iteration Analysis</strong><small>Inspect Run outcomes and questionnaire evidence.</small></span><ChevronRight /></Link>}
-              <Link href="/calls"><Activity size={17} /><span><strong>Call Evidence</strong><small>Review individual attempts, transcripts and response variables.</small></span><ChevronRight /></Link>
-            </nav>
-
-            <footer className={styles.generated}><FileQuestion size={14} />Generated from stored platform evidence. No vote-choice prediction or individual propensity score is produced.</footer>
-          </>
-        )}
-      </main>
-    </AppShell>
+        <section className={styles.validity}><div className={styles.validityLead}><AlertTriangle size={22} /><div><span>INTERPRETATION</span><h2>Directional aggregate evidence</h2><p>Findings describe responding cohorts and do not estimate constituency vote share.</p></div></div><div className={styles.warnings}>{data.validity.warnings.slice(0, 4).map((warning) => <p key={warning}><AlertTriangle size={14} />{warning}</p>)}</div></section>
+        <footer className={styles.generated}><FileQuestion size={14} />Generated from stored platform evidence. No individual political profile, propensity score, or targeting list is produced.</footer>
+      </>}
+    </main></AppShell>
   );
 }

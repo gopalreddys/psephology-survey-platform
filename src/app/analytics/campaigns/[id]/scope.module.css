@@ -63,10 +63,73 @@
 
 .scopeMetrics {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-top: 12px;
 }
+
+.segmentFilters {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.2fr) repeat(3, minmax(145px, .7fr)) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 12px;
+  padding: 17px 20px;
+  border: 1px solid #eadfe1;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.segmentFilters > div,
+.segmentFilters label {
+  display: grid;
+  gap: 5px;
+}
+
+.segmentFilters > div > span,
+.segmentFilters label > span {
+  color: #168b7d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.segmentFilters > div strong { font-size: 15px; }
+.segmentFilters > div small { color: #897a7e; font-size: 10px; }
+
+.segmentFilters select,
+.segmentFilters button {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #dbcfd2;
+  border-radius: 10px;
+  background: #fff;
+  color: #49343a;
+  font: inherit;
+}
+
+.segmentFilters button {
+  width: auto;
+  cursor: pointer;
+  color: #b5485c;
+  font-weight: 750;
+}
+
+.segmentFilters button:disabled { cursor: default; opacity: .45; }
+
+.suppressed {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding: 20px;
+  border: 1px solid #efcf9f;
+  border-radius: 16px;
+  background: #fff8ec;
+  color: #674d33;
+}
+
+.suppressed p { margin: 4px 0 0; font-size: 12px; }
 
 .scopeMetrics article {
   display: grid;
@@ -95,9 +158,11 @@
 @media (max-width: 1200px) {
   .scopeSelector { grid-template-columns: 1fr; }
   .scopeMetrics { grid-template-columns: repeat(3, 1fr); }
+  .segmentFilters { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 760px) {
   .scopeControls,
-  .scopeMetrics { grid-template-columns: 1fr; }
+  .scopeMetrics,
+  .segmentFilters { grid-template-columns: 1fr; }
 }

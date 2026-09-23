@@ -437,9 +437,6 @@ export default function AnalyticsPage() {
                               <Link href={`/analytics/campaigns/${campaign.id}`}>
                                 Strategic Analysis <ChevronRight size={15} />
                               </Link>
-                              <Link href={`/campaigns/${campaign.id}/analysis`}>
-                                Compare Campaign Iterations <ChevronRight size={15} />
-                              </Link>
                             </div>
 
                             {!campaign.iterations.length ? (
@@ -468,7 +465,7 @@ export default function AnalyticsPage() {
                                       </div>
                                       <div className={styles.iterationFoot}>
                                         <span><Activity size={14} />Latest call: {dateTime(iteration.latestAttemptAt)}</span>
-                                        <Link href={`/iterations/${iteration.id}/analysis`}>
+                                        <Link href={`/analytics/campaigns/${campaign.id}?iterationId=${iteration.id}`}>
                                           View Iteration Analysis <ChevronRight size={15} />
                                         </Link>
                                       </div>

@@ -26,6 +26,9 @@ const SUCCESS_STATUSES = [
   "SUCCESS_SUBSTANTIAL"
 ];
 
+const MINIMUM_SEGMENT_BASE = 5;
+const AGE_BANDS = ["18–29", "30–39", "40–49", "50+", "Unknown"];
+
 const TECHNICAL_VARIABLES = new Set([
   "agent_code", "agent_style_context", "analytics_excluded", "attempt_cycle_id",
   "demo_call_id", "iteration_id", "iteration_number", "knowledge_context",
@@ -65,6 +68,44 @@ function number(value) {
 function percentage(value, total) {
   if (!total) return 0;
   return Number(((number(value) / number(total)) * 100).toFixed(1));
+}
+
+function normalizeGender(value) {
+  const text = scalarText(value).toLowerCase();
+  if (/^(f|female|woman)$/.test(text)) return "Female";
+  if (/^(m|male|man)$/.test(text)) return "Male";
+  if (!text) return "Unknown";
+  return "Other / self-described";
+}
+
+function ageBand(value) {
+  const age = Number(value);
+  if (!Number.isFinite(age) || age < 18) return "Unknown";
+  if (age < 30) return "18–29";
+  if (age < 40) return "30–39";
+  if (age < 50) return "40–49";
+  return "50+";
+}
+
+function normalizeMandal(value) {
+  return scalarText(value) || "Unknown";
+}
+
+function filterOptions(records) {
+  return {
+    genders: Array.from(new Set(records.map((record) => normalizeGender(record.gender)))).sort(),
+    ageBands: AGE_BANDS.filter((band) => records.some((record) => ageBand(record.age) === band)),
+    mandals: Array.from(new Set(records.map((record) => normalizeMandal(record.mandal_name)))).sort()
+  };
+}
+
+function filterRespondents(records, selection) {
+  return records.filter((record) => {
+    if (selection.gender && normalizeGender(record.gender) !== selection.gender) return false;
+    if (selection.ageBand && ageBand(record.age) !== selection.ageBand) return false;
+    if (selection.mandal && normalizeMandal(record.mandal_name) !== selection.mandal) return false;
+    return true;
+  });
 }
 
 function errorWithStatus(message, statusCode) {
@@ -412,6 +453,37 @@ function derivedDistribution(records, derive) {
     }));
 }
 
+function firstAvailableDistribution(records, keys, classifier = null) {
+  for (const key of keys) {
+    const result = distribution(records, key, classifier);
+    if (result.length) return result;
+  }
+  return [];
+}
+
+function directFivePointIndex(records) {
+  const keys = ["brs_lean_rating", "party_lean_rating", "party_lean_strength"];
+  const ratings = [];
+  for (const record of records) {
+    const variables = record.response_variables || {};
+    for (const key of keys) {
+      const value = Number(variables[key]);
+      if (Number.isFinite(value) && value >= 1 && value <= 5) {
+        ratings.push(value);
+        break;
+      }
+    }
+  }
+  return {
+    value: ratings.length
+      ? Number((ratings.reduce((total, value) => total + value, 0) / ratings.length).toFixed(1))
+      : null,
+    answered: ratings.length,
+    scale: 5,
+    basis: "Direct respondent rating only"
+  };
+}
+
 function classifySentiment(value) {
   const text = scalarText(value).toLowerCase();
   if (!text) return null;
@@ -736,7 +808,8 @@ async function loadStrategicEvidence(db, iterationIds) {
       execution.id AS execution_id, call_record.iteration_id,
       iteration.iteration_number, iteration.iteration_name,
       call_record.run_id, selected_run.run_number, selected_run.run_name,
-      call_record.voter_id, voter.is_demo_contact,
+      call_record.voter_id, voter.is_demo_contact, voter.gender, voter.age,
+      voter.mandal_name_source AS mandal_name,
       call_record.response_variables, call_record.interaction_transcript,
       call_record.duration_seconds, call_record.updated_at
     FROM calls call_record
@@ -867,9 +940,20 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   if (selection.runId && !selectedRun) {
     throw errorWithStatus("Run is not part of the selected Iteration", 404);
   }
-  const selectedRecords = selectedIteration
+  const scopedRecords = selectedIteration
     ? latestRespondents(records, selectedIteration.id, selectedRun?.id || null)
     : [];
+  const demographicFilters = {
+    gender: selection.gender || null,
+    ageBand: selection.ageBand || null,
+    mandal: selection.mandal || null
+  };
+  const availableFilters = filterOptions(scopedRecords);
+  const filteredRecords = filterRespondents(scopedRecords, demographicFilters);
+  const hasDemographicFilter = Object.values(demographicFilters).some(Boolean);
+  const segmentSuppressed = hasDemographicFilter
+    && filteredRecords.length < MINIMUM_SEGMENT_BASE;
+  const selectedRecords = segmentSuppressed ? [] : filteredRecords;
   const performance = questionPerformance(selectedRecords);
   const issuePriority = distribution(selectedRecords, "graduate_issue_priority", classifyIssue);
   const candidateAwareness = distribution(selectedRecords, "veeresh_awareness", classifyAwareness);
@@ -883,6 +967,13 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const issueLeader = distribution(selectedRecords, "perceived_issue_leader_aided", classifyParty);
   const associationInfluence = distribution(selectedRecords, "association_influence");
   const associations = distribution(selectedRecords, "association_named");
+  const developmentPriorities = firstAvailableDistribution(selectedRecords, [
+    "development_priority", "priority_development"
+  ], classifyIssue);
+  const desiredChanges = firstAvailableDistribution(selectedRecords, [
+    "desired_change", "expected_change", "change_priority"
+  ], classifyIssue);
+  const partyLeanIndex = directFivePointIndex(selectedRecords);
   const themes = transcriptThemes(selectedRecords);
   const demoRespondents = selectedRecords.filter((record) => record.is_demo_contact).length;
   const answeredQuestions = performance.filter((question) => question.answered > 0);
@@ -930,7 +1021,9 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     warnings.unshift("The selected Iteration contains only controlled demo respondents; all findings are directional demonstrations.");
   }
   if (!selectedRecords.length) {
-    warnings.unshift("No connected respondent evidence is available for the selected scope.");
+    warnings.unshift(segmentSuppressed
+      ? `This filtered segment is below the minimum reporting base of ${MINIMUM_SEGMENT_BASE}; political results are withheld.`
+      : "No connected respondent evidence is available for the selected scope.");
   }
 
   const scopeOperations = selectedRun || (selectedIteration ? {
@@ -965,7 +1058,14 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       iterations: campaignAnalysis.iterations.map((iteration) => ({
         ...iteration,
         runs: runs.filter((run) => run.iterationId === iteration.id)
-      }))
+      })),
+      filters: availableFilters
+    },
+    segment: {
+      filters: demographicFilters,
+      respondentBase: segmentSuppressed ? null : filteredRecords.length,
+      minimumBase: MINIMUM_SEGMENT_BASE,
+      suppressed: segmentSuppressed
     },
     validity: {
       ...campaignAnalysis.readiness,
@@ -979,7 +1079,9 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     comparison,
     questionPerformance: performance,
     issueAnalysis: {
-      priorities: issuePriority
+      priorities: issuePriority,
+      developmentPriorities,
+      desiredChanges
     },
     candidateAnalysis: {
       awareness: candidateAwareness,
@@ -997,6 +1099,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       associations
     },
     iterationDashboard,
+    partyLeanIndex,
     transcriptAnalysis: {
       transcriptRespondents: selectedRecords.filter((record) =>
         Boolean(transcriptText(record.interaction_transcript))

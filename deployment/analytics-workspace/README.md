@@ -2,7 +2,8 @@
 
 Adds the role-scoped API behind the Analytics sidebar page.
 
-The workspace is hierarchical: Campaigns contain Iterations, and detailed analysis remains available from the existing Campaign and Iteration analysis pages.
+The workspace is hierarchical: Campaigns contain Iterations and Runs, and every
+analysis entry point resolves to the dedicated Analytics workspace.
 
 - Super Admin: all non-archived Campaigns.
 - Admin: assigned Campaigns plus unassigned drafts created by that Admin.
@@ -42,14 +43,16 @@ The strategic workspace supports an explicit Campaign → Iteration → Run hier
 - The selected scope reports attempts, connections, successful outcomes, duration, callback coverage, transcript coverage and structured-response coverage.
 - Institutional awareness, incumbent assessment, candidate criteria and association influence are retained beside the original issue, candidate and party signals.
 
-The selected Iteration now includes a visual intelligence dashboard with:
+The selected Iteration now includes a concise decision dashboard with:
 
 - candidate perception grouped as Positive, Neutral, Negative or Can't say;
 - candidate criterion-fit and incumbent-assessment distributions;
 - unaided party-attention and aided issue-leadership signals;
-- association influence and issue-sentiment signals;
-- answer-completeness and respondent-base context;
-- an explicit predictive-readiness guard.
+- priority issues, development priorities and desired changes;
+- aggregate filters for gender, non-overlapping age bands and Mandal;
+- suppression of filtered political results below a five-respondent base;
+- an aggregate five-star party-strength index only when a direct neutral 1–5
+  questionnaire response is available.
 
 Party attention is not labelled as vote intention. Predictive output remains
 disabled while the evidence is a small/demo cohort without a measured outcome,

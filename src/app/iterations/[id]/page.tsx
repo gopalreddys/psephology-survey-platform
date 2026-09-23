@@ -859,7 +859,9 @@ export default function IterationPage() {
                 function () {
 
                   router.push(
-                    `/iterations/${iterationId}/analysis`
+                    campaignId
+                      ? `/analytics/campaigns/${campaignId}?iterationId=${iterationId}`
+                      : "/analytics"
                   );
                 }
               }

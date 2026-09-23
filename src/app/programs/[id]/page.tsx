@@ -483,7 +483,7 @@ export default function ProgramDetailPage() {
                     </div>
                     <div className={styles.campaignLinks}>
                       {campaign.comparisonReady && (
-                        <Link href={`/campaigns/${campaign.id}/analysis`}>
+                        <Link href={`/analytics/campaigns/${campaign.id}`}>
                           <BarChart3 size={14} /> Compare Iterations
                         </Link>
                       )}

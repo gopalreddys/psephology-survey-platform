@@ -13,6 +13,50 @@
   gap: 14px;
 }
 
+.decisionGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cardEyebrow,
+.ratingCard > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #168b7d;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+
+.ratingCard {
+  padding: 17px;
+  border: 1px solid #dfeae7;
+  border-radius: 17px;
+  background: #fff;
+}
+
+.ratingCard h3 { margin: 0 0 14px; font-size: 15px; }
+.ratingCard p { margin: 12px 0 0; color: #7d6c71; font-size: 11px; line-height: 1.5; }
+.emptyStars { color: #d9cbce; font-size: 31px; letter-spacing: 4px; }
+.stars { display: flex; align-items: center; gap: 3px; }
+.stars i { color: #d9cbce; font-size: 24px; font-style: normal; }
+.stars i[data-filled="true"] { color: #e0a34b; }
+.stars strong { margin-left: 7px; color: #594249; }
+
+.methodNote {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eef8f6;
+  color: #5f746f;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .dashboardMetrics {
   grid-template-columns: repeat(4, 1fr);
   margin-bottom: 14px;
@@ -185,7 +229,8 @@
 
 @media (max-width: 1200px) {
   .chartGrid,
-  .dashboardMetrics {
+  .dashboardMetrics,
+  .decisionGrid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -193,6 +238,7 @@
 @media (max-width: 760px) {
   .chartGrid,
   .dashboardMetrics,
+  .decisionGrid,
   .landscapeGrid,
   .predictiveGuard {
     grid-template-columns: 1fr;

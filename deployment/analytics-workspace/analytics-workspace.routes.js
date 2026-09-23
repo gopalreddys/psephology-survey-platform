@@ -38,7 +38,10 @@ router.get(
           req.platformUser,
           {
             iterationId: String(req.query.iterationId || "").trim() || null,
-            runId: String(req.query.runId || "").trim() || null
+            runId: String(req.query.runId || "").trim() || null,
+            gender: String(req.query.gender || "").trim() || null,
+            ageBand: String(req.query.ageBand || "").trim() || null,
+            mandal: String(req.query.mandal || "").trim() || null
           }
         )
       );
