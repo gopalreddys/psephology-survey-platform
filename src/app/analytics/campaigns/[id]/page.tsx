@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
@@ -13,6 +13,7 @@ import {
   Lightbulb,
   LoaderCircle,
   MessageSquareText,
+  PhoneCall,
   RefreshCw,
   ShieldAlert,
   Target,
@@ -24,6 +25,7 @@ import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./strategic.module.css";
+import scopeStyles from "./scope.module.css";
 
 type Distribution = {
   value: string;
@@ -52,6 +54,34 @@ type IterationSummary = {
   connectedRespondents: number;
 };
 
+type RunSummary = {
+  id: string;
+  iterationId: string;
+  number: number;
+  name: string;
+  status: string;
+  selectedVoters: number;
+  successfulVoters: number;
+  retryEligibleVoters: number;
+  callAttempts: number;
+  callbacksReceived: number;
+  connectedCalls: number;
+  transcriptsCaptured: number;
+  responsesCaptured: number;
+  averageDurationSeconds: number;
+  callbackCoveragePct: number;
+  transcriptCoveragePct: number;
+  responseCoveragePct: number;
+};
+
+type AnalysisIteration = IterationSummary & {
+  status: string;
+  completed: boolean;
+  runs: RunSummary[];
+};
+
+type CampaignOption = { id: string; code: string; name: string };
+
 type StrategicResponse = {
   campaign: {
     id: string;
@@ -61,6 +91,26 @@ type StrategicResponse = {
     surveyStage: string;
     status: string;
   };
+  scope: {
+    level: "CAMPAIGN" | "ITERATION" | "RUN";
+    iteration: IterationSummary | null;
+    run: RunSummary | null;
+    operations: null | {
+      selectedVoters: number;
+      successfulVoters: number;
+      callAttempts: number;
+      callbacksReceived: number;
+      connectedCalls: number;
+      transcriptsCaptured: number;
+      responsesCaptured: number;
+      averageDurationSeconds: number;
+      callbackCoveragePct: number;
+      transcriptCoveragePct: number;
+      responseCoveragePct: number;
+    };
+    interpretation: string;
+  };
+  options: { iterations: AnalysisIteration[] };
   validity: {
     analysisMode: string;
     representative: boolean;
@@ -95,10 +145,16 @@ type StrategicResponse = {
   candidateAnalysis: {
     awareness: Distribution[];
     criterionFit: Distribution[];
+    impression: Distribution[];
+    preferredCriterion: Distribution[];
   };
   partyAndInstitutionalAnalysis: {
+    roleAwareness: Distribution[];
+    incumbentAwareness: Distribution[];
+    incumbentAssessment: Distribution[];
     unaidedPartySalience: Distribution[];
     aidedIssueLeader: Distribution[];
+    associationInfluence: Distribution[];
     associations: Distribution[];
   };
   transcriptAnalysis: {
@@ -173,9 +229,13 @@ function SignalCard({
 
 export default function StrategicCampaignAnalyticsPage() {
   const params = useParams();
+  const router = useRouter();
   const campaignId = params.id as string;
   const { user } = useCurrentUser();
   const [data, setData] = useState<StrategicResponse | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
+  const [iterationId, setIterationId] = useState("");
+  const [runId, setRunId] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,14 +246,18 @@ export default function StrategicCampaignAnalyticsPage() {
     else setLoading(true);
     setError(null);
     try {
-      setData(await apiFetch(`/api/analytics/campaigns/${campaignId}`));
+      const query = new URLSearchParams();
+      if (iterationId) query.set("iterationId", iterationId);
+      if (runId) query.set("runId", runId);
+      const suffix = query.size ? `?${query.toString()}` : "";
+      setData(await apiFetch(`/api/analytics/campaigns/${campaignId}${suffix}`));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to load strategic Analytics");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [campaignId]);
+  }, [campaignId, iterationId, runId]);
 
   useEffect(function () {
     if (!user || !campaignId) return;
@@ -202,6 +266,20 @@ export default function StrategicCampaignAnalyticsPage() {
     }, 0);
     return function () { window.clearTimeout(timer); };
   }, [campaignId, loadStrategic, user]);
+
+  useEffect(function () {
+    if (!user) return;
+    void apiFetch("/api/analytics").then(function (workspace) {
+      const result = workspace as { campaigns: CampaignOption[] };
+      setCampaigns(result.campaigns.map((campaign) => ({
+        id: campaign.id,
+        code: campaign.code,
+        name: campaign.name
+      })));
+    }).catch(function () {
+      setCampaigns([]);
+    });
+  }, [user]);
 
   if (loading) {
     return (
@@ -236,6 +314,61 @@ export default function StrategicCampaignAnalyticsPage() {
                 </button>
               </div>
             </header>
+
+            <section className={scopeStyles.scopeSelector}>
+              <div className={scopeStyles.scopeIntro}>
+                <span>ANALYSIS SCOPE</span>
+                <h2>Campaign → Iteration → Run</h2>
+                <p>{data.scope.interpretation}</p>
+              </div>
+              <div className={scopeStyles.scopeControls}>
+                <label>
+                  <span>Campaign</span>
+                  <select value={campaignId} onChange={function (event) {
+                    router.push(`/analytics/campaigns/${event.target.value}`);
+                  }}>
+                    {campaigns.length === 0 && <option value={campaignId}>{data.campaign.name}</option>}
+                    {campaigns.map(function (campaign) {
+                      return <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.code}</option>;
+                    })}
+                  </select>
+                </label>
+                <label>
+                  <span>Iteration</span>
+                  <select value={iterationId} onChange={function (event) {
+                    setIterationId(event.target.value);
+                    setRunId("");
+                  }}>
+                    <option value="">Campaign overview</option>
+                    {data.options.iterations.map(function (iteration) {
+                      return <option key={iteration.id} value={iteration.id}>Iteration {iteration.number} · {iteration.name}</option>;
+                    })}
+                  </select>
+                </label>
+                <label>
+                  <span>Run</span>
+                  <select value={runId} disabled={!iterationId} onChange={function (event) {
+                    setRunId(event.target.value);
+                  }}>
+                    <option value="">All Runs · deduplicated</option>
+                    {(data.options.iterations.find((iteration) => iteration.id === iterationId)?.runs || []).map(function (run) {
+                      return <option key={run.id} value={run.id}>Run {run.number} · {run.status}</option>;
+                    })}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            {data.scope.operations && (
+              <section className={scopeStyles.scopeMetrics} aria-label="Selected analysis scope">
+                <article><PhoneCall size={18} /><span>Attempts</span><strong>{data.scope.operations.callAttempts}</strong></article>
+                <article><Activity size={18} /><span>Connected</span><strong>{data.scope.operations.connectedCalls}</strong></article>
+                <article><MessageSquareText size={18} /><span>Transcripts</span><strong>{pct(data.scope.operations.transcriptCoveragePct)}</strong></article>
+                <article><FileQuestion size={18} /><span>Responses</span><strong>{pct(data.scope.operations.responseCoveragePct)}</strong></article>
+                <article><Target size={18} /><span>Successful</span><strong>{data.scope.operations.successfulVoters}</strong></article>
+                <article><Activity size={18} /><span>Avg duration</span><strong>{Math.round(data.scope.operations.averageDurationSeconds)}s</strong></article>
+              </section>
+            )}
 
             <section className={styles.validity}>
               <div className={styles.validityLead}>
@@ -284,8 +417,10 @@ export default function StrategicCampaignAnalyticsPage() {
 
             <section className={styles.signalsSection}>
               <div className={styles.sectionHead}>
-                <div><span>CURRENT ITERATION</span><h2>Strategic signal explorer</h2></div>
-                <p>{data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.latestIteration.name}` : "No Iteration evidence available"}</p>
+                <div><span>{data.scope.level} EVIDENCE</span><h2>Strategic signal explorer</h2></div>
+                <p>{data.scope.run
+                  ? `Iteration ${data.scope.iteration?.number} · Run ${data.scope.run.number}`
+                  : data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.latestIteration.name}` : "No Iteration evidence available"}</p>
               </div>
               <div className={styles.signals}>
                 <SignalCard eyebrow="ISSUES" title="Graduate issue priority">
@@ -297,6 +432,18 @@ export default function StrategicCampaignAnalyticsPage() {
                 <SignalCard eyebrow="CANDIDATE" title="Criterion fit">
                   <DistributionList items={data.candidateAnalysis.criterionFit} empty="No candidate criterion-fit answer is available." />
                 </SignalCard>
+                <SignalCard eyebrow="CANDIDATE" title="Preferred candidate quality">
+                  <DistributionList items={data.candidateAnalysis.preferredCriterion} empty="No preferred-candidate criterion is available." />
+                </SignalCard>
+                <SignalCard eyebrow="INSTITUTION" title="MLC role awareness">
+                  <DistributionList items={data.partyAndInstitutionalAnalysis.roleAwareness} empty="No MLC role-awareness answer is available." />
+                </SignalCard>
+                <SignalCard eyebrow="INSTITUTION" title="Incumbent awareness">
+                  <DistributionList items={data.partyAndInstitutionalAnalysis.incumbentAwareness} empty="No incumbent-awareness answer is available." />
+                </SignalCard>
+                <SignalCard eyebrow="INSTITUTION" title="Incumbent assessment">
+                  <DistributionList items={data.partyAndInstitutionalAnalysis.incumbentAssessment} empty="No incumbent-assessment answer is available." />
+                </SignalCard>
                 <SignalCard eyebrow="PARTIES" title="Unaided party salience">
                   <DistributionList items={data.partyAndInstitutionalAnalysis.unaidedPartySalience} empty="No unaided party-salience answer is available." />
                 </SignalCard>
@@ -305,6 +452,9 @@ export default function StrategicCampaignAnalyticsPage() {
                 </SignalCard>
                 <SignalCard eyebrow="INSTITUTIONS" title="Associations named">
                   <DistributionList items={data.partyAndInstitutionalAnalysis.associations} empty="No student, teacher or graduate association was recorded." />
+                </SignalCard>
+                <SignalCard eyebrow="INSTITUTIONS" title="Association influence">
+                  <DistributionList items={data.partyAndInstitutionalAnalysis.associationInfluence} empty="No association-influence answer is available." />
                 </SignalCard>
               </div>
             </section>

@@ -9,6 +9,11 @@ Replaces the fixed demo homepage metrics with read-only, role-scoped operational
 
 The Dashboard never launches calls or changes lifecycle state. It does not infer vote share from demo respondents.
 
+Campaign cards expose an aggregate execution funnel—attempts, connected calls,
+successful outcomes, connection rate and evidence readiness—without exposing voter-level
+records. These campaign-level measures form the safe product boundary for a future embedded
+QuickSight dashboard.
+
 Each role receives a distinct operating brief and decision boundary:
 
 - Super Admin sees platform governance, ownership and evidence exceptions.

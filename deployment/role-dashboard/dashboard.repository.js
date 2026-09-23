@@ -271,19 +271,36 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows) {
     campaigns: campaigns
       .sort((left, right) => new Date(right.updatedAt) - new Date(left.updatedAt))
       .slice(0, 8)
-      .map((campaign) => ({
-        ...campaign,
-        iterationCount: campaign.iterations.length,
-        completedIterationCount: campaign.iterations.filter((iteration) =>
-          completedIterations.includes(iteration)
-        ).length,
-        activeRunCount: campaign.iterations.reduce((total, iteration) =>
-          total + iteration.runs.filter((run) =>
+      .map((campaign) => {
+        const campaignRuns = campaign.iterations.flatMap((iteration) => iteration.runs);
+        const attempts = campaignRuns.reduce((total, run) => total + run.callAttempts, 0);
+        const connected = campaignRuns.reduce((total, run) => total + run.connectedCalls, 0);
+        const successful = campaignRuns.reduce((total, run) => total + run.successfulContacts, 0);
+        const missingEvidence = campaignRuns.reduce((total, run) =>
+          total + run.missingTranscripts + run.missingResponses,
+          0
+        );
+        return {
+          ...campaign,
+          iterationCount: campaign.iterations.length,
+          completedIterationCount: campaign.iterations.filter((iteration) =>
+            completedIterations.includes(iteration)
+          ).length,
+          activeRunCount: campaignRuns.filter((run) =>
             ["READY", "RUNNING"].includes(run.status)
           ).length,
-          0
-        ),
-        iterations: campaign.iterations
+          callAttempts: attempts,
+          connectedCalls: connected,
+          successfulContacts: successful,
+          evidenceExceptions: missingEvidence,
+          connectionRatePct: attempts ? Number(((connected / attempts) * 100).toFixed(1)) : 0,
+          evidenceReadyPct: connected
+            ? Number((Math.min(
+                Math.max((connected * 2) - missingEvidence, 0) / (connected * 2),
+                1
+              ) * 100).toFixed(1))
+            : 0,
+          iterations: campaign.iterations
           .sort((left, right) => left.number - right.number)
           .map((iteration) => ({
             id: iteration.id,
@@ -294,7 +311,8 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows) {
             readyRunCount: iteration.runs.filter((run) => run.status === "READY").length,
             runningRunCount: iteration.runs.filter((run) => run.status === "RUNNING").length
           }))
-      })),
+        };
+      }),
     generatedAt: new Date().toISOString()
   };
 }

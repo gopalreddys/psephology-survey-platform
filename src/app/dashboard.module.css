@@ -121,6 +121,13 @@
 .campaignTop span { color: #a75969; font-size: 10px; font-weight: 800; letter-spacing: .07em; }
 .campaignTop a { display: flex; align-items: center; gap: 6px; margin-top: 5px; color: #49363b; font-size: 16px; font-weight: 800; }
 .campaignTop > strong { white-space: nowrap; color: #188777; font-size: 12px; }
+.campaignFlow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 14px; }
+.campaignFlow > div { display: grid; gap: 2px; padding: 9px; border-radius: 9px; background: #f6fbfa; }
+.campaignFlow span { color: #758883; font-size: 9px; }
+.campaignFlow strong { color: #167e71; font-size: 14px; }
+.campaignBar { height: 6px; margin-top: 10px; overflow: hidden; border-radius: 99px; background: #e8efed; }
+.campaignBar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #24a28f, #7acaba); }
+.campaignRate { display: block; margin-top: 5px; color: #8c7c80; font-size: 9px; }
 .iterations { display: grid; gap: 7px; margin-top: 14px; }
 .iterations > p { margin: 0; padding: 10px; color: #9b858c; font-size: 12px; }
 .iterations a { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 9px; padding: 11px; border: 1px solid #e8efed; border-radius: 10px; color: #534349; }
@@ -148,6 +155,7 @@
   .scope { align-items: flex-start; }
   .metrics, .campaigns { grid-template-columns: 1fr; }
   .campaignTop { flex-direction: column; }
+  .campaignFlow { grid-template-columns: repeat(2, 1fr); }
   .iterations a { grid-template-columns: 1fr auto; }
   .iterations a small { grid-column: 1 / -1; text-align: left; }
 }

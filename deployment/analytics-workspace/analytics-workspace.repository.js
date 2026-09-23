@@ -390,10 +390,11 @@ function distribution(records, key, classifier = null) {
     }));
 }
 
-function latestRespondents(records, iterationId) {
+function latestRespondents(records, iterationId, runId = null) {
   const respondents = new Map();
   for (const record of records) {
     if (record.iteration_id !== iterationId) continue;
+    if (runId && record.run_id !== runId) continue;
     const key = record.voter_id || record.call_id;
     if (!respondents.has(key)) respondents.set(key, record);
   }
@@ -567,11 +568,13 @@ async function loadStrategicEvidence(db, iterationIds) {
     SELECT call_record.id AS call_id, call_record.attempt_id,
       execution.id AS execution_id, call_record.iteration_id,
       iteration.iteration_number, iteration.iteration_name,
+      call_record.run_id, selected_run.run_number, selected_run.run_name,
       call_record.voter_id, voter.is_demo_contact,
       call_record.response_variables, call_record.interaction_transcript,
       call_record.duration_seconds, call_record.updated_at
     FROM calls call_record
     JOIN program_iterations iteration ON iteration.id = call_record.iteration_id
+    LEFT JOIN campaign_runs selected_run ON selected_run.id = call_record.run_id
     LEFT JOIN voter_master voter ON voter.id = call_record.voter_id
     LEFT JOIN LATERAL (
       SELECT candidate.id
@@ -587,25 +590,134 @@ async function loadStrategicEvidence(db, iterationIds) {
   return result.rows;
 }
 
-export async function getCampaignStrategicAnalytics(campaignId, actor) {
+async function loadRunCatalog(db, iterationIds) {
+  if (!iterationIds.length) return [];
+  const result = await db.query(`
+    WITH contact_stats AS (
+      SELECT contact.run_id,
+        COUNT(DISTINCT contact.voter_id)::int AS selected_voters,
+        COUNT(DISTINCT contact.voter_id) FILTER (
+          WHERE contact.final_status = ANY($2::text[])
+        )::int AS successful_voters,
+        COUNT(DISTINCT contact.voter_id) FILTER (
+          WHERE contact.retry_eligible = TRUE AND contact.retry_exhausted = FALSE
+        )::int AS retry_eligible_voters
+      FROM campaign_run_contacts contact
+      JOIN campaign_runs run ON run.id = contact.run_id
+      WHERE run.iteration_id = ANY($1::uuid[])
+      GROUP BY contact.run_id
+    ), execution_stats AS (
+      SELECT execution.run_id,
+        COUNT(*)::int AS call_attempts,
+        COUNT(*) FILTER (WHERE execution.callback_received_at IS NOT NULL)::int AS callbacks_received
+      FROM call_executions execution
+      JOIN campaign_runs run ON run.id = execution.run_id
+      WHERE run.iteration_id = ANY($1::uuid[])
+      GROUP BY execution.run_id
+    ), evidence_stats AS (
+      SELECT call_record.run_id,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+        )::int AS connected_calls,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+            AND jsonb_typeof(call_record.interaction_transcript) = 'array'
+            AND jsonb_array_length(call_record.interaction_transcript) > 0
+        )::int AS transcripts_captured,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+            AND jsonb_typeof(call_record.response_variables) = 'object'
+            AND call_record.response_variables <> '{}'::jsonb
+        )::int AS responses_captured,
+        ROUND(AVG(call_record.duration_seconds) FILTER (
+          WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+        )::numeric, 1) AS average_duration_seconds
+      FROM calls call_record
+      JOIN campaign_runs run ON run.id = call_record.run_id
+      WHERE run.iteration_id = ANY($1::uuid[])
+      GROUP BY call_record.run_id
+    )
+    SELECT run.id, run.iteration_id, run.run_number, run.run_name, run.status,
+      COALESCE(contact.selected_voters, 0)::int AS selected_voters,
+      COALESCE(contact.successful_voters, 0)::int AS successful_voters,
+      COALESCE(contact.retry_eligible_voters, 0)::int AS retry_eligible_voters,
+      COALESCE(execution.call_attempts, 0)::int AS call_attempts,
+      COALESCE(execution.callbacks_received, 0)::int AS callbacks_received,
+      COALESCE(evidence.connected_calls, 0)::int AS connected_calls,
+      COALESCE(evidence.transcripts_captured, 0)::int AS transcripts_captured,
+      COALESCE(evidence.responses_captured, 0)::int AS responses_captured,
+      COALESCE(evidence.average_duration_seconds, 0)::numeric AS average_duration_seconds
+    FROM campaign_runs run
+    LEFT JOIN contact_stats contact ON contact.run_id = run.id
+    LEFT JOIN execution_stats execution ON execution.run_id = run.id
+    LEFT JOIN evidence_stats evidence ON evidence.run_id = run.id
+    WHERE run.iteration_id = ANY($1::uuid[])
+    ORDER BY run.iteration_id, run.run_number, run.created_at
+  `, [iterationIds, SUCCESS_STATUSES]);
+  return result.rows.map((row) => ({
+    id: row.id,
+    iterationId: row.iteration_id,
+    number: number(row.run_number),
+    name: row.run_name || `Run ${row.run_number}`,
+    status: row.status,
+    selectedVoters: number(row.selected_voters),
+    successfulVoters: number(row.successful_voters),
+    retryEligibleVoters: number(row.retry_eligible_voters),
+    callAttempts: number(row.call_attempts),
+    callbacksReceived: number(row.callbacks_received),
+    connectedCalls: number(row.connected_calls),
+    transcriptsCaptured: number(row.transcripts_captured),
+    responsesCaptured: number(row.responses_captured),
+    averageDurationSeconds: number(row.average_duration_seconds),
+    callbackCoveragePct: percentage(row.callbacks_received, row.call_attempts),
+    transcriptCoveragePct: percentage(row.transcripts_captured, row.connected_calls),
+    responseCoveragePct: percentage(row.responses_captured, row.connected_calls)
+  }));
+}
+
+export async function getCampaignStrategicAnalytics(campaignId, actor, selection = {}) {
   const campaignAnalysis = await getCampaignAnalysis(campaignId, actor);
   const db = await getDb();
   const iterationIds = campaignAnalysis.iterations.map((iteration) => iteration.id);
-  const records = await loadStrategicEvidence(db, iterationIds);
+  const [records, runs] = await Promise.all([
+    loadStrategicEvidence(db, iterationIds),
+    loadRunCatalog(db, iterationIds)
+  ]);
   const completed = campaignAnalysis.iterations.filter((iteration) => iteration.completed);
-  const latestIteration = completed.at(-1) || campaignAnalysis.iterations.at(-1) || null;
-  const latestRecords = latestIteration
-    ? latestRespondents(records, latestIteration.id)
+  const defaultIteration = completed.at(-1) || campaignAnalysis.iterations.at(-1) || null;
+  const selectedIteration = selection.iterationId
+    ? campaignAnalysis.iterations.find((iteration) => iteration.id === selection.iterationId)
+    : defaultIteration;
+  if (selection.iterationId && !selectedIteration) {
+    throw errorWithStatus("Iteration is not part of this Campaign", 404);
+  }
+  const iterationRuns = selectedIteration
+    ? runs.filter((run) => run.iterationId === selectedIteration.id)
     : [];
-  const performance = questionPerformance(latestRecords);
-  const issuePriority = distribution(latestRecords, "graduate_issue_priority", classifyIssue);
-  const candidateAwareness = distribution(latestRecords, "veeresh_awareness", classifyAwareness);
-  const candidateFit = distribution(latestRecords, "veeresh_criterion_fit");
-  const partySalience = distribution(latestRecords, "party_salience_unaided");
-  const issueLeader = distribution(latestRecords, "perceived_issue_leader_aided");
-  const associations = distribution(latestRecords, "association_named");
-  const themes = transcriptThemes(latestRecords);
-  const demoRespondents = latestRecords.filter((record) => record.is_demo_contact).length;
+  const selectedRun = selection.runId
+    ? iterationRuns.find((run) => run.id === selection.runId)
+    : null;
+  if (selection.runId && !selectedRun) {
+    throw errorWithStatus("Run is not part of the selected Iteration", 404);
+  }
+  const selectedRecords = selectedIteration
+    ? latestRespondents(records, selectedIteration.id, selectedRun?.id || null)
+    : [];
+  const performance = questionPerformance(selectedRecords);
+  const issuePriority = distribution(selectedRecords, "graduate_issue_priority", classifyIssue);
+  const candidateAwareness = distribution(selectedRecords, "veeresh_awareness", classifyAwareness);
+  const candidateFit = distribution(selectedRecords, "veeresh_criterion_fit");
+  const candidateImpression = distribution(selectedRecords, "veeresh_impression");
+  const preferredCandidateCriterion = distribution(selectedRecords, "candidate_criterion");
+  const roleAwareness = distribution(selectedRecords, "mlc_role_awareness");
+  const incumbentAwareness = distribution(selectedRecords, "incumbent_awareness");
+  const incumbentAssessment = distribution(selectedRecords, "incumbent_assessment");
+  const partySalience = distribution(selectedRecords, "party_salience_unaided");
+  const issueLeader = distribution(selectedRecords, "perceived_issue_leader_aided");
+  const associationInfluence = distribution(selectedRecords, "association_influence");
+  const associations = distribution(selectedRecords, "association_named");
+  const themes = transcriptThemes(selectedRecords);
+  const demoRespondents = selectedRecords.filter((record) => record.is_demo_contact).length;
   const answeredQuestions = performance.filter((question) => question.answered > 0);
   const averageAnswerCoveragePct = answeredQuestions.length
     ? Number((answeredQuestions.reduce((total, question) => total + question.answeredPct, 0) / answeredQuestions.length).toFixed(1))
@@ -630,24 +742,64 @@ export async function getCampaignStrategicAnalytics(campaignId, actor) {
     : null;
 
   const warnings = [...campaignAnalysis.readiness.warnings];
-  if (latestRecords.length && demoRespondents === latestRecords.length) {
+  if (!selection.iterationId && selectedIteration) {
+    warnings.unshift(`Campaign overview uses Iteration ${selectedIteration.number} for current signal distributions; movement is shown separately across compatible Iterations.`);
+  }
+  if (selectedRun) {
+    warnings.unshift(selectedRun.number > 1
+      ? `Run ${selectedRun.number} is a retry cohort. Use it for response quality and retry-bias review, not as independent opinion movement.`
+      : "Run-level findings describe the contacted Run cohort and should not be generalized to the full electorate.");
+  }
+  if (selectedRecords.length && demoRespondents === selectedRecords.length) {
     warnings.unshift("The selected Iteration contains only controlled demo respondents; all findings are directional demonstrations.");
   }
-  if (!latestRecords.length) {
-    warnings.unshift("No connected respondent evidence is available for the latest Iteration.");
+  if (!selectedRecords.length) {
+    warnings.unshift("No connected respondent evidence is available for the selected scope.");
   }
+
+  const scopeOperations = selectedRun || (selectedIteration ? {
+    selectedVoters: selectedIteration.selectedVoters,
+    successfulVoters: selectedIteration.successfulVoters,
+    retryEligibleVoters: selectedIteration.retryExhaustedVoters,
+    callAttempts: selectedIteration.callAttempts,
+    callbacksReceived: selectedIteration.callbacksReceived,
+    connectedCalls: selectedIteration.connectedRespondents,
+    transcriptsCaptured: selectedIteration.transcriptsCaptured,
+    responsesCaptured: selectedIteration.responsesCaptured,
+    averageDurationSeconds: selectedIteration.averageDurationSeconds,
+    callbackCoveragePct: percentage(selectedIteration.callbacksReceived, selectedIteration.callAttempts),
+    transcriptCoveragePct: percentage(selectedIteration.transcriptsCaptured, selectedIteration.connectedRespondents),
+    responseCoveragePct: percentage(selectedIteration.responsesCaptured, selectedIteration.connectedRespondents)
+  } : null);
 
   return {
     campaign: campaignAnalysis.campaign,
+    scope: {
+      level: selectedRun ? "RUN" : selection.iterationId ? "ITERATION" : "CAMPAIGN",
+      iteration: selectedIteration,
+      run: selectedRun,
+      operations: scopeOperations,
+      interpretation: selectedRun
+        ? "Run results support execution-quality and retry-cohort diagnosis."
+        : selection.iterationId
+          ? "Iteration results deduplicate respondents across Runs using their latest connected evidence."
+          : "Campaign view uses the latest completed Iteration for current signals and preserves Iteration movement separately."
+    },
+    options: {
+      iterations: campaignAnalysis.iterations.map((iteration) => ({
+        ...iteration,
+        runs: runs.filter((run) => run.iterationId === iteration.id)
+      }))
+    },
     validity: {
       ...campaignAnalysis.readiness,
       directionalOnly: true,
-      latestRespondentBase: latestRecords.length,
+      latestRespondentBase: selectedRecords.length,
       latestDemoRespondents: demoRespondents,
       averageAnswerCoveragePct,
       warnings: Array.from(new Set(warnings))
     },
-    latestIteration,
+    latestIteration: selectedIteration,
     comparison,
     questionPerformance: performance,
     issueAnalysis: {
@@ -655,15 +807,21 @@ export async function getCampaignStrategicAnalytics(campaignId, actor) {
     },
     candidateAnalysis: {
       awareness: candidateAwareness,
-      criterionFit: candidateFit
+      criterionFit: candidateFit,
+      impression: candidateImpression,
+      preferredCriterion: preferredCandidateCriterion
     },
     partyAndInstitutionalAnalysis: {
+      roleAwareness,
+      incumbentAwareness,
+      incumbentAssessment,
       unaidedPartySalience: partySalience,
       aidedIssueLeader: issueLeader,
+      associationInfluence,
       associations
     },
     transcriptAnalysis: {
-      transcriptRespondents: latestRecords.filter((record) =>
+      transcriptRespondents: selectedRecords.filter((record) =>
         Boolean(transcriptText(record.interaction_transcript))
       ).length,
       themes
@@ -673,7 +831,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor) {
       candidateAwareness,
       issueLeader,
       performance,
-      latestRecords.length
+      selectedRecords.length
     ),
     generatedAt: new Date().toISOString()
   };

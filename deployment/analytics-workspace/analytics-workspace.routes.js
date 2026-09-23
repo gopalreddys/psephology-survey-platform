@@ -35,7 +35,11 @@ router.get(
       return res.json(
         await getCampaignStrategicAnalytics(
           req.params.campaignId,
-          req.platformUser
+          req.platformUser,
+          {
+            iterationId: String(req.query.iterationId || "").trim() || null,
+            runId: String(req.query.runId || "").trim() || null
+          }
         )
       );
     } catch (error) {

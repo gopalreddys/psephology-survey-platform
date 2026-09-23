@@ -34,6 +34,14 @@ Phase 1 strategic Campaign analysis adds:
 - deterministic transcript themes with links back to stored call evidence;
 - evidence-qualified finding cards.
 
+The strategic workspace supports an explicit Campaign → Iteration → Run hierarchy:
+
+- Campaign overview uses the latest completed Iteration for current distributions and keeps cross-Iteration movement separate.
+- Iteration analysis deduplicates respondents across Runs using the latest connected evidence per voter.
+- Run analysis isolates the selected execution cohort and labels Run 2/3 as retry cohorts, not independent opinion movement.
+- The selected scope reports attempts, connections, successful outcomes, duration, callback coverage, transcript coverage and structured-response coverage.
+- Institutional awareness, incumbent assessment, candidate criteria and association influence are retained beside the original issue, candidate and party signals.
+
 Install on the API host:
 
 ```bash
