@@ -6,6 +6,80 @@
   background: linear-gradient(135deg, #f4fcfa, #fff 48%, #fff8f9);
 }
 
+.judgmentSection,
+.actionPlan,
+.methodology {
+  margin-top: 20px;
+  padding: 24px;
+  border: 1px solid #d8e8e4;
+  border-radius: 23px;
+  background: linear-gradient(140deg, #f2fbf9, #fff 52%, #fff7f8);
+}
+
+.judgmentIntro > span,
+.actionPlan > div:first-child span,
+.methodology > div:first-child > span {
+  color: #168b7d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .14em;
+}
+
+.judgmentIntro h2,
+.methodology h2 { margin: 6px 0; font-size: 24px; }
+.judgmentIntro p,
+.methodology > div:first-child p { margin: 0; color: #7d6c71; font-size: 12px; }
+.judgmentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.predictiveCard,
+.sentimentCard,
+.partyStrengthCard { padding: 19px; border: 1px solid #dfeae7; border-radius: 17px; background: #fff; }
+.predictiveCard > span,
+.sentimentCard > span,
+.partyStrengthCard > div:first-child > span,
+.planGrid article > span { color: #c65369; font-size: 9px; font-weight: 850; letter-spacing: .12em; }
+.predictiveCard h3,
+.sentimentCard h3,
+.partyStrengthCard h3,
+.planGrid h3 { margin: 6px 0 11px; font-size: 17px; }
+.predictiveCard > p,
+.sentimentCard > p,
+.partyStrengthCard p,
+.planGrid p { color: #79686d; font-size: 11px; line-height: 1.5; }
+.judgmentStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+.judgmentStats > div { padding: 10px; border-radius: 10px; background: #f5faf9; }
+.judgmentStats span { display: block; color: #7d8f8a; font-size: 8px; font-weight: 750; text-transform: uppercase; }
+.judgmentStats strong { display: block; margin-top: 4px; color: #167f72; font-size: 13px; }
+.variablesLabel { display: block; margin-bottom: 7px; color: #6c5c61; font-size: 9px; text-transform: uppercase; }
+.variableChips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.variableChips code { padding: 4px 6px; border-radius: 6px; background: #f5edef; color: #985164; font-size: 8px; }
+.sentimentBars { display: grid; gap: 9px; margin: 14px 0; }
+.sentimentBars > div > div:first-child { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px; }
+.sentimentBars > div > div:first-child i { width: 8px; height: 8px; border-radius: 50%; }
+.sentimentBars span { font-size: 10px; }
+.sentimentBars strong { font-size: 9px; }
+.sentimentBars > div > div:last-child { height: 6px; margin-top: 4px; overflow: hidden; border-radius: 99px; background: #edf1f0; }
+.sentimentBars > div > div:last-child i { display: block; height: 100%; border-radius: inherit; }
+.partyStrengthCard { display: grid; grid-template-columns: minmax(210px, .8fr) minmax(280px, 1fr); gap: 17px; margin-top: 14px; }
+.strengthMeasures { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+.strengthMeasures > div,
+.strengthComponents > div { padding: 12px; border: 1px solid #e0ebe8; border-radius: 11px; background: #f9fcfb; }
+.strengthMeasures span,
+.strengthComponents span { display: block; color: #7d6c71; font-size: 9px; }
+.strengthMeasures strong,
+.strengthComponents strong { display: block; margin: 5px 0; color: #168b7d; font-size: 17px; }
+.strengthMeasures small,
+.strengthComponents small { color: #958489; font-size: 8px; }
+.strengthComponents { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.analysisGuard { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; padding: 11px 13px; border-radius: 10px; background: #edf8f6; color: #58736d; font-size: 10px; line-height: 1.45; }
+.planGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.planGrid article { padding: 16px; border: 1px solid #eadfe1; border-radius: 15px; background: #fff; }
+.planGrid article > strong { display: block; padding-top: 10px; border-top: 1px solid #f0e7e9; color: #59484d; font-size: 10px; line-height: 1.45; }
+.methodology > div:nth-child(2) { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 16px; }
+.methodology article { padding: 11px; border: 1px solid #e2ebe9; border-radius: 11px; background: #fff; }
+.methodology article span { display: block; color: #7e6d72; font-size: 9px; }
+.methodology article strong { display: block; margin-top: 5px; font-size: 11px; }
+.methodology > p { display: flex; align-items: flex-start; gap: 7px; margin: 11px 0 0; color: #726167; font-size: 10px; }
+
 .dashboardMetrics,
 .chartGrid,
 .landscapeGrid {
@@ -101,6 +175,22 @@
   .campaignRating { grid-template-columns: 1fr; }
   .campaignRatingEvidence,
   .ratingComponents { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .judgmentGrid,
+  .partyStrengthCard { grid-template-columns: 1fr; }
+  .strengthComponents,
+  .planGrid,
+  .methodology > div:nth-child(2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .judgmentSection,
+  .actionPlan,
+  .methodology { padding: 16px; }
+  .judgmentStats,
+  .strengthMeasures,
+  .strengthComponents,
+  .planGrid,
+  .methodology > div:nth-child(2) { grid-template-columns: 1fr; }
 }
 
 .methodNote {

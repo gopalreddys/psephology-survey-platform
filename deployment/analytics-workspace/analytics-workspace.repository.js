@@ -94,7 +94,7 @@ function normalizeMandal(value) {
 function filterOptions(records) {
   return {
     genders: Array.from(new Set(records.map((record) => normalizeGender(record.gender)))).sort(),
-    ageBands: AGE_BANDS.filter((band) => records.some((record) => ageBand(record.age) === band)),
+    ageBands: AGE_BANDS.filter((band) => band !== "Unknown"),
     mandals: Array.from(new Set(records.map((record) => normalizeMandal(record.mandal_name)))).sort()
   };
 }
@@ -525,6 +525,83 @@ function candidateSentiment(record) {
   return null;
 }
 
+const SENTIMENT_OUTPUTS = [
+  { key: "veeresh_impression", label: "Candidate impression", classifier: classifySentiment },
+  { key: "veeresh_criterion_fit", label: "Candidate criterion fit", classifier: classifyFit },
+  { key: "incumbent_assessment", label: "Leadership assessment", classifier: classifySentiment },
+  { key: "issue_sentiment", label: "Issue sentiment", classifier: classifySentiment },
+  { key: "development_sentiment", label: "Development sentiment", classifier: classifySentiment },
+  { key: "change_sentiment", label: "Expected-change sentiment", classifier: classifySentiment }
+];
+
+function sentimentDistribution(values) {
+  const counts = new Map();
+  for (const value of values) {
+    if (!value) continue;
+    const label = value === "Can't say" ? "Uncertain" : value;
+    counts.set(label, number(counts.get(label)) + 1);
+  }
+  const answered = Array.from(counts.values()).reduce((total, value) => total + value, 0);
+  return Array.from(counts.entries())
+    .map(([value, respondents]) => ({
+      value,
+      respondents,
+      percentage: percentage(respondents, answered)
+    }))
+    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value));
+}
+
+function buildSentimentAnalysis(records) {
+  const observations = [];
+  const variables = SENTIMENT_OUTPUTS.map((output) => {
+    const values = records.map((record) => {
+      const raw = record.response_variables?.[output.key];
+      if (!validAnswer(raw)) return null;
+      return output.classifier(raw);
+    }).filter(Boolean);
+    observations.push(...values);
+    return {
+      key: output.key,
+      label: output.label,
+      answered: values.length,
+      distribution: sentimentDistribution(values)
+    };
+  }).filter((output) => output.answered > 0);
+  const distribution = sentimentDistribution(observations);
+  const share = (label) => number(
+    distribution.find((item) => item.value === label)?.percentage
+  );
+  const positive = share("Positive");
+  const negative = share("Negative");
+  const uncertain = share("Uncertain");
+  const judgment = !observations.length
+    ? "No sentiment judgment is available"
+    : uncertain >= 45
+      ? "Uncertainty is the dominant sentiment signal"
+      : positive - negative >= 15
+        ? "Positive sentiment is directionally stronger"
+        : negative - positive >= 15
+          ? "Negative sentiment pressure requires investigation"
+          : "Sentiment is mixed and requires sharper diagnostic questions";
+  const coverage = records.length
+    ? percentage(observations.length, records.length * SENTIMENT_OUTPUTS.length)
+    : 0;
+  const confidence = records.length >= 100 && coverage >= 60
+    ? "High"
+    : records.length >= 30 && coverage >= 35
+      ? "Moderate"
+      : "Directional";
+  return {
+    judgment,
+    confidence,
+    respondentBase: records.length,
+    codedAnswers: observations.length,
+    outputCoveragePct: coverage,
+    distribution,
+    variables
+  };
+}
+
 function classifyParty(value) {
   const text = scalarText(value).toLowerCase();
   if (!text) return null;
@@ -570,6 +647,7 @@ function aggregateCampaignRating(records, iterationCount) {
     components.push({
       key: "DIRECT_RATING",
       label: "Direct neutral party-strength rating",
+      variables: ["brs_lean_rating", "party_lean_rating", "party_lean_strength"],
       value: direct.value,
       weight: 4,
       answered: direct.answered
@@ -587,6 +665,7 @@ function aggregateCampaignRating(records, iterationCount) {
     components.push({
       key: "PARTY_ATTENTION",
       label: "Unaided BRS attention",
+      variables: ["party_salience_unaided"],
       value: Number((1 + (4 * shareOf(partyAttention, "BRS") / 100)).toFixed(2)),
       weight: 2,
       answered: partyAttentionAnswered
@@ -604,6 +683,7 @@ function aggregateCampaignRating(records, iterationCount) {
     components.push({
       key: "ISSUE_LEADERSHIP",
       label: "BRS issue-leadership perception",
+      variables: ["perceived_issue_leader_aided"],
       value: Number((1 + (4 * shareOf(issueLeadership, "BRS") / 100)).toFixed(2)),
       weight: 3,
       answered: issueLeadershipAnswered
@@ -625,6 +705,7 @@ function aggregateCampaignRating(records, iterationCount) {
     components.push({
       key: "CANDIDATE_PERCEPTION",
       label: "Candidate perception balance",
+      variables: ["veeresh_impression", "veeresh_criterion_fit", "veeresh_awareness"],
       value: Number(sentimentScore.toFixed(2)),
       weight: 2,
       answered: candidateAnswered
@@ -659,6 +740,75 @@ function aggregateCampaignRating(records, iterationCount) {
     iterationCount,
     components,
     basis: "Aggregate output-variable composite; not individual vote intention"
+  };
+}
+
+function buildPartyStrengthAnalysis(records) {
+  const estimate = aggregateCampaignRating(records, 1);
+  const direct = directFivePointIndex(records);
+  const judgment = estimate.value === null
+    ? "Party strength cannot be estimated from the recorded outputs"
+    : estimate.value < 1.8
+      ? "Very low aggregate party-strength evidence"
+      : estimate.value < 2.6
+        ? "Low aggregate party-strength evidence"
+        : estimate.value < 3.4
+          ? "Uncertain aggregate party-strength evidence"
+          : estimate.value < 4.2
+            ? "Moderate aggregate party-strength evidence"
+            : "High aggregate party-strength evidence";
+  return {
+    estimate: {
+      value: estimate.value,
+      scale: estimate.scale,
+      band: estimate.band,
+      confidence: estimate.confidence,
+      judgment,
+      components: estimate.components,
+      basis: "Weighted aggregate of recorded party, leadership and candidate output variables"
+    },
+    directMeasure: direct,
+    distinction: direct.value === null
+      ? "No direct 1–5 party-strength question was recorded; the displayed estimate is derived from aggregate output variables."
+      : "A direct neutral 1–5 response is available and is shown separately from the derived estimate."
+  };
+}
+
+function buildPredictiveAnalysis(records, partyStrength, sentiment) {
+  const value = partyStrength.estimate.value;
+  const confidence = partyStrength.estimate.confidence === "High" && sentiment.confidence === "High"
+    ? "High"
+    : partyStrength.estimate.confidence === "Directional" || sentiment.confidence === "Directional"
+      ? "Directional"
+      : "Moderate";
+  const outlook = value === null
+    ? "Insufficient evidence"
+    : value < 2.6
+      ? "Weak alignment signals"
+      : value < 3.4
+        ? "Uncertain alignment signals"
+        : "Favourable alignment signals";
+  return {
+    outlook,
+    confidence,
+    judgment: value === null
+      ? "Complete the missing structured outputs before drawing a predictive judgment."
+      : `${outlook}. ${sentiment.judgment}.`,
+    respondentBase: records.length,
+    variables: Array.from(new Set(
+      partyStrength.estimate.components.flatMap((component) => component.variables)
+    )),
+    drivers: partyStrength.estimate.components.map((component) => ({
+      label: component.label,
+      value: component.value,
+      answered: component.answered,
+      variables: component.variables
+    })),
+    limitations: [
+      "The result is an aggregate directional estimate, not constituency vote share.",
+      "No participant-level prediction or political category is produced.",
+      "Representative sampling, weighting and external outcome calibration are required for electoral forecasting."
+    ]
   };
 }
 
@@ -732,10 +882,10 @@ function buildIterationDashboard(records, {
       issueLeader: topIssueLeader
     },
     predictiveAssessment: {
-      status: "NOT_READY",
-      label: "Descriptive and directional only",
+      status: respondentBase ? "DIRECTIONAL" : "NOT_AVAILABLE",
+      label: respondentBase ? "Aggregate directional outlook" : "No predictive evidence",
       reasons,
-      permittedUse: "Compare aggregate Iteration signals and improve questionnaire design.",
+      permittedUse: "Guide aggregate Iteration questionnaire design and compare repeated measures.",
       prohibitedUse: "Do not infer individual vote choice, persuasion likelihood or constituency vote share."
     }
   };
@@ -890,27 +1040,92 @@ function strategicFindings(issuePriority, candidateAwareness, issueLeader, perfo
     type: "ISSUE",
     title: `${topIssue.value} leads the recorded issue priorities`,
     evidence: `${topIssue.respondents} respondents · ${topIssue.percentage}% of coded issue answers`,
-    caution: "Open-text classification is directional and should be reviewed against transcript evidence."
+    caution: "Open-text classification is directional and should be reviewed against transcript evidence.",
+    variables: ["graduate_issue_priority", "development_priority", "desired_change"]
   });
   if (awareness) findings.push({
     type: "CANDIDATE",
     title: `${awareness.percentage}% show some prior candidate awareness`,
     evidence: `${awareness.respondents} of ${candidateAwareness.reduce((total, item) => total + item.respondents, 0)} classified awareness answers`,
-    caution: "Awareness does not imply positive support or vote intention."
+    caution: "Awareness does not imply positive support or vote intention.",
+    variables: ["veeresh_awareness", "veeresh_impression", "veeresh_criterion_fit"]
   });
   if (topLeader) findings.push({
     type: "PARTY",
     title: `${topLeader.value} is the most frequently recorded aided issue leader`,
     evidence: `${topLeader.respondents} respondents · ${topLeader.percentage}% of answered records`,
-    caution: "This is perceived issue leadership, not a vote-choice measure."
+    caution: "This is perceived issue leadership, not a vote-choice measure.",
+    variables: ["perceived_issue_leader_aided", "party_salience_unaided"]
   });
   if (weakQuestion && weakQuestion.answeredPct < 80) findings.push({
     type: "QUALITY",
     title: `${weakQuestion.label} has the largest answer gap`,
     evidence: `${weakQuestion.answered}/${respondentBase} respondents answered · ${weakQuestion.answeredPct}%`,
-    caution: "Review question wording, conditional logic and agent probing before the next Iteration."
+    caution: "Review question wording, conditional logic and agent probing before the next Iteration.",
+    variables: weakQuestion.outputVariables
   });
   return findings;
+}
+
+function buildNextIterationPlan({
+  issuePriority,
+  performance,
+  sentiment,
+  predictive,
+  partyStrength
+}) {
+  const plan = [];
+  const topIssue = issuePriority[0];
+  const weakest = [...performance]
+    .filter((question) => question.required || question.answered > 0)
+    .sort((left, right) => left.answeredPct - right.answeredPct)[0];
+  if (topIssue) {
+    plan.push({
+      priority: 1,
+      title: `Deepen the ${topIssue.value.toLowerCase()} diagnosis`,
+      objective: "Measure severity, lived experience, expected resolution and proof of improvement using neutral questions.",
+      rationale: `${topIssue.percentage}% of coded issue answers identify this as the leading recorded priority.`,
+      variables: ["graduate_issue_priority", "development_priority", "desired_change"]
+    });
+  }
+  if (sentiment.judgment.includes("Uncertainty") || predictive.outlook.includes("Uncertain")) {
+    plan.push({
+      priority: 2,
+      title: "Reduce uncertainty before testing movement",
+      objective: "Use comprehension, awareness and evidence-recall questions before asking evaluative follow-ups.",
+      rationale: `${sentiment.judgment}; predictive confidence is ${predictive.confidence.toLowerCase()}.`,
+      variables: sentiment.variables.map((variable) => variable.key)
+    });
+  } else {
+    plan.push({
+      priority: 2,
+      title: "Validate the current sentiment judgment",
+      objective: "Repeat neutral evaluation measures and add a reason-for-rating probe to test stability.",
+      rationale: `${sentiment.judgment}; the aggregate party-strength band is ${partyStrength.estimate.band.toLowerCase()}.`,
+      variables: Array.from(new Set([
+        ...predictive.variables,
+        ...sentiment.variables.map((variable) => variable.key)
+      ]))
+    });
+  }
+  if (weakest && weakest.answeredPct < 80) {
+    plan.push({
+      priority: 3,
+      title: `Repair ${weakest.label.toLowerCase()} capture`,
+      objective: "Review wording, branching, agent acknowledgement and structured-output mapping before the next launch.",
+      rationale: `Only ${weakest.answeredPct}% of the Iteration base produced this required evidence.`,
+      variables: weakest.outputVariables
+    });
+  } else {
+    plan.push({
+      priority: 3,
+      title: "Preserve comparability in the next Iteration",
+      objective: "Retain core benchmark questions, then add only the highest-priority diagnostic module.",
+      rationale: "Comparable repeated measures are required to distinguish real movement from questionnaire changes.",
+      variables: ["party_salience_unaided", "perceived_issue_leader_aided", "veeresh_impression"]
+    });
+  }
+  return plan.slice(0, 3);
 }
 
 async function loadStrategicEvidence(db, iterationIds) {
@@ -1053,7 +1268,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     throw errorWithStatus("Run is not part of the selected Iteration", 404);
   }
   const scopedRecords = selectedIteration
-    ? latestRespondents(records, selectedIteration.id, selectedRun?.id || null)
+    ? latestRespondents(records, selectedIteration.id)
     : [];
   const demographicFilters = {
     gender: selection.gender || null,
@@ -1093,6 +1308,13 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     "desired_change", "expected_change", "change_priority"
   ], classifyIssue);
   const partyLeanIndex = directFivePointIndex(selectedRecords);
+  const sentimentAnalysis = buildSentimentAnalysis(selectedRecords);
+  const partyStrengthAnalysis = buildPartyStrengthAnalysis(selectedRecords);
+  const predictiveAnalysis = buildPredictiveAnalysis(
+    selectedRecords,
+    partyStrengthAnalysis,
+    sentimentAnalysis
+  );
   const themes = transcriptThemes(selectedRecords);
   const demoRespondents = selectedRecords.filter((record) => record.is_demo_contact).length;
   const answeredQuestions = performance.filter((question) => question.answered > 0);
@@ -1107,6 +1329,13 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     associationInfluence,
     averageAnswerCoveragePct,
     demoRespondents
+  });
+  const nextIterationPlan = buildNextIterationPlan({
+    issuePriority,
+    performance,
+    sentiment: sentimentAnalysis,
+    predictive: predictiveAnalysis,
+    partyStrength: partyStrengthAnalysis
   });
   const comparison = campaignAnalysis.comparison
     ? {
@@ -1132,9 +1361,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     warnings.unshift(`Campaign overview uses Iteration ${selectedIteration.number} for current signal distributions; movement is shown separately across compatible Iterations.`);
   }
   if (selectedRun) {
-    warnings.unshift(selectedRun.number > 1
-      ? `Run ${selectedRun.number} is a retry cohort. Use it for response quality and retry-bias review, not as independent opinion movement.`
-      : "Run-level findings describe the contacted Run cohort and should not be generalized to the full electorate.");
+    warnings.unshift(`Run ${selectedRun.number} changes operational metrics only. Predictive, sentiment and party-strength judgments continue to use all deduplicated respondents in Iteration ${selectedIteration.number}.`);
   }
   if (selectedRecords.length && demoRespondents === selectedRecords.length) {
     warnings.unshift("The selected Iteration contains only controlled demo respondents; all findings are directional demonstrations.");
@@ -1168,7 +1395,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       run: selectedRun,
       operations: scopeOperations,
       interpretation: selectedRun
-        ? "Run results support execution-quality and retry-cohort diagnosis."
+        ? "Run selection changes operational metrics; research judgments remain Iteration-wide."
         : selection.iterationId
           ? "Iteration results deduplicate respondents across Runs using their latest connected evidence."
           : "Campaign view uses the latest completed Iteration for current signals and preserves Iteration movement separately."
@@ -1220,6 +1447,21 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     iterationDashboard,
     campaignRating,
     partyLeanIndex,
+    partyStrengthAnalysis,
+    predictiveAnalysis,
+    sentimentAnalysis,
+    nextIterationPlan,
+    methodology: {
+      analysisUnit: "Entire selected Iteration, deduplicated by respondent across Runs",
+      ageBands: AGE_BANDS.filter((band) => band !== "Unknown"),
+      minimumSegmentBase: MINIMUM_SEGMENT_BASE,
+      weighting: "Not configured",
+      representativeSampling: "Not verified",
+      uncertainty: selectedRecords.length >= 100
+        ? "Report confidence intervals after sampling design and weights are configured"
+        : "Directional sample; do not report constituency estimates",
+      benchmarkRule: "Keep core output variables unchanged across Iterations before interpreting movement"
+    },
     transcriptAnalysis: {
       transcriptRespondents: selectedRecords.filter((record) =>
         Boolean(transcriptText(record.interaction_transcript))

@@ -63,9 +63,26 @@ directional research evidence, not vote intention, and no participant rating or
 participant-to-band mapping is created or retained.
 
 Party attention is not labelled as vote intention. Predictive output remains
-disabled while the evidence is a small/demo cohort without a measured outcome,
-sampling weights, and out-of-sample validation. The platform never produces an
-individual voter political-propensity score.
+an aggregate directional judgment while the evidence is a small/demo cohort
+without sampling weights and out-of-sample validation. The platform never
+produces an individual voter political-propensity score.
+
+The streamlined Iteration-wide Analysis separates:
+
+- predictive analytics: aggregate party-strength outlook, confidence, drivers
+  and exact contributing output variables;
+- sentiment analysis: positive, neutral, negative and uncertain distributions,
+  variable-level coverage and an Iteration judgment;
+- direct party-strength measurement from an explicit neutral 1–5 output, shown
+  separately from the derived aggregate estimate;
+- a three-step next-Iteration plan that cites the variables supporting every
+  recommendation; and
+- psephology quality controls for sample base, minimum segment size, weighting,
+  representativeness, uncertainty and benchmark continuity.
+
+Selecting a Run changes operational metrics only. Predictive, sentiment and
+party-strength judgments always use all deduplicated respondents in the selected
+Iteration.
 
 Install on the API host:
 

@@ -28,6 +28,17 @@ type CampaignRating = {
   components: Array<{ key: string; label: string; value: number; weight: number; answered: number }>;
   basis: string;
 };
+type RatingComponent = { key: string; label: string; value: number; weight: number; answered: number; variables: string[] };
+type PartyStrengthAnalysis = {
+  estimate: { value: number | null; scale: number; band: string; confidence: string; judgment: string; components: RatingComponent[]; basis: string };
+  directMeasure: { value: number | null; answered: number; scale: number; basis: string };
+  distinction: string;
+};
+type SentimentAnalysis = {
+  judgment: string; confidence: string; respondentBase: number; codedAnswers: number; outputCoveragePct: number;
+  distribution: Distribution[];
+  variables: Array<{ key: string; label: string; answered: number; distribution: Distribution[] }>;
+};
 type StrategicResponse = {
   campaign: { id: string; code: string; name: string; targetName: string; surveyStage: string };
   scope: {
@@ -45,7 +56,12 @@ type StrategicResponse = {
   iterationDashboard: { respondentBase: number; candidateSentiment: Distribution[]; incumbentSentiment: Distribution[]; partyAttention: Distribution[]; perceivedIssueLeadership: Distribution[] };
   campaignRating: CampaignRating;
   partyLeanIndex: { value: number | null; answered: number; scale: number; basis: string };
-  findings: Array<{ type: string; title: string; evidence: string; caution: string }>;
+  partyStrengthAnalysis: PartyStrengthAnalysis;
+  predictiveAnalysis: { outlook: string; confidence: string; judgment: string; respondentBase: number; variables: string[]; drivers: Array<{ label: string; value: number; answered: number; variables: string[] }>; limitations: string[] };
+  sentimentAnalysis: SentimentAnalysis;
+  nextIterationPlan: Array<{ priority: number; title: string; objective: string; rationale: string; variables: string[] }>;
+  methodology: { analysisUnit: string; ageBands: string[]; minimumSegmentBase: number; weighting: string; representativeSampling: string; uncertainty: string; benchmarkRule: string };
+  findings: Array<{ type: string; title: string; evidence: string; caution: string; variables: string[] }>;
   generatedAt: string;
 };
 
@@ -76,40 +92,45 @@ function DistributionCard({ eyebrow, title, items, empty }: { eyebrow: string; t
   );
 }
 
-function FiveStarIndex({ index }: { index: StrategicResponse["partyLeanIndex"] }) {
-  return (
-    <article className={intelligenceStyles.ratingCard}><span>DIRECT PARTY-STRENGTH MEASURE</span><h3>Aggregate five-star index</h3>
-      {index.value === null ? <><div className={intelligenceStyles.emptyStars}>☆☆☆☆☆</div><p>Not measured in this questionnaire. Add a neutral 1–5 party-strength question to a future Iteration to populate this index.</p></> : <><div className={intelligenceStyles.stars} aria-label={`${index.value} out of 5 stars`}>{Array.from({ length: 5 }, (_, item) => <i key={item} data-filled={item + 1 <= Math.round(index.value || 0)}>★</i>)}<strong>{index.value}/5</strong></div><p>{index.answered} direct answers · {index.basis}. This is an aggregate cohort measure, never an individual voter score.</p></>}
-    </article>
-  );
+function VariableChips({ variables }: { variables: string[] }) {
+  return <div className={intelligenceStyles.variableChips}>{variables.map((variable) => <code key={variable}>{variable}</code>)}</div>;
 }
 
-function CampaignAggregateRating({ rating }: { rating: CampaignRating }) {
+function IterationJudgments({ data }: { data: StrategicResponse }) {
+  const estimate = data.partyStrengthAnalysis.estimate;
+  const sentiment = data.sentimentAnalysis;
   return (
-    <article className={intelligenceStyles.campaignRating}>
-      <div className={intelligenceStyles.campaignRatingLead}>
-        <span>CAMPAIGN-LEVEL AGGREGATE RATING</span>
-        <h3>{rating.band}</h3>
-        {rating.value === null
+    <section className={intelligenceStyles.judgmentSection}>
+      <div className={intelligenceStyles.judgmentIntro}><span>ITERATION-WIDE ANALYTICS</span><h2>Two judgments, one evidence base</h2><p>All deduplicated respondents in the selected Iteration are analysed. Run selection affects operational metrics only.</p></div>
+      <div className={intelligenceStyles.judgmentGrid}>
+        <article className={intelligenceStyles.predictiveCard}>
+          <span>PREDICTIVE ANALYTICS</span>
+          <h3>{data.predictiveAnalysis.outlook}</h3>
+          {estimate.value === null
           ? <div className={intelligenceStyles.emptyStars}>☆☆☆☆☆</div>
-          : <div className={intelligenceStyles.stars} aria-label={`${rating.value} out of 5 stars`}>
-              {Array.from({ length: 5 }, (_, item) => <i key={item} data-filled={item + 1 <= Math.round(rating.value || 0)}>★</i>)}
-              <strong>{rating.value}/5</strong>
+          : <div className={intelligenceStyles.stars} aria-label={`${estimate.value} out of 5 stars`}>
+              {Array.from({ length: 5 }, (_, item) => <i key={item} data-filled={item + 1 <= Math.round(estimate.value || 0)}>★</i>)}
+              <strong>{estimate.value}/5</strong>
             </div>}
-        <p>{rating.basis}.</p>
+          <p>{data.predictiveAnalysis.judgment}</p>
+          <div className={intelligenceStyles.judgmentStats}><div><span>Band</span><strong>{estimate.band}</strong></div><div><span>Confidence</span><strong>{data.predictiveAnalysis.confidence}</strong></div><div><span>Base</span><strong>{data.predictiveAnalysis.respondentBase}</strong></div></div>
+          <strong className={intelligenceStyles.variablesLabel}>Variables used</strong><VariableChips variables={data.predictiveAnalysis.variables} />
+        </article>
+        <article className={intelligenceStyles.sentimentCard}>
+          <span>SENTIMENT ANALYSIS</span>
+          <h3>{sentiment.judgment}</h3>
+          <div className={intelligenceStyles.sentimentBars}>{sentiment.distribution.map((item, index) => <div key={item.value}><div><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div><div><i style={{ width: `${item.percentage}%`, background: CHART_COLORS[index % CHART_COLORS.length] }} /></div></div>)}</div>
+          <div className={intelligenceStyles.judgmentStats}><div><span>Confidence</span><strong>{sentiment.confidence}</strong></div><div><span>Coded answers</span><strong>{sentiment.codedAnswers}</strong></div><div><span>Coverage</span><strong>{pct(sentiment.outputCoveragePct)}</strong></div></div>
+          <strong className={intelligenceStyles.variablesLabel}>Variables used</strong><VariableChips variables={sentiment.variables.map((variable) => variable.key)} />
+        </article>
       </div>
-      <div className={intelligenceStyles.campaignRatingEvidence}>
-        <div><span>Confidence</span><strong>{rating.confidence}</strong></div>
-        <div><span>Output coverage</span><strong>{pct(rating.componentCoverage)}</strong></div>
-        <div><span>Evidence base</span><strong>{rating.respondentObservations}</strong><small>respondent observations</small></div>
-        <div><span>Iterations</span><strong>{rating.iterationCount}</strong><small>completed</small></div>
-      </div>
-      <div className={intelligenceStyles.ratingComponents}>
-        {!rating.components.length
-          ? <p>No eligible campaign-level output variables are available.</p>
-          : rating.components.map((component) => <div key={component.key}><span>{component.label}</span><strong>{component.value.toFixed(1)}/5</strong><small>{component.answered} answers</small></div>)}
-      </div>
-    </article>
+      <article className={intelligenceStyles.partyStrengthCard}>
+        <div><span>PARTY-STRENGTH MEASUREMENT</span><h3>Derived aggregate estimate and direct measure</h3><p>{data.partyStrengthAnalysis.distinction}</p></div>
+        <div className={intelligenceStyles.strengthMeasures}><div><span>Derived from outputs</span><strong>{estimate.value === null ? "Not measured" : `${estimate.value}/5`}</strong><small>{estimate.judgment}</small></div><div><span>Direct neutral 1–5 question</span><strong>{data.partyStrengthAnalysis.directMeasure.value === null ? "Not asked" : `${data.partyStrengthAnalysis.directMeasure.value}/5`}</strong><small>{data.partyStrengthAnalysis.directMeasure.answered} direct answers</small></div></div>
+        <div className={intelligenceStyles.strengthComponents}>{estimate.components.map((component) => <div key={component.key}><span>{component.label}</span><strong>{component.value.toFixed(1)}/5</strong><small>{component.answered} answers</small><VariableChips variables={component.variables} /></div>)}</div>
+      </article>
+      <div className={intelligenceStyles.analysisGuard}><ShieldAlert size={16} /><span>Predictive output is an aggregate research judgment—not constituency vote share, an election forecast, or a participant-level political score.</span></div>
+    </section>
   );
 }
 
@@ -169,6 +190,40 @@ export default function StrategicCampaignAnalyticsPage() {
         components: [],
         basis: "Aggregate output-variable composite; not individual vote intention"
       };
+      response.partyStrengthAnalysis ||= {
+        estimate: { value: null, scale: 5, band: "Not measured", confidence: "Directional", judgment: "Party strength cannot be estimated from the recorded outputs", components: [], basis: "Weighted aggregate of recorded output variables" },
+        directMeasure: response.partyLeanIndex,
+        distinction: "No direct or derived party-strength measurement is available."
+      };
+      response.sentimentAnalysis ||= {
+        judgment: "No sentiment judgment is available",
+        confidence: "Directional",
+        respondentBase: response.segment.respondentBase || 0,
+        codedAnswers: 0,
+        outputCoveragePct: 0,
+        distribution: [],
+        variables: []
+      };
+      response.predictiveAnalysis ||= {
+        outlook: "Insufficient evidence",
+        confidence: "Directional",
+        judgment: "Complete the structured outputs before drawing a predictive judgment.",
+        respondentBase: response.segment.respondentBase || 0,
+        variables: [],
+        drivers: [],
+        limitations: []
+      };
+      response.nextIterationPlan ||= [];
+      response.methodology ||= {
+        analysisUnit: "Entire selected Iteration, deduplicated by respondent across Runs",
+        ageBands: ["18–29", "30–39", "40–49", "50+"],
+        minimumSegmentBase: 5,
+        weighting: "Not configured",
+        representativeSampling: "Not verified",
+        uncertainty: "Directional sample; do not report constituency estimates",
+        benchmarkRule: "Keep core output variables unchanged across Iterations before interpreting movement"
+      };
+      response.findings = (response.findings || []).map((finding) => ({ ...finding, variables: finding.variables || [] }));
       setData(response);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Analysis"); }
     finally { setLoading(false); setRefreshing(false); }
@@ -204,8 +259,9 @@ export default function StrategicCampaignAnalyticsPage() {
         {data.segment.suppressed ? <section className={scopeStyles.suppressed}><ShieldAlert size={23} /><div><strong>Segment results withheld</strong><p>The selected cohort is below the minimum reporting base of {data.segment.minimumBase}. Broaden one or more filters.</p></div></section> : <>
           {data.scope.operations && <section className={scopeStyles.scopeMetrics} aria-label="Selected analysis scope"><article><PhoneCall size={18} /><span>Attempts</span><strong>{data.scope.operations.callAttempts}</strong></article><article><Activity size={18} /><span>Connected</span><strong>{data.scope.operations.connectedCalls}</strong></article><article><FileQuestion size={18} /><span>Responses</span><strong>{pct(data.scope.operations.responseCoveragePct)}</strong></article><article><Target size={18} /><span>Filtered base</span><strong>{data.segment.respondentBase}</strong></article></section>}
 
-          <section className={intelligenceStyles.dashboardSection}><div className={styles.sectionHead}><div><span>DECISION SUMMARY</span><h2>Signals needed for the next Iteration</h2></div><p>{data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.segment.respondentBase} deduplicated respondents` : "No Iteration evidence available"}</p></div>
-            <CampaignAggregateRating rating={data.campaignRating} />
+          <IterationJudgments data={data} />
+
+          <section className={intelligenceStyles.dashboardSection}><div className={styles.sectionHead}><div><span>EVIDENCE BEHIND THE JUDGMENT</span><h2>Decision signals from recorded outputs</h2></div><p>{data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.segment.respondentBase} deduplicated respondents` : "No Iteration evidence available"}</p></div>
             <div className={intelligenceStyles.decisionGrid}>
               <DonutChart title="Party attention" subtitle="PARTY LEAN PROXY" items={data.iterationDashboard.partyAttention} empty="No unaided party signal was captured." />
               <DonutChart title="Candidate perception" subtitle="CANDIDATE LEAN" items={data.iterationDashboard.candidateSentiment} empty="No classifiable candidate perception was captured." />
@@ -214,13 +270,16 @@ export default function StrategicCampaignAnalyticsPage() {
               <DistributionCard eyebrow="ISSUES" title="Priority issues" items={data.issueAnalysis.priorities} empty="No issue priority was captured." />
               <DistributionCard eyebrow="DEVELOPMENT" title="Development priorities" items={data.issueAnalysis.developmentPriorities} empty="No development priority was captured." />
               <DistributionCard eyebrow="CHANGE" title="Changes voters want" items={data.issueAnalysis.desiredChanges} empty="No desired-change output was captured." />
-              <FiveStarIndex index={data.partyLeanIndex} />
             </div>
-            <p className={intelligenceStyles.methodNote}><ShieldAlert size={15} />Party attention is an unaided aggregate signal, not declared vote intention. The five-star index is shown only from a direct neutral rating question and is never used to score or target an individual voter.</p>
+            <p className={intelligenceStyles.methodNote}><ShieldAlert size={15} />Party attention, candidate perception and leadership signals are aggregate evidence components. Their exact output variables are documented in the predictive and sentiment sections above.</p>
           </section>
 
-          <section className={styles.findingsSection}><div className={styles.sectionHead}><div><span>WHAT TO DO NEXT</span><h2>Evidence-qualified findings</h2></div><p>Use these summaries to choose the next research question, not to target individual voters.</p></div>{!data.findings.length ? <div className={styles.noSignal}>No decision finding can be generated from the current evidence.</div> : <div className={styles.findings}>{data.findings.slice(0, 4).map((finding) => <article key={`${finding.type}-${finding.title}`}><div><Target size={17} /><span>{finding.type}</span></div><h3>{finding.title}</h3><strong>{finding.evidence}</strong><p>{finding.caution}</p></article>)}</div>}</section>
+          <section className={styles.findingsSection}><div className={styles.sectionHead}><div><span>WHAT THE EVIDENCE SAYS</span><h2>Evidence-qualified findings</h2></div><p>Each finding shows the output variables used.</p></div>{!data.findings.length ? <div className={styles.noSignal}>No decision finding can be generated from the current evidence.</div> : <div className={styles.findings}>{data.findings.slice(0, 4).map((finding) => <article key={`${finding.type}-${finding.title}`}><div><Target size={17} /><span>{finding.type}</span></div><h3>{finding.title}</h3><strong>{finding.evidence}</strong><p>{finding.caution}</p><VariableChips variables={finding.variables} /></article>)}</div>}</section>
+
+          <section className={intelligenceStyles.actionPlan}><div className={styles.sectionHead}><div><span>NEXT-LEVEL SURVEY PLAN</span><h2>Clear actions for the next Iteration</h2></div><p>Prioritized from the complete Iteration evidence.</p></div><div className={intelligenceStyles.planGrid}>{data.nextIterationPlan.map((item) => <article key={item.priority}><span>PRIORITY {item.priority}</span><h3>{item.title}</h3><p>{item.objective}</p><strong>{item.rationale}</strong><VariableChips variables={item.variables} /></article>)}</div></section>
         </>}
+
+        <section className={intelligenceStyles.methodology}><div><span>PSEPHOLOGY QUALITY GATE</span><h2>How to interpret this Analysis</h2><p>{data.methodology.analysisUnit}</p></div><div><article><span>Age bands</span><strong>{data.methodology.ageBands.join(" · ")}</strong></article><article><span>Minimum segment</span><strong>n={data.methodology.minimumSegmentBase}</strong></article><article><span>Weighting</span><strong>{data.methodology.weighting}</strong></article><article><span>Sampling</span><strong>{data.methodology.representativeSampling}</strong></article></div><p><AlertTriangle size={14} />{data.methodology.uncertainty}</p><p><FileQuestion size={14} />{data.methodology.benchmarkRule}</p></section>
 
         <section className={styles.validity}><div className={styles.validityLead}><AlertTriangle size={22} /><div><span>INTERPRETATION</span><h2>Directional aggregate evidence</h2><p>Findings describe responding cohorts and do not estimate constituency vote share.</p></div></div><div className={styles.warnings}>{data.validity.warnings.slice(0, 4).map((warning) => <p key={warning}><AlertTriangle size={14} />{warning}</p>)}</div></section>
         <footer className={styles.generated}><FileQuestion size={14} />Generated from stored platform evidence. No individual political profile, propensity score, or targeting list is produced.</footer>

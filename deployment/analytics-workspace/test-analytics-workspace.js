@@ -21,8 +21,12 @@ assert.match(repository, /MLC_QUESTION_CATALOG/);
 assert.match(repository, /TRANSCRIPT_THEMES/);
 assert.match(repository, /directionalOnly: true/);
 assert.match(repository, /loadRunCatalog/);
-assert.match(repository, /Run results support execution-quality and retry-cohort diagnosis/);
-assert.match(repository, /latestRespondents\(records, selectedIteration\.id, selectedRun\?\.id/);
+assert.match(repository, /Run selection changes operational metrics; research judgments remain Iteration-wide/);
+assert.match(repository, /latestRespondents\(records, selectedIteration\.id\)/);
+assert.doesNotMatch(
+  repository,
+  /latestRespondents\(records, selectedIteration\.id, selectedRun/
+);
 assert.match(repository, /roleAwareness/);
 assert.match(repository, /incumbentAssessment/);
 assert.match(repository, /buildIterationDashboard/);
@@ -37,6 +41,12 @@ assert.match(repository, /Direct respondent rating only/);
 assert.match(repository, /aggregateCampaignRating/);
 assert.match(repository, /Aggregate output-variable composite; not individual vote intention/);
 assert.match(repository, /respondentObservations/);
+assert.match(repository, /buildSentimentAnalysis/);
+assert.match(repository, /buildPartyStrengthAnalysis/);
+assert.match(repository, /buildPredictiveAnalysis/);
+assert.match(repository, /buildNextIterationPlan/);
+assert.match(repository, /Entire selected Iteration, deduplicated by respondent across Runs/);
+assert.match(repository, /Run selection changes operational metrics/);
 assert.match(repository, /segmentSuppressed/);
 assert.match(routes, /req\.query\.iterationId/);
 assert.match(routes, /req\.query\.runId/);
