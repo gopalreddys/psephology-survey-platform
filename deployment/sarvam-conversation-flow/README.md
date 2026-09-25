@@ -1,10 +1,13 @@
 # Concise Sarvam conversation flow
 
-Adds a governed turn-taking instruction to every platform-launched Sarvam Run
-call. After a usable voter answer, the agent must acknowledge in two to five
-words and immediately ask the next approved question. It must not repeat,
-paraphrase, summarize, interpret, praise or debate the answer. One short probe
-is allowed only when an answer cannot be coded.
+Adds a governed conversation-state and turn-taking instruction to every
+platform-launched Sarvam Run call. The configured Sarvam Greeting is the only
+opening and must play once. After any respondent utterance, the agent must not
+greet, introduce itself, reconfirm the name or repeat the time/consent request.
+It continues from the first unanswered approved question. After a usable voter
+answer, the agent acknowledges in two to five words and immediately advances.
+It must not repeat, paraphrase, summarize, interpret, praise or debate the
+answer. One short probe is allowed only when an answer cannot be coded.
 
 The policy is appended to the existing `agent_style_context` and
 `probe_context`; it does not replace the Iteration questionnaire, consent,
@@ -25,3 +28,18 @@ curl --retry 10 --retry-connrefused --retry-delay 1 \
 
 Validate with one approved demo call before bulk launch. Confirm from its AWS
 transcript that answers are not echoed and all expected questions are reached.
+
+If a previous Run repeated its opening, run the read-only diagnostic first. It
+reports execution, provider-attempt and interaction counts without printing
+names, phone numbers or transcript text:
+
+```bash
+node deployment/sarvam-conversation-flow/diagnose-repeated-opening.js \
+  /opt/sarvam-voice-analytics \
+  --run-id=RUN_UUID
+```
+
+One execution, one provider attempt and one interaction per Run contact rules
+out repeated platform submission. `repeatedOpeningTurns` greater than one then
+locates the problem inside the single Sarvam conversation/context. Multiple
+attempts or interactions require launch-idempotency investigation instead.
