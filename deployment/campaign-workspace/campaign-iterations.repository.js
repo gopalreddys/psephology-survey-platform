@@ -1,6 +1,7 @@
 import { getDb } from "../db/postgres.js";
 import { getVoiceAgentForSelection, voiceAgentSnapshot } from "./voice-agents.repository.js";
 import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js";
+import { assertIterationAgentVersionChange } from "./iteration-agent-version.policy.js";
 
 const STAGES = new Set(["BASE", "CAMPAIGN", "TURNOUT"]);
 const STATUSES = new Set(["PLANNED", "ACTIVE", "PAUSED", "COMPLETED", "LOCKED"]);
@@ -236,6 +237,89 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       voice_agent_category: voiceAgent.usage_category,
       voice_agent_app_id: voiceAgent.app_id,
       voice_agent_app_version: voiceAgent.app_version
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateCampaignIterationVoiceAgent(campaignId, iterationId, voiceAgentId, actor) {
+  if (actor.role_code !== "CAMPAIGN_MANAGER") {
+    throw errorWithStatus("Only the assigned Campaign Manager can change an Iteration agent version", 403);
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(voiceAgentId || "").trim()
+  )) {
+    throw errorWithStatus("Select a valid committed voice-agent version", 400);
+  }
+
+  const db = await getDb();
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const campaign = await getCampaignContext(client, campaignId, actor, true);
+    if (campaign.campaign_manager_user_id !== actor.id) {
+      throw errorWithStatus("Campaign Manager can update only assigned campaigns", 403);
+    }
+    const iterationResult = await client.query(`
+      SELECT iteration.id, iteration.voice_agent_id, iteration.voice_agent_snapshot,
+        COALESCE(link.status, iteration.status) AS status
+      FROM program_iterations iteration
+      JOIN campaign_iteration_links link ON link.iteration_id = iteration.id
+      WHERE link.campaign_id = $1 AND iteration.id = $2
+      FOR UPDATE OF iteration, link
+    `, [campaignId, iterationId]);
+    if (!iterationResult.rowCount) throw errorWithStatus("Campaign iteration not found", 404);
+    const iteration = iterationResult.rows[0];
+    const targetAgent = await getVoiceAgentForSelection(client, String(voiceAgentId).trim());
+
+    const executionResult = await client.query(`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE execution.status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+        )::int AS active_executions,
+        COUNT(*)::int AS prior_executions
+      FROM call_executions execution
+      JOIN campaign_runs run ON run.id = execution.run_id
+      WHERE run.iteration_id = $1
+    `, [iterationId]);
+    const executionState = executionResult.rows[0] || {};
+    const versions = assertIterationAgentVersionChange({
+      campaign,
+      iteration,
+      currentSnapshot: iteration.voice_agent_snapshot,
+      targetAgent,
+      activeExecutions: Number(executionState.active_executions || 0)
+    });
+    const changedAt = new Date().toISOString();
+    const snapshot = {
+      ...voiceAgentSnapshot(targetAgent),
+      version_changed_from: versions.currentVersion,
+      version_changed_by_user_id: actor.id,
+      version_changed_at: changedAt
+    };
+    const updated = await client.query(`
+      UPDATE program_iterations
+      SET voice_agent_id = $2, voice_agent_snapshot = $3::jsonb, updated_at = NOW()
+      WHERE id = $1 AND voice_agent_id = $4
+      RETURNING id, voice_agent_id, updated_at
+    `, [iterationId, targetAgent.id, JSON.stringify(snapshot), iteration.voice_agent_id]);
+    if (updated.rowCount !== 1) {
+      throw errorWithStatus("Iteration agent changed concurrently; refresh and try again", 409);
+    }
+    await client.query("COMMIT");
+    return {
+      ...updated.rows[0],
+      campaign_id: campaignId,
+      voice_agent_name: targetAgent.provider_name,
+      voice_agent_category: targetAgent.usage_category,
+      voice_agent_app_id: targetAgent.app_id,
+      voice_agent_app_version: Number(targetAgent.app_version),
+      previous_app_version: versions.currentVersion,
+      prior_executions_preserved: Number(executionState.prior_executions || 0)
     };
   } catch (error) {
     await client.query("ROLLBACK");

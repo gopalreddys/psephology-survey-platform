@@ -7,6 +7,7 @@ import {
   listCampaignIterationAllocations,
   listCampaignIterations,
   saveCampaignIterationAllocations,
+  updateCampaignIterationVoiceAgent,
   updateCampaignIterationStatus
 } from "../repositories/campaign-iterations.repository.js";
 
@@ -81,6 +82,19 @@ router.put("/campaigns/:campaignId/iterations/:iterationId/allocations", require
     ));
   } catch (error) {
     return sendError(res, error, "Unable to save iteration allocations");
+  }
+});
+
+router.patch("/campaigns/:campaignId/iterations/:iterationId/voice-agent", requireAuth, requireRole(["CAMPAIGN_MANAGER"]), async function (req, res) {
+  try {
+    return res.json(await updateCampaignIterationVoiceAgent(
+      req.params.campaignId,
+      req.params.iterationId,
+      req.body?.voiceAgentId,
+      req.platformUser
+    ));
+  } catch (error) {
+    return sendError(res, error, "Unable to change Iteration voice-agent version");
   }
 });
 
