@@ -62,6 +62,8 @@ const route = patchRunLaunchRoute(routeFixture);
 assert.match(route, new RegExp(MARKER));
 assert.match(route, /runContactIds: requestedContactIds/);
 assert.match(route, /uuidPattern/);
+assert.doesNotMatch(route, /requestedContactIds\$2/);
+assert.doesNotThrow(() => new Function(route));
 assert.equal(patchRunLaunchRoute(route), route);
 
 const service = patchRunLaunchService(serviceFixture);
@@ -85,6 +87,9 @@ assert.equal(
   1
 );
 assert.match(service, /statusCode = 409/);
+assert.doesNotThrow(
+  () => new Function(service.replace("export async function", "async function"))
+);
 assert.equal(patchRunLaunchService(service), service);
 
 assert.throws(

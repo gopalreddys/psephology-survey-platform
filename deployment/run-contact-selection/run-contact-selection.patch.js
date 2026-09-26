@@ -85,7 +85,9 @@ export function patchRunLaunchRoute(source) {
   block = replaceExactly(
     block,
     /(launchRun\(\{[\s\S]*?runId\s*:\s*req\.params\.runId\s*,[\s\S]*?limit\s*:\s*requestedLimit)(\s*\}\))/,
-    "$1,\n          runContactIds: requestedContactIds$2",
+    function (_match, launchArguments, closeCall) {
+      return `${launchArguments},\n          runContactIds: requestedContactIds${closeCall}`;
+    },
     1,
     "launchRun invocation"
   );
