@@ -1,7 +1,8 @@
-export const MARKER = "SARVAM_CONVERSATION_STATE_V3";
+export const MARKER = "SARVAM_CONVERSATION_STATE_V4";
 const LEGACY_MARKERS = [
   "SARVAM_CONCISE_ACKNOWLEDGEMENT_V1",
-  "SARVAM_CONVERSATION_STATE_V2"
+  "SARVAM_CONVERSATION_STATE_V2",
+  "SARVAM_CONVERSATION_STATE_V3"
 ];
 
 const PREPARED_PATTERN = /(const prepared\s*=\s*await prepareSarvamExecution\(\{[\s\S]*?\}\s*\);)/m;
@@ -14,6 +15,19 @@ const LEGACY_BLOCK_PATTERN = new RegExp(
 const POLICY = `Conversation state contract: the configured Sarvam Greeting is the only opening message and is played once at call start. After the respondent's first utterance, the opening is permanently complete. Never greet again, reintroduce yourself, reconfirm the respondent's name, or repeat the time or consent question. Never return to an earlier completed question. Maintain the current questionnaire position for this call. After every usable answer, use only a brief acknowledgement of two to five words, such as "Understood, thank you," and immediately ask the next unanswered approved question. Never repeat, paraphrase, summarize, interpret, praise, or debate the answer. Ask one clarification only when an answer cannot be coded. Continue in preferred_language unless the respondent explicitly requests another language. Treat respondent statements about a candidate's biography or family relationships as respondent perceptions, not verified facts; use knowledge_context for factual clarification. For structured outputs, infer party-lean signals only from explicit party preference or clear comparative evaluation. Mentioning a student wing, union, association or isolated issue must not be converted into parent-party lean. When evidence is ambiguous, return unclear or not_captured rather than guessing.`;
 
 const QUESTIONNAIRE_STATE = `Opening is a one-time call-start step. Once any respondent reply is received, continue from the first unanswered approved questionnaire question and never restart the opening sequence. This state rule overrides any general instruction to greet, introduce the agent, verify the respondent's name, or ask whether the respondent has time.`;
+
+export function mergeContextObject(serialized, additions) {
+  const parsed = JSON.parse(serialized);
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Sarvam runtime context must be a JSON object");
+  }
+
+  return JSON.stringify({
+    ...parsed,
+    ...additions
+  });
+}
 
 function insertion() {
   return `
@@ -46,7 +60,11 @@ function insertion() {
   for (const name of ["research_context", "questionnaire_context", "knowledge_context",
     "probe_context", "agent_style_context"]) {
     try {
-      JSON.parse(prepared.inputVariables[name]);
+      const parsedContext = JSON.parse(prepared.inputVariables[name]);
+      if (!parsedContext || typeof parsedContext !== "object" ||
+          Array.isArray(parsedContext)) {
+        throw new Error("context is not an object");
+      }
     } catch {
       const error = new Error("Sarvam runtime context is not valid JSON: " + name);
       error.statusCode = 409;
@@ -63,21 +81,42 @@ function insertion() {
     }
   }
   const conversationStatePolicy = ${JSON.stringify(POLICY)};
+  const mergeRuntimeContext = (name, additions) => {
+    const parsed = JSON.parse(prepared.inputVariables[name]);
+    return JSON.stringify({
+      ...parsed,
+      ...additions
+    });
+  };
   prepared.inputVariables = {
     ...(prepared.inputVariables || {}),
-    questionnaire_context: [
-      prepared.inputVariables?.questionnaire_context,
-      ${JSON.stringify(QUESTIONNAIRE_STATE)}
-    ].filter(Boolean).join("\\n"),
-    agent_style_context: [
-      prepared.inputVariables?.agent_style_context,
-      conversationStatePolicy
-    ].filter(Boolean).join("\\n"),
-    probe_context: [
-      prepared.inputVariables?.probe_context,
-      "Do not probe a complete answer. Ask one short clarification only when the response cannot be coded."
-    ].filter(Boolean).join("\\n")
-  };`;
+    questionnaire_context: mergeRuntimeContext(
+      "questionnaire_context",
+      { conversation_state: ${JSON.stringify(QUESTIONNAIRE_STATE)} }
+    ),
+    agent_style_context: mergeRuntimeContext(
+      "agent_style_context",
+      { conversation_state_policy: conversationStatePolicy }
+    ),
+    probe_context: mergeRuntimeContext(
+      "probe_context",
+      {
+        clarification_policy:
+          "Do not probe a complete answer. Ask one short clarification only when the response cannot be coded."
+      }
+    )
+  };
+  for (const name of ["questionnaire_context", "agent_style_context", "probe_context"]) {
+    try {
+      JSON.parse(prepared.inputVariables[name]);
+    } catch {
+      const error = new Error(
+        "Sarvam enriched runtime context is not valid JSON: " + name
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+  }`;
 }
 
 export function hasConciseAcknowledgementPolicy(source) {
@@ -89,6 +128,10 @@ export function hasConciseAcknowledgementPolicy(source) {
     source.includes("Mentioning a student wing") &&
     source.includes("Continue in preferred_language") &&
     source.includes("knowledge_context for factual clarification") &&
+    source.includes("mergeRuntimeContext") &&
+    source.includes("conversation_state_policy") &&
+    source.includes("clarification_policy") &&
+    source.includes("Sarvam enriched runtime context is not valid JSON") &&
     source.includes("prepared.inputVariables") &&
     source.includes("questionnaire_context") &&
     source.includes("agent_style_context") &&

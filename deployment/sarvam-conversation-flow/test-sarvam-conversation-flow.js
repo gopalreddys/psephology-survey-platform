@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   hasConciseAcknowledgementPolicy,
+  mergeContextObject,
   patchConversationFlow
 } from "./conversation-flow.patch.js";
 
@@ -32,18 +33,41 @@ assert.match(first.source, /Mentioning a student wing/);
 assert.match(first.source, /Continue in preferred_language/);
 assert.match(first.source, /knowledge_context for factual clarification/);
 assert.match(first.source, /questionnaire_context/);
+assert.match(first.source, /mergeRuntimeContext/);
+assert.match(first.source, /conversation_state_policy/);
+assert.match(first.source, /clarification_policy/);
+assert.match(first.source, /Sarvam enriched runtime context is not valid JSON/);
+assert.doesNotMatch(
+  first.source,
+  /questionnaire_context:\s*\[[\s\S]*?\.join\("\\n"\)/
+);
 assert.match(first.source, /agentVariables: prepared\.inputVariables/);
+
+const mergedContext = mergeContextObject(
+  JSON.stringify({ questionnaire_code: "TEST", questions: [1, 2, 3] }),
+  { conversation_state: "Continue after the greeting." }
+);
+assert.deepEqual(JSON.parse(mergedContext), {
+  questionnaire_code: "TEST",
+  questions: [1, 2, 3],
+  conversation_state: "Continue after the greeting."
+});
+assert.throws(
+  () => mergeContextObject("[]", { conversation_state: "invalid" }),
+  /must be a JSON object/
+);
 
 const second = patchConversationFlow(first.source);
 assert.equal(second.changed, false);
 assert.equal(second.source, first.source);
 
 const legacy = first.source
-  .replaceAll("SARVAM_CONVERSATION_STATE_V3", "SARVAM_CONVERSATION_STATE_V2");
+  .replaceAll("SARVAM_CONVERSATION_STATE_V4", "SARVAM_CONVERSATION_STATE_V3");
 const upgraded = patchConversationFlow(legacy);
 assert.equal(upgraded.changed, true);
 assert.equal(hasConciseAcknowledgementPolicy(upgraded.source), true);
 assert.equal(upgraded.source.includes("SARVAM_CONCISE_ACKNOWLEDGEMENT_V1"), false);
+assert.equal(upgraded.source.includes("SARVAM_CONVERSATION_STATE_V3"), false);
 assert.equal(
   upgraded.source.match(/prepared\.inputVariables\s*=\s*\{/g)?.length,
   1
