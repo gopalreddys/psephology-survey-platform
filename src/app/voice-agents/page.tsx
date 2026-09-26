@@ -25,6 +25,8 @@ type VoiceAgent = {
   is_enabled: boolean;
   is_current: boolean;
   is_selectable: boolean;
+  identity_conflict?: boolean;
+  identity_conflict_app_ids?: string[];
   iteration_usage_count: number;
   completed_iteration_count: number;
   active_iteration_count: number;
@@ -217,13 +219,13 @@ export default function VoiceAgentsPage() {
       <div className={styles.registrationHeader}><div><span>OUTBOUND AGENT APP</span><h2>{editingAgent ? `Edit ${editingAgent.provider_name || editingAgent.app_id}` : "Register callable Sarvam configuration"}</h2><p>{editingAgent ? "After a committed version or telephony change, the new configuration becomes current. Prior versions remain available only in history for audit." : "Copy these values from the committed Sarvam agent and its outbound telephony connection."}</p></div><button type="button" aria-label="Close agent form" onClick={closeEditor}><X size={18} /></button></div>
       <form onSubmit={saveAgent} className={styles.registrationForm}>
         <Field label="Agent display name *"><input value={registration.providerName} onChange={function (event) { setRegistration({ ...registration, providerName: event.target.value }); }} placeholder="Telangana Urban Male Agent" required /></Field>
-        <Field label="Audience category *"><select value={registration.usageCategory} onChange={function (event) { setRegistration({ ...registration, usageCategory: event.target.value as Category | "" }); }} required><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></Field>
+        <Field label="Audience category *"><select value={registration.usageCategory} disabled={Boolean(editingAgent)} onChange={function (event) { setRegistration({ ...registration, usageCategory: event.target.value as Category | "" }); }} required><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></Field>
         <Field label="Sarvam Agent App ID *"><input value={registration.appId} onChange={function (event) { setRegistration({ ...registration, appId: event.target.value }); }} placeholder="Conversatio-…" readOnly={Boolean(editingAgent)} required /></Field>
         <Field label="Committed version *"><input type="number" min="1" step="1" value={registration.appVersion} onChange={function (event) { setRegistration({ ...registration, appVersion: event.target.value }); }} placeholder="9" required /></Field>
-        <Field label="Connection ID *"><input value={registration.connectionId} onChange={function (event) { setRegistration({ ...registration, connectionId: event.target.value }); }} placeholder="Exotel-Sarv-…" required /></Field>
-        <Field label="Outbound phone number *"><input value={registration.outboundPhoneNumber} onChange={function (event) { setRegistration({ ...registration, outboundPhoneNumber: event.target.value }); }} placeholder="+9180…" required /></Field>
+        <Field label="Connection ID *"><input value={registration.connectionId} readOnly={Boolean(editingAgent)} onChange={function (event) { setRegistration({ ...registration, connectionId: event.target.value }); }} placeholder="Exotel-Sarv-…" required /></Field>
+        <Field label="Outbound phone number *"><input value={registration.outboundPhoneNumber} readOnly={Boolean(editingAgent)} onChange={function (event) { setRegistration({ ...registration, outboundPhoneNumber: event.target.value }); }} placeholder="+9180…" required /></Field>
         <Field label="Operational note"><input value={registration.description} onChange={function (event) { setRegistration({ ...registration, description: event.target.value }); }} placeholder="Telugu urban research voice" /></Field>
-        <div className={styles.registrationFooter}><span>{editingAgent ? "App ID is fixed. Existing iterations retain their frozen version; only future iterations receive the new current version." : "Register each Sarvam Agent App once. Saving makes it selectable for new iterations."}</span><div className={styles.formActions}><button type="button" className={styles.cancelButton} onClick={closeEditor}>Cancel</button><button type="submit" disabled={registering}>{registering ? "Saving…" : editingAgent ? "Save as Current" : "Register Agent"}</button></div></div>
+        <div className={styles.registrationFooter}><span>{editingAgent ? "App ID, connection, phone and category are locked. Increase only the committed version; existing iterations retain their frozen identity until explicitly upgraded." : "Register each Sarvam Agent App once. Saving makes it selectable for new iterations."}</span><div className={styles.formActions}><button type="button" className={styles.cancelButton} onClick={closeEditor}>Cancel</button><button type="submit" disabled={registering}>{registering ? "Saving…" : editingAgent ? "Save as Current" : "Register Agent"}</button></div></div>
       </form>
     </section>}
 
@@ -242,11 +244,11 @@ export default function VoiceAgentsPage() {
           return <article key={group.appId} className={styles.agentGroup}>
             <div className={agent.is_selectable ? styles.readyCard : styles.agentCard}>
               <div className={styles.agentIcon}><Bot size={20} /></div>
-              <div className={styles.identity}><span>{agent.provider_name || "Unnamed Sarvam agent"}</span><strong>{agent.app_id}</strong><small>Current version {agent.app_version} · {agent.catalog_source === "MANUAL_AGENT_APP" ? "Agent App" : "Deployment API"}</small>{agent.description && <p>{agent.description}</p>}</div>
+              <div className={styles.identity}><span>{agent.provider_name || "Unnamed Sarvam agent"}</span><strong>{agent.app_id}</strong><small>Current version {agent.app_version} · {agent.catalog_source === "MANUAL_AGENT_APP" ? "Agent App" : "Deployment API"}</small>{agent.description && <p>{agent.description}</p>}{agent.identity_conflict && <p className={styles.identityWarning}>Identity conflict: similar Agent App{agent.identity_conflict_app_ids?.length === 1 ? "" : "s"} share this telephony configuration. Disable the incorrect App ID before selection.</p>}</div>
               <div className={styles.telephony}><span><PhoneCall size={14} />{agent.channel_direction}</span><small>{agent.outbound_phone_number || "No outbound number"}</small><small>{agent.connection_id || "No connection id"}</small></div>
               <label className={styles.category}><span>Audience category</span><select value={agent.usage_category || ""} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { usageCategory: event.target.value as Category | "" }); }}><option value="">Select category</option>{categories.map(function (category) { return <option key={category.value} value={category.value}>{category.label}</option>; })}</select></label>
               <label className={styles.toggle}><input type="checkbox" checked={agent.is_enabled} disabled={savingId === agent.id} onChange={function (event) { updateAgent(agent, { isEnabled: event.target.checked }); }} /><span>Enabled</span></label>
-              <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Current · ready" : "Not selectable"}</em>
+              <em className={agent.is_selectable ? styles.ready : styles.attention}>{agent.is_selectable ? "Current · ready" : agent.identity_conflict ? "Identity conflict" : "Not selectable"}</em>
               {agent.catalog_source === "MANUAL_AGENT_APP" && <button type="button" className={styles.editButton} onClick={function () { startEditing(agent); }}><Pencil size={15} />Edit current</button>}
             </div>
             {group.history.length > 0 && <details className={styles.versionHistory}>

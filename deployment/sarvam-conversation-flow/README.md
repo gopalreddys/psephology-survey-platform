@@ -9,6 +9,16 @@ answer, the agent acknowledges in two to five words and immediately advances.
 It must not repeat, paraphrase, summarize, interpret, praise or debate the
 answer. One short probe is allowed only when an answer cannot be coded.
 
+Before any provider submission, the V3 guard also requires all ten registered
+runtime variables to contain real values, validates UUID identifiers and checks
+that the five context variables are valid JSON. Placeholder Sarvam test values
+such as `Language needs to speak`, `Probe` and `Agent Style` are rejected. The
+conversation remains in `preferred_language` unless the respondent explicitly
+asks to switch. Candidate-family statements are treated as respondent
+perceptions unless `knowledge_context` verifies them, and student-wing, union
+or association mentions cannot by themselves produce a parent-party lean.
+Ambiguous structured outputs must be `unclear` or `not_captured`.
+
 The policy is appended to the existing `agent_style_context` and
 `probe_context`; it does not replace the Iteration questionnaire, consent,
 language, candidate knowledge or voice-agent snapshot. The committed Sarvam

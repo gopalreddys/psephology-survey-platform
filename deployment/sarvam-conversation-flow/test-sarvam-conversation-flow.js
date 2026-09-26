@@ -26,6 +26,11 @@ assert.match(first.source, /Never repeat, paraphrase, summarize/);
 assert.match(first.source, /opening is permanently complete/);
 assert.match(first.source, /never restart the opening sequence/);
 assert.match(first.source, /Do not probe a complete answer/);
+assert.match(first.source, /requiredRuntimeVariables/);
+assert.match(first.source, /Sarvam runtime context is incomplete/);
+assert.match(first.source, /Mentioning a student wing/);
+assert.match(first.source, /Continue in preferred_language/);
+assert.match(first.source, /knowledge_context for factual clarification/);
 assert.match(first.source, /questionnaire_context/);
 assert.match(first.source, /agentVariables: prepared\.inputVariables/);
 
@@ -34,7 +39,7 @@ assert.equal(second.changed, false);
 assert.equal(second.source, first.source);
 
 const legacy = first.source
-  .replaceAll("SARVAM_CONVERSATION_STATE_V2", "SARVAM_CONCISE_ACKNOWLEDGEMENT_V1");
+  .replaceAll("SARVAM_CONVERSATION_STATE_V3", "SARVAM_CONVERSATION_STATE_V2");
 const upgraded = patchConversationFlow(legacy);
 assert.equal(upgraded.changed, true);
 assert.equal(hasConciseAcknowledgementPolicy(upgraded.source), true);

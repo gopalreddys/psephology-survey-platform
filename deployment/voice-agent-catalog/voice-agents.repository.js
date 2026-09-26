@@ -4,6 +4,68 @@ import { fetchSarvamDeployments } from "../services/sarvam-voice-agents.service.
 
 const CATEGORIES = new Set(["URBAN_MALE", "URBAN_FEMALE", "RURAL_MALE", "RURAL_FEMALE"]);
 
+function normalizedProviderName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function editDistance(left, right) {
+  const a = normalizedProviderName(left);
+  const b = normalizedProviderName(right);
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = [row];
+    for (let column = 1; column <= b.length; column += 1) {
+      current[column] = Math.min(
+        current[column - 1] + 1,
+        previous[column] + 1,
+        previous[column - 1] + (a[row - 1] === b[column - 1] ? 0 : 1)
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[b.length];
+}
+
+export function areConfusableAgentNames(left, right) {
+  const a = normalizedProviderName(left);
+  const b = normalizedProviderName(right);
+  if (a.length < 8 || b.length < 8) return false;
+  const distance = editDistance(a, b);
+  return distance <= 2 || distance / Math.max(a.length, b.length) <= 0.12;
+}
+
+function sameTelephonyIdentity(left, right) {
+  return Boolean(
+    left.connection_id && right.connection_id &&
+    left.outbound_phone_number && right.outbound_phone_number &&
+    left.connection_id === right.connection_id &&
+    left.outbound_phone_number === right.outbound_phone_number &&
+    String(left.usage_category || "") === String(right.usage_category || "")
+  );
+}
+
+export function decorateIdentityConflicts(rows) {
+  const current = rows.filter((agent) => agent.is_enabled && agent.is_current !== false);
+  return rows.map(function (agent) {
+    const peerAppIds = current
+      .filter((peer) => peer.app_id !== agent.app_id)
+      .filter((peer) => sameTelephonyIdentity(agent, peer))
+      .filter((peer) => areConfusableAgentNames(agent.provider_name, peer.provider_name))
+      .map((peer) => peer.app_id);
+    const uniquePeers = Array.from(new Set(peerAppIds));
+    return {
+      ...agent,
+      identity_conflict: uniquePeers.length > 0,
+      identity_conflict_app_ids: uniquePeers,
+      is_selectable: Boolean(agent.is_selectable) && uniquePeers.length === 0
+    };
+  });
+}
+
 function errorWithStatus(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -77,7 +139,33 @@ export async function listVoiceAgents({ selectableOnly = false } = {}) {
     ${selectableOnly ? `WHERE ${selectableSql("agent")}` : ""}
     ORDER BY agent.usage_category NULLS LAST, agent.provider_name, agent.app_id
   `);
-  return result.rows;
+  return decorateIdentityConflicts(result.rows);
+}
+
+async function assertNoConfusableAgentIdentity(client, candidate, excludeId = null) {
+  const peers = await client.query(`
+    SELECT agent.id, agent.app_id, agent.provider_name, agent.connection_id,
+      agent.outbound_phone_number, agent.usage_category, agent.is_enabled,
+      (${currentVersionSql("agent")}) AS is_current
+    FROM sarvam_voice_agents agent
+    WHERE agent.is_enabled = TRUE
+      AND agent.app_id <> $1
+      AND agent.connection_id = $2
+      AND agent.outbound_phone_number = $3
+      AND COALESCE(agent.usage_category, '') = COALESCE($4, '')
+      AND ($5::uuid IS NULL OR agent.id <> $5::uuid)
+  `, [candidate.app_id, candidate.connection_id, candidate.outbound_phone_number,
+    candidate.usage_category || null, excludeId]);
+  const conflict = peers.rows.find((peer) =>
+    peer.is_current !== false &&
+    areConfusableAgentNames(candidate.provider_name, peer.provider_name)
+  );
+  if (conflict) {
+    throw errorWithStatus(
+      `A similarly named Agent App (${conflict.provider_name}: ${conflict.app_id}) already uses this outbound connection. Disable the incorrect App ID before registering or enabling this one`,
+      409
+    );
+  }
 }
 
 export async function synchronizeVoiceAgents(actor) {
@@ -160,6 +248,13 @@ export async function registerVoiceAgent(input, actor) {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    await assertNoConfusableAgentIdentity(client, {
+      app_id: appId,
+      provider_name: providerName,
+      connection_id: connectionId,
+      outbound_phone_number: phoneNumber,
+      usage_category: category
+    });
     const result = await client.query(`
       INSERT INTO sarvam_voice_agents (
         provider_deployment_id, app_id, app_version, provider_name, description,
@@ -231,9 +326,42 @@ export async function editManualVoiceAgent(id, input, actor) {
       throw errorWithStatus("App ID cannot be changed. Register a separate Agent App instead", 400);
     }
 
-    const configChanged = appVersion !== Number(source.app_version)
-      || connectionId !== source.connection_id
-      || phoneNumber !== source.outbound_phone_number;
+    if (connectionId !== source.connection_id || phoneNumber !== source.outbound_phone_number) {
+      throw errorWithStatus(
+        "Connection ID and outbound phone number are immutable across versions. Register a separate Agent App if the Sarvam telephony identity changed",
+        409
+      );
+    }
+
+    if (category !== source.usage_category && appVersion !== Number(source.app_version)) {
+      throw errorWithStatus(
+        "Change the audience category separately before creating a new Agent App version",
+        409
+      );
+    }
+
+    const latestResult = await client.query(`
+      SELECT MAX(app_version)::int AS latest_version
+      FROM sarvam_voice_agents
+      WHERE app_id = $1
+    `, [appId]);
+    const latestVersion = Number(latestResult.rows[0]?.latest_version || source.app_version);
+    if (appVersion < latestVersion) {
+      throw errorWithStatus(`Committed version cannot move backward from v${latestVersion}`, 409);
+    }
+    if (appVersion === latestVersion && Number(source.app_version) !== latestVersion) {
+      throw errorWithStatus(`Version ${latestVersion} is already current. Edit that catalog entry instead`, 409);
+    }
+
+    await assertNoConfusableAgentIdentity(client, {
+      app_id: appId,
+      provider_name: providerName,
+      connection_id: connectionId,
+      outbound_phone_number: phoneNumber,
+      usage_category: category
+    }, source.id);
+
+    const configChanged = appVersion !== Number(source.app_version);
     let result;
     if (!configChanged) {
       result = await client.query(`
@@ -292,10 +420,11 @@ export async function classifyVoiceAgent(id, input, actor) {
   try {
     await client.query("BEGIN");
     const target = await client.query(
-      "SELECT id, app_id FROM sarvam_voice_agents WHERE id = $1 FOR UPDATE", [id]
+      "SELECT * FROM sarvam_voice_agents WHERE id = $1 FOR UPDATE", [id]
     );
     if (!target.rowCount) throw errorWithStatus("Voice agent not found", 404);
     if (input.isEnabled === true) {
+      await assertNoConfusableAgentIdentity(client, target.rows[0], id);
       await client.query(`
         UPDATE sarvam_voice_agents
         SET is_enabled = FALSE, updated_at = NOW()
@@ -331,6 +460,7 @@ export async function getVoiceAgentForSelection(client, id) {
   if (!result.rowCount) {
     throw errorWithStatus("Select a registered, categorized, active outbound Sarvam voice agent", 400);
   }
+  await assertNoConfusableAgentIdentity(client, result.rows[0], result.rows[0].id);
   return result.rows[0];
 }
 

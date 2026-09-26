@@ -23,6 +23,7 @@ const sourceAgent = {
   app_version: 1,
   connection_id: input.connectionId,
   outbound_phone_number: input.outboundPhoneNumber,
+  usage_category: input.usageCategory,
   is_enabled: true
 };
 
@@ -32,6 +33,10 @@ function harness(agent, inserted = true) {
     async query(sql, params = []) {
       statements.push({ sql, params });
       if (sql.includes("SELECT * FROM sarvam_voice_agents")) return { rowCount: 1, rows: [agent] };
+      if (sql.includes("SELECT MAX(app_version)")) return {
+        rowCount: 1, rows: [{ latest_version: agent.app_version }]
+      };
+      if (sql.includes("SELECT agent.id, agent.app_id")) return { rowCount: 0, rows: [] };
       if (sql.includes("INSERT INTO sarvam_voice_agents")) return {
         rowCount: Number(inserted), rows: inserted ? [{ ...agent, id: "new-id", app_version: params[2] }] : []
       };
@@ -83,6 +88,22 @@ const actor = { id: "admin-id", role_code: "ADMIN" };
 {
   const { edit, statements } = harness(sourceAgent);
   await assert.rejects(edit(sourceAgent.id, { ...input, appId: "Different-App" }, actor), { statusCode: 400 });
+  assert.equal(statements.some((item) => item.sql === "ROLLBACK"), true);
+}
+
+{
+  const { edit, statements } = harness(sourceAgent);
+  await assert.rejects(edit(sourceAgent.id, {
+    ...input,
+    connectionId: "different-connection"
+  }, actor), /immutable across versions/);
+  assert.equal(statements.some((item) => item.sql === "ROLLBACK"), true);
+}
+
+{
+  const current = { ...sourceAgent, app_version: 5 };
+  const { edit, statements } = harness(current);
+  await assert.rejects(edit(current.id, { ...input, appVersion: 4 }, actor), /move backward/);
   assert.equal(statements.some((item) => item.sql === "ROLLBACK"), true);
 }
 

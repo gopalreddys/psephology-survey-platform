@@ -47,6 +47,8 @@
 .identity > span { color: #34445a; font-weight: 800; }
 .identity strong, .identity small { overflow: hidden; color: #7f8d9c; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .identity p { margin: 3px 0 0; color: #8b747b; font-size: 12px; }
+.identity .identityWarning { color: #a16b14; font-weight: 750; line-height: 1.35; }
+.field select:disabled { background: #f4f6f6; color: #607187; opacity: 1; }
 .telephony { display: grid; gap: 4px; min-width: 0; }
 .telephony span { display: flex; align-items: center; gap: 5px; color: #52677b; font-size: 12px; font-weight: 750; text-transform: capitalize; }
 .telephony small { overflow: hidden; color: #8996a4; text-overflow: ellipsis; white-space: nowrap; }

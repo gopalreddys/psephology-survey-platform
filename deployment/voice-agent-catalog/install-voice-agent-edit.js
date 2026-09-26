@@ -9,12 +9,17 @@ const files = [
   {
     name: "voice-agents.repository.js",
     subdirectory: "src/repositories",
-    previousHash: "ee120497faeb81bf4fbcd904eea8c1799231e23bb47507807e1a1acb9a63de1e"
+    previousHashes: [
+      "ee120497faeb81bf4fbcd904eea8c1799231e23bb47507807e1a1acb9a63de1e",
+      "1ee8ac7ad890ae3c41d651de54349eaa048eab1504517dea427d876fb0b5f82d"
+    ]
   },
   {
     name: "voice-agents.routes.js",
     subdirectory: "src/routes",
-    previousHash: "5abbd697d4faa854bd0b3b6a0c0fbeae88fc27b04cd6562d4126b4a2ad9bc3ad"
+    previousHashes: [
+      "5abbd697d4faa854bd0b3b6a0c0fbeae88fc27b04cd6562d4126b4a2ad9bc3ad"
+    ]
   }
 ];
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -24,7 +29,7 @@ const checks = await Promise.all(files.map(async (file) => {
   const [incoming, existing] = await Promise.all([readFile(source), readFile(target)]);
   const currentHash = hash(existing);
   const incomingHash = hash(incoming);
-  if (currentHash !== file.previousHash && currentHash !== incomingHash) {
+  if (!file.previousHashes.includes(currentHash) && currentHash !== incomingHash) {
     throw new Error(`${target} differs from the known platform version. Review its changes before installing; nothing was overwritten.`);
   }
   return { target, source, unchanged: currentHash === incomingHash };
