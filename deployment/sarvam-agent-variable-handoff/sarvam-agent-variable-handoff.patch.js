@@ -1,7 +1,8 @@
-const MARKER = "SARVAM_AGENT_VARIABLE_HANDOFF_V3";
+const MARKER = "SARVAM_AGENT_VARIABLE_HANDOFF_V4";
 const LEGACY_MARKERS = [
   "SARVAM_AGENT_VARIABLE_HANDOFF_V1",
-  "SARVAM_AGENT_VARIABLE_HANDOFF_V2"
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V2",
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V3"
 ];
 
 const REGISTERED_INPUT_VARIABLES = [
@@ -20,8 +21,8 @@ const REGISTERED_INPUT_VARIABLES = [
 const BODY_PATTERN = /const body\s*=\s*\{[\s\S]*?app_id\s*:\s*appId[\s\S]*?user_phone_number\s*:\s*\n?\s*userPhoneNumber[\s\S]*?\n\s*\};/m;
 
 const LEGACY_NORMALIZATION_PATTERN = new RegExp(
-  `\\s*/\\* SARVAM_AGENT_VARIABLE_HANDOFF_V(?:1|2):[^*]*\\*/` +
-  `\\s*const normalizedAgentVariables\\s*=\\s*Object\\.fromEntries\\(` +
+  `\\s*/\\* SARVAM_AGENT_VARIABLE_HANDOFF_V(?:1|2|3):[^*]*\\*/` +
+  `[\\s\\S]*?const normalizedAgentVariables\\s*=\\s*Object\\.fromEntries\\(` +
   `[\\s\\S]*?\\n\\s*\\);\\s*(?=const body\\s*=)`,
   "m"
 );
@@ -33,8 +34,21 @@ const CORRECT_BODY = `/* ${MARKER}: submit only variables registered on the comm
     4
   )});
 
+  /* Keep the provider handoff equivalent to the committed-agent phone test.
+     The full frozen questionnaire remains in call_executions.request_payload. */
+  const compactRuntimeDefaults = {
+    research_context: "",
+    questionnaire_context: "",
+    knowledge_context: "",
+    probe_context: "Probe",
+    agent_style_context: "Agent style"
+  };
+
   const normalizedAgentVariables = Object.fromEntries(
-    Object.entries(agentVariables || {})
+    Object.entries({
+      ...(agentVariables || {}),
+      ...compactRuntimeDefaults
+    })
       .filter(([key, value]) =>
         registeredInputVariables.has(key) &&
         value !== null &&
@@ -109,6 +123,11 @@ export function hasCorrectAgentVariableHandoff(source) {
   return appConfigContainsVariables(source) &&
     !userConfigContainsVariables(source) &&
     source.includes("registeredInputVariables.has(key)") &&
+    source.includes("const compactRuntimeDefaults =") &&
+    source.includes('questionnaire_context: ""') &&
+    source.includes('probe_context: "Probe"') &&
+    source.includes('agent_style_context: "Agent style"') &&
+    source.includes("...compactRuntimeDefaults") &&
     REGISTERED_INPUT_VARIABLES.every((name) => source.includes(`\"${name}\"`)) &&
     /value !== null\s*&&\s*value !== undefined/.test(source) &&
     source.includes("const providerDetail =") &&

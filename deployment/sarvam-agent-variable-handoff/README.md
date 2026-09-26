@@ -6,7 +6,7 @@ they were nested under `user_config`, causing the `load_runtime_context`
 on-start hook to receive an empty `run_contact_id` and preventing the correct
 voter name from being loaded.
 
-The V3 patch also removes `null` and `undefined` values and restricts the
+The V4 patch also removes `null` and `undefined` values and restricts the
 outbound payload to the ten input variables registered on
 `Political_Agent_Base`: `agent_style_context`, `knowledge_context`,
 `preferred_language`, `probe_context`, `questionnaire_context`,
@@ -15,6 +15,16 @@ Sarvam rejects the entire request when `agent_variables` contains unregistered
 platform-internal fields, even if the registered values are correct. Provider
 validation errors retain only safe field locations and messages, making a
 future 422 diagnosable without persisting phone numbers or request values.
+
+V4 additionally keeps the live LLM handoff equivalent to the successful
+committed-agent phone test. The five large dynamic context variables are sent
+with the agent's compact defaults (`Agent style`, `Probe`, or an empty value),
+both in the instant-outbound request and in the on-start runtime hook. The full
+compiled questionnaire, research context, knowledge and execution correlation
+remain frozen in `call_executions.request_payload` and the Iteration snapshot;
+they are not deleted or weakened for audit and analytics. This avoids injecting
+roughly 11 KB of duplicate runtime instructions before the first generated
+agent response.
 
 The change does not place a call. It preserves a timestamped copy of the
 previous client and is safe to run repeatedly.
@@ -38,6 +48,7 @@ Then verify and restart the API:
 
 ```bash
 node --check /opt/sarvam-voice-analytics/src/clients/sarvam.js
+node --check /opt/sarvam-voice-analytics/src/routes/sarvam-runtime.routes.js
 sudo systemctl restart psephology-api.service
 curl --retry 10 --retry-connrefused --retry-delay 1 -i \
   http://127.0.0.1:3000/ready

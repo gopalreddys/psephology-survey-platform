@@ -4,6 +4,10 @@ import {
   hasCorrectAgentVariableHandoff,
   patchAgentVariableHandoff
 } from "./sarvam-agent-variable-handoff.patch.js";
+import {
+  hasCompactRuntimeContext,
+  patchRuntimeContext
+} from "./sarvam-runtime-context.patch.js";
 
 const legacyClient = `
 export async function createInstantOutboundCall({
@@ -53,6 +57,10 @@ assert.equal(first.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(first.source), true);
 assert.match(first.source, /agent_variables:\s*normalizedAgentVariables/);
 assert.match(first.source, /registeredInputVariables\.has\(key\)/);
+assert.match(first.source, /const compactRuntimeDefaults =/);
+assert.match(first.source, /questionnaire_context: ""/);
+assert.match(first.source, /probe_context: "Probe"/);
+assert.match(first.source, /agent_style_context: "Agent style"/);
 assert.match(first.source, /value !== null\s*&&\s*value !== undefined/);
 assert.match(first.source, /const providerDetail =/);
 assert.doesNotMatch(
@@ -74,7 +82,7 @@ assert.throws(
 );
 
 const upgradedV1Client = first.source
-  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V3", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V4", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
   .replace(
     /const normalizedAgentVariables =[\s\S]*?\n\s*const body =/m,
     "const body ="
@@ -89,7 +97,7 @@ assert.equal(upgraded.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(upgraded.source), true);
 
 const upgradedV2Client = first.source
-  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V3", "SARVAM_AGENT_VARIABLE_HANDOFF_V2")
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V4", "SARVAM_AGENT_VARIABLE_HANDOFF_V2")
   .replace(
     /\s*const registeredInputVariables = new Set\([\s\S]*?\);\n\n/m,
     "\n"
@@ -103,6 +111,18 @@ assert.equal(upgradedFromV2.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(upgradedFromV2.source), true);
 assert.equal(
   upgradedFromV2.source.match(/const normalizedAgentVariables/g)?.length,
+  1
+);
+
+const upgradedV3Client = first.source.replaceAll(
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V4",
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V3"
+);
+const upgradedFromV3 = patchAgentVariableHandoff(upgradedV3Client);
+assert.equal(upgradedFromV3.changed, true);
+assert.equal(hasCorrectAgentVariableHandoff(upgradedFromV3.source), true);
+assert.equal(
+  upgradedFromV3.source.match(/const normalizedAgentVariables/g)?.length,
   1
 );
 
@@ -128,7 +148,14 @@ const registeredInputVariables = new Set([
 ]);
 assert.equal(registeredInputVariables.size, 10);
 const normalizedPreparedVariables = Object.fromEntries(
-  Object.entries(preparedVariables)
+  Object.entries({
+    ...preparedVariables,
+    research_context: "",
+    questionnaire_context: "",
+    knowledge_context: "",
+    probe_context: "Probe",
+    agent_style_context: "Agent style"
+  })
     .filter(([key, value]) =>
       registeredInputVariables.has(key) &&
       value !== null &&
@@ -164,7 +191,37 @@ assert.equal("agent_code" in requestBody.app_config.agent_variables, false);
 assert.equal("iteration_id" in requestBody.app_config.agent_variables, false);
 assert.equal(
   requestBody.app_config.agent_variables.questionnaire_context,
-  "Ask the configured neutral research questions."
+  ""
 );
+assert.equal(requestBody.app_config.agent_variables.probe_context, "Probe");
+assert.equal(
+  requestBody.app_config.agent_variables.agent_style_context,
+  "Agent style"
+);
+
+const runtimeRoute = `
+router.post("/runtime-context", async function (req, res) {
+  const compiled = await compileCallContext({ runContactId: req.body.run_contact_id });
+  return res.json({
+    user_name: compiled.user_name,
+    preferred_language: compiled.preferred_language,
+    research_context: compiled.research_context,
+    questionnaire_context: compiled.questionnaire_context,
+    knowledge_context: compiled.knowledge_context,
+    probe_context: compiled.probe_context,
+    agent_style_context: compiled.agent_style_context
+  });
+});
+`;
+const compactRuntime = patchRuntimeContext(runtimeRoute);
+assert.equal(compactRuntime.changed, true);
+assert.equal(hasCompactRuntimeContext(compactRuntime.source), true);
+assert.match(compactRuntime.source, /questionnaire_context: ""/);
+assert.match(compactRuntime.source, /probe_context: "Probe"/);
+assert.doesNotMatch(
+  compactRuntime.source,
+  /questionnaire_context: compiled\.questionnaire_context/
+);
+assert.equal(patchRuntimeContext(compactRuntime.source).changed, false);
 
 console.log("Sarvam agent-variable handoff tests passed.");
