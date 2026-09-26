@@ -4599,6 +4599,34 @@ textarea.iteration-input {
   padding: 12px 14px;
 }
 
+.run-launch-selection-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 0;
+  color: #557875;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.run-launch-selection-tools > div {
+  display: flex;
+  gap: 6px;
+}
+
+.run-launch-selection-tools button {
+  border: 0;
+  color: #147f73;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.run-launch-selection-tools button:hover {
+  text-decoration: underline;
+}
+
 .run-launch-contact {
   display: flex;
   min-width: 0;
@@ -4609,6 +4637,25 @@ textarea.iteration-input {
   border: 1px solid rgba(20, 145, 130, .10);
   border-radius: 9px;
   background: rgba(255, 255, 255, .78);
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+.run-launch-contact:hover {
+  border-color: rgba(20, 145, 130, .28);
+}
+
+.run-launch-contact.is-selected {
+  border-color: rgba(20, 145, 130, .42);
+  background: rgba(230, 249, 246, .92);
+  box-shadow: 0 0 0 2px rgba(20, 145, 130, .06);
+}
+
+.run-launch-contact input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: #148f82;
 }
 
 .run-launch-contact strong,

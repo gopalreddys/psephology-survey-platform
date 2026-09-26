@@ -198,6 +198,13 @@ export default function IterationPage() {
 
 
   const [
+    selectedLaunchContactIds,
+    setSelectedLaunchContactIds
+  ] =
+    useState<string[]>([]);
+
+
+  const [
     message,
     setMessage
   ] =
@@ -601,6 +608,7 @@ export default function IterationPage() {
           "No eligible pending demo voter is available for this Run."
         );
         setLaunchPreview(null);
+        setSelectedLaunchContactIds([]);
         return;
       }
 
@@ -610,6 +618,7 @@ export default function IterationPage() {
         total: Number(result?.total || items.length),
         cycle: result?.cycle || null
       });
+      setSelectedLaunchContactIds([]);
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -624,18 +633,27 @@ export default function IterationPage() {
   }
 
 
-  async function launchPendingCalls(requestedCount?: number) {
+  async function launchPendingCalls() {
     if (!launchPreview || launchPreview.items.length === 0) {
       return;
     }
 
     const run = launchPreview.run;
-    const launchCount = Math.min(
-      Math.max(Number(requestedCount) || launchPreview.items.length, 1),
-      launchPreview.items.length
+    const selectedContacts = launchPreview.items.filter(
+      (contact) => selectedLaunchContactIds.includes(contact.runContactId)
     );
+    const launchCount = selectedContacts.length;
+
+    if (launchCount === 0) {
+      setMessage("Select at least one voter before launching calls.");
+      return;
+    }
+
+    const selectionDescription = launchCount === 1
+      ? `${selectedContacts[0].fullName} (•••• ${selectedContacts[0].phoneEnding})`
+      : `${launchCount} selected voters`;
     const confirmed = window.confirm(
-      `Submit ${launchCount} approved demo calls from "${run.run_name || `Run ${run.run_number}`}"? Only the voters shown in the preview will be eligible.`
+      `Submit approved demo ${launchCount === 1 ? "call" : "calls"} for ${selectionDescription} from "${run.run_name || `Run ${run.run_number}`}"?`
     );
 
     if (!confirmed) {
@@ -651,7 +669,10 @@ export default function IterationPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            limit: launchCount
+            limit: launchCount,
+            runContactIds: selectedContacts.map(
+              (contact) => contact.runContactId
+            )
           })
         }
       );
@@ -674,6 +695,7 @@ export default function IterationPage() {
       }
 
       setLaunchPreview(null);
+      setSelectedLaunchContactIds([]);
       await loadRuns();
     } catch (error) {
       setMessage(
@@ -1609,6 +1631,7 @@ export default function IterationPage() {
                                     className="run-launch-preview-close"
                                     onClick={function () {
                                       setLaunchPreview(null);
+                                      setSelectedLaunchContactIds([]);
                                     }}
                                     aria-label="Close voter preview"
                                   >
@@ -1616,13 +1639,71 @@ export default function IterationPage() {
                                   </button>
                                 </div>
 
+                                <div className="run-launch-selection-tools">
+                                  <span>
+                                    {selectedLaunchContactIds.length} of {launchPreview.items.length} selected
+                                  </span>
+
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={function () {
+                                        setSelectedLaunchContactIds(
+                                          launchPreview.items.map(
+                                            (contact) => contact.runContactId
+                                          )
+                                        );
+                                      }}
+                                    >
+                                      Select all
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={function () {
+                                        setSelectedLaunchContactIds([]);
+                                      }}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                </div>
+
                                 <div className="run-launch-contact-list">
                                   {launchPreview.items.map(function (contact) {
+                                    const selected = selectedLaunchContactIds.includes(
+                                      contact.runContactId
+                                    );
+
                                     return (
-                                      <div
+                                      <label
                                         key={contact.runContactId}
-                                        className="run-launch-contact"
+                                        className={`run-launch-contact${selected ? " is-selected" : ""}`}
                                       >
+                                        <input
+                                          type="checkbox"
+                                          checked={selected}
+                                          onChange={function (event) {
+                                            setSelectedLaunchContactIds(
+                                              function (current) {
+                                                if (event.target.checked) {
+                                                  return Array.from(
+                                                    new Set([
+                                                      ...current,
+                                                      contact.runContactId
+                                                    ])
+                                                  );
+                                                }
+
+                                                return current.filter(
+                                                  (id) => id !== contact.runContactId
+                                                );
+                                              }
+                                            );
+                                          }}
+                                          aria-label={`Select ${contact.fullName}, phone ending ${contact.phoneEnding}`}
+                                        />
+
                                         <div>
                                           <strong>{contact.fullName}</strong>
                                           <span>
@@ -1636,7 +1717,7 @@ export default function IterationPage() {
                                         <span className="run-launch-phone">
                                           •••• {contact.phoneEnding}
                                         </span>
-                                      </div>
+                                      </label>
                                     );
                                   })}
                                 </div>
@@ -1646,25 +1727,13 @@ export default function IterationPage() {
                                     Only approved demo contacts can pass the server-side launch check.
                                   </span>
 
-                                  {launchPreview.items.length > 1 && (
-                                    <button
-                                      type="button"
-                                      className="iteration-analysis-button"
-                                      disabled={launchingRunId === run.id}
-                                      onClick={function () {
-                                        void launchPendingCalls(1);
-                                      }}
-                                      title="Submit only the first voter shown so the call configuration can be validated before the remaining batch."
-                                    >
-                                      <PhoneCall size={15} />
-                                      Launch 1 Test Call
-                                    </button>
-                                  )}
-
                                   <button
                                     type="button"
                                     className="run-submit-button"
-                                    disabled={launchingRunId === run.id}
+                                    disabled={
+                                      launchingRunId === run.id ||
+                                      selectedLaunchContactIds.length === 0
+                                    }
                                     onClick={function () {
                                       void launchPendingCalls();
                                     }}
@@ -1672,7 +1741,9 @@ export default function IterationPage() {
                                     <PhoneCall size={15} />
                                     {launchingRunId === run.id
                                       ? "Submitting calls..."
-                                      : `Launch ${launchPreview.items.length === launchPreview.total ? "All " : "Next "}${launchPreview.items.length} Calls`}
+                                      : selectedLaunchContactIds.length === 0
+                                        ? "Select Voters to Launch"
+                                        : `Launch ${selectedLaunchContactIds.length} Selected ${selectedLaunchContactIds.length === 1 ? "Call" : "Calls"}`}
                                   </button>
                                 </div>
 
