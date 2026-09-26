@@ -188,7 +188,8 @@ export function patchRunLaunchService(source) {
   updated = replaceExactly(
     updated,
     /(\s+const contacts\s*=\s*contactsResult\.rows\s*;)/,
-    `
+    function (_match, contactsAssignment) {
+      return `
   if (
     selectedContactIds.length > 0 &&
     contactsResult.rows.length !== selectedContactIds.length
@@ -199,7 +200,8 @@ export function patchRunLaunchService(source) {
     error.statusCode = 409;
     throw error;
   }
-$1`,
+${contactsAssignment}`;
+    },
     1,
     "selected contact validation"
   );

@@ -87,6 +87,8 @@ assert.equal(
   1
 );
 assert.match(service, /statusCode = 409/);
+assert.match(service, /const contacts = contactsResult\.rows/);
+assert.doesNotMatch(service, /^\s*\$1;?\s*$/m);
 assert.doesNotThrow(
   () => new Function(service.replace("export async function", "async function"))
 );
