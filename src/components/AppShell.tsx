@@ -20,7 +20,6 @@ import {
   Map,
   Megaphone,
   Phone,
-  Settings,
   Users,
   ClipboardList,
   ShieldCheck,
@@ -165,8 +164,8 @@ const menuItems: MenuItem[] = [
   },
 
   {
-    label: "Pipeline",
-    icon: Settings,
+    label: "Platform Health",
+    icon: ShieldCheck,
     href: "/pipeline",
     roles: [
       "SUPER_ADMIN"

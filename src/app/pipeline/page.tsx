@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Clock3, Database, RefreshCw, Webhook } from "lucide-react";
+import {
+  Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Database,
+  ListChecks, Radio, RefreshCw, ShieldCheck, Webhook
+} from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -13,6 +16,9 @@ type Summary = {
   awaiting_callbacks: number;
   delayed_callbacks: number;
   failed_attempts_24h: number;
+  attempts_24h: number;
+  provider_accepted_24h: number;
+  last_submission_at: string | null;
   last_callback_at: string | null;
   received_24h: number;
   processed_24h: number;
@@ -46,6 +52,43 @@ type Pipeline = {
   database: { status: string };
   timer: Timer;
   summary: Summary;
+  integration: {
+    enabled_agents: number;
+    invalid_enabled_agents: number;
+    open_iterations: number;
+    iteration_configuration_gaps: number;
+  };
+  latestConversation: {
+    execution_id: string;
+    callback_received_at: string | null;
+    created_at: string;
+    connectivity_status: string;
+    duration_seconds: number | null;
+    normalized_status: string | null;
+    transcript_turns: number;
+    response_variables: number;
+    app_id: string | null;
+    app_version: number | null;
+    connection_id: string | null;
+    campaign_name: string | null;
+    iteration_number: number;
+    run_number: number;
+  } | null;
+  health: {
+    status: "READY" | "READY_WITH_WARNINGS" | "ATTENTION_REQUIRED";
+    pass: number;
+    warn: number;
+    fail: number;
+    blocking: number;
+    checks: Array<{
+      id: string;
+      area: string;
+      label: string;
+      status: "PASS" | "WARN" | "FAIL";
+      message: string;
+      blocking: boolean;
+    }>;
+  };
   delayedCalls: DelayedCall[];
   unresolvedWebhooks: WebhookEvent[];
   generatedAt: string;
@@ -72,7 +115,7 @@ export default function PipelinePage() {
     try { setData(await apiFetch("/api/pipeline") as Pipeline); }
     catch (error) {
       setData(null);
-      setMessage(error instanceof Error ? error.message : "Unable to load Pipeline diagnostics");
+      setMessage(error instanceof Error ? error.message : "Unable to load Platform Health");
     } finally { setLoading(false); }
   }, []);
 
@@ -84,29 +127,88 @@ export default function PipelinePage() {
 
   return <AppShell><main className={styles.page}>
     <section className={styles.hero}>
-      <div><span>SYSTEM OPERATIONS</span><h1>Pipeline</h1>
-        <p>Read-only diagnostics for provider callbacks, evidence capture and lifecycle recovery.</p></div>
+      <div><span>SUPER ADMIN CONTROL PLANE</span><h1>Platform Health</h1>
+        <p>Readiness, integrations, evidence integrity and the governed launch checklist in one place.</p></div>
       {user?.role.code === "SUPER_ADMIN" && <button type="button" onClick={() => void load()} disabled={loading}>
         <RefreshCw size={17} className={loading ? styles.spin : ""} /> Refresh
       </button>}
     </section>
 
     {user && user.role.code !== "SUPER_ADMIN" ?
-      <section className={styles.notice}>Pipeline diagnostics are available to Super Admin only.</section> : <>
+      <section className={styles.notice}>Platform Health is available to Super Admin only.</section> : <>
         {message && <FeedbackMessage message={message} className={styles.message} />}
-        {loading && !data ? <section className={styles.notice}>Loading Pipeline diagnostics…</section> : null}
+        {loading && !data ? <section className={styles.notice}>Loading Platform Health…</section> : null}
         {data && <>
+          <section className={styles.readiness} data-status={data.health.status}>
+            <div className={styles.readinessIcon}>
+              {data.health.status === "READY" ? <ShieldCheck size={28} /> : <AlertTriangle size={28} />}
+            </div>
+            <div className={styles.readinessCopy}>
+              <span>LAUNCH READINESS</span>
+              <h2>{data.health.status === "READY" ? "All critical checks passed"
+                : data.health.status === "READY_WITH_WARNINGS" ? "Ready with warnings"
+                  : "Attention required before bulk launch"}</h2>
+              <p>{data.health.blocking
+                ? `${data.health.blocking} blocking check(s) require Super Admin review.`
+                : "Core services, Sarvam handoff and the end-to-end conversation proof are ready."}</p>
+            </div>
+            <div className={styles.readinessTotals}>
+              <div><strong>{data.health.pass}</strong><span>Passed</span></div>
+              <div><strong>{data.health.warn}</strong><span>Warnings</span></div>
+              <div><strong>{data.health.fail}</strong><span>Failed</span></div>
+            </div>
+          </section>
+
           <section className={styles.health}>
-            <Health label="API" status={data.api.status} detail="Authenticated Pipeline endpoint" />
+            <Health label="API" status={data.api.status} detail="Authenticated Platform Health endpoint" />
             <Health label="Database" status={data.database.status} detail="Operational queries completed" />
             <Health label="Recovery timer" status={data.timer.status} detail={data.timer.status === "waiting" ? "Scheduled on this API host" : "Check the host timer"} />
             <Health label="Last recovery service" status={data.timer.lastResult || "unknown"} detail={data.timer.lastExitStatus === null ? "No exit status observed" : `Exit status ${data.timer.lastExitStatus}`} />
           </section>
 
+          <section className={styles.checklistPanel}>
+            <div className={styles.panelHead}>
+              <div><span>GOVERNED CHECKLIST</span><h2>Pre-launch checks</h2><p>Blocking checks must pass before a bulk Run is launched.</p></div>
+              <ListChecks size={25} />
+            </div>
+            <div className={styles.checklist}>
+              {data.health.checks.map((item) => <article key={item.id} className={styles.checkItem} data-status={item.status}>
+                <div className={styles.checkIcon}>{item.status === "PASS" ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}</div>
+                <div><span>{item.area}</span><strong>{item.label}</strong><p>{item.message}</p></div>
+                <div className={styles.checkState}><b>{item.status}</b>{item.blocking && item.status !== "PASS" ? <small>BLOCKING</small> : null}</div>
+              </article>)}
+            </div>
+          </section>
+
+          <section className={styles.integrationGrid}>
+            <div className={styles.integrationCard}>
+              <Bot size={22} /><span>Enabled Sarvam agents</span>
+              <strong>{count(data.integration.enabled_agents)}</strong>
+              <small>{count(data.integration.invalid_enabled_agents)} incomplete provider records</small>
+            </div>
+            <div className={styles.integrationCard}>
+              <ListChecks size={22} /><span>Open Iterations</span>
+              <strong>{count(data.integration.open_iterations)}</strong>
+              <small>{count(data.integration.iteration_configuration_gaps)} launch configuration gaps</small>
+            </div>
+            <div className={styles.integrationCard}>
+              <Radio size={22} /><span>Latest conversation proof</span>
+              <strong>{data.latestConversation ? `${count(data.latestConversation.transcript_turns)} turns` : "Not observed"}</strong>
+              <small>{data.latestConversation
+                ? `${data.latestConversation.campaign_name || "Campaign"} · Iteration ${data.latestConversation.iteration_number} · Run ${data.latestConversation.run_number}`
+                : "Run one controlled canary call"}</small>
+            </div>
+            <div className={styles.integrationCard}>
+              <ShieldCheck size={22} /><span>Observed deployment</span>
+              <strong>{data.latestConversation?.app_version ? `Version ${data.latestConversation.app_version}` : "Unknown"}</strong>
+              <small>{data.latestConversation?.app_id || "No provider app identity observed"}</small>
+            </div>
+          </section>
+
           <section className={styles.metrics}>
             <Metric icon={Clock3} label="Awaiting callbacks" value={count(data.summary.awaiting_callbacks)} detail={`${count(data.summary.delayed_callbacks)} past 30 minutes`} warn={data.summary.delayed_callbacks > 0} />
             <Metric icon={Webhook} label="Webhooks, 24 hours" value={`${count(data.summary.processed_24h)}/${count(data.summary.received_24h)}`} detail={`${count(data.summary.unresolved_total)} unresolved overall`} warn={data.summary.unresolved_total > 0} />
-            <Metric icon={AlertTriangle} label="Failed attempts, 24 hours" value={count(data.summary.failed_attempts_24h)} detail="Provider or recovery outcomes" warn={data.summary.failed_attempts_24h > 0} />
+            <Metric icon={AlertTriangle} label="Failed attempts, 24 hours" value={count(data.summary.failed_attempts_24h)} detail={`${count(data.summary.provider_accepted_24h)}/${count(data.summary.attempts_24h)} submissions accepted by provider`} warn={data.summary.failed_attempts_24h > 0} />
             <Metric icon={Database} label="Evidence gaps" value={count(data.summary.missing_transcripts + data.summary.missing_responses)} detail={`${count(data.summary.missing_transcripts)} transcripts · ${count(data.summary.missing_responses)} response sets`} warn={data.summary.missing_transcripts + data.summary.missing_responses > 0} />
           </section>
 
@@ -129,7 +231,7 @@ export default function PipelinePage() {
 
           <section className={styles.footer}>
             <div><strong>Recovery</strong><span>{count(data.summary.recovered_24h)} stale executions recovered in 24 hours · last recovery event {dateTime(data.summary.last_recovery_at)}</span></div>
-            <div><strong>Provider activity</strong><span>Last webhook {dateTime(data.summary.last_received_at)} · last callback {dateTime(data.summary.last_callback_at)}</span></div>
+            <div><strong>Provider activity</strong><span>Last submission {dateTime(data.summary.last_submission_at)} · webhook {dateTime(data.summary.last_received_at)} · callback {dateTime(data.summary.last_callback_at)}</span></div>
             <div><strong>Timer</strong><span>Last trigger {dateTime(data.timer.lastTrigger)} · next trigger {dateTime(data.timer.nextTrigger)}</span></div>
             <small>Snapshot {dateTime(data.generatedAt)}. An idle provider feed is not proof of delivery health; use a consented test call to verify end-to-end behavior.</small>
           </section>
