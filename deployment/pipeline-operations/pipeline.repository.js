@@ -313,10 +313,23 @@ function isOpenExecutionWorkflow(row) {
   return runOpen && iterationOpen && contactUnresolved && latest;
 }
 
+function isActiveExecution(row) {
+  return !row.callback_received_at && ["PENDING", "SUBMITTED", "RUNNING"].includes(
+    String(row.execution_status || "").toUpperCase()
+  );
+}
+
 function isRuntimeIssue(code, row) {
   if (["CALLBACK_DELAYED", "UNMATCHED_WEBHOOK", "WEBHOOK_PROCESSING_FAILURE",
     "RUN_LIFECYCLE_DRIFT"].includes(code)) return true;
   if (code === "PROVIDER_DELIVERY_FAILURE") return false;
+  // A completed call keeps the provider deployment that was actually used.
+  // The Iteration may legitimately move to a newer snapshot before a retry, so
+  // comparing an old completed execution with today's snapshot is historical
+  // evidence, not a current launch blocker.
+  if (code === "AGENT_DEPLOYMENT_DRIFT") {
+    return isActiveExecution(row) && isOpenExecutionWorkflow(row);
+  }
   return isOpenExecutionWorkflow(row);
 }
 
@@ -406,11 +419,32 @@ export function buildCallIssueTrace({ executions = [], webhooks = [], lifecycleD
   }
 
   for (const starts of byContact.values()) {
-    const uniqueAttempts = new Set(starts.map((row) => row.provider_attempt_id));
+    const ordered = [...starts].sort((left, right) =>
+      new Date(left.submitted_at || left.created_at).getTime() -
+      new Date(right.submitted_at || right.created_at).getTime()
+    );
+    const overlapping = new Set();
+    for (let index = 1; index < ordered.length; index += 1) {
+      const current = ordered[index];
+      const currentStartedAt = new Date(current.submitted_at || current.created_at).getTime();
+      for (let previousIndex = 0; previousIndex < index; previousIndex += 1) {
+        const previous = ordered[previousIndex];
+        const previousFinishedAt = previous.callback_received_at
+          ? new Date(previous.callback_received_at).getTime() : Number.POSITIVE_INFINITY;
+        if (Number.isFinite(currentStartedAt) && currentStartedAt < previousFinishedAt) {
+          overlapping.add(previous);
+          overlapping.add(current);
+        }
+      }
+    }
+    const uniqueAttempts = new Set([...overlapping].map((row) => row.provider_attempt_id));
     if (uniqueAttempts.size > 1) {
-      const row = starts[0];
+      const row = [...overlapping].sort((left, right) =>
+        new Date(right.submitted_at || right.created_at).getTime() -
+        new Date(left.submitted_at || left.created_at).getTime()
+      )[0];
       incidents.push(traceIncident("DUPLICATE_PROVIDER_START", row,
-        `${uniqueAttempts.size} provider attempt IDs are recorded for one Run contact.`, ":duplicate"));
+        `${uniqueAttempts.size} overlapping provider attempt IDs are recorded for one Run contact.`, ":duplicate"));
     }
   }
 

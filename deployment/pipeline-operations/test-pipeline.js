@@ -133,6 +133,64 @@ assert.equal(trace.runtime.incidents[0].preliminaryFixes.length, 3);
 assert.equal(trace.runtime.incidents[0].matchedHistoricalControl.controlPrograms.length > 0, true);
 assert.equal(trace.runtime.incidents.some((item) => item.evidence.includes("9999999999")), false);
 
+const completedDrift = buildCallIssueTrace({
+  executions: [{
+    execution_id: "completed-drift", run_contact_id: "drift-contact",
+    execution_status: "COMPLETED", provider_attempt_id: "old-version-attempt",
+    submitted_at: "2026-09-25T09:00:00.000Z",
+    callback_received_at: "2026-09-25T09:05:00.000Z",
+    submitted_app_id: "Agent", submitted_app_version: "4",
+    submitted_connection_id: "connection", snapshot_app_id: "Agent",
+    snapshot_app_version: "5", snapshot_connection_id: "connection",
+    run_status: "RUNNING", iteration_status: "DRAFT",
+    iteration_link_status: "PLANNED", contact_final_status: "PENDING",
+    contact_retry_exhausted: false, is_latest_for_contact: true
+  }],
+  webhooks: [], lifecycleDrifts: []
+});
+assert.equal(completedDrift.runtime.incidents.some((item) =>
+  item.code === "AGENT_DEPLOYMENT_DRIFT"), false);
+assert.equal(completedDrift.history.buckets.some((item) =>
+  item.code === "AGENT_DEPLOYMENT_DRIFT"), true);
+
+const retryBase = {
+  run_contact_id: "retry-contact", execution_status: "FAILED",
+  run_status: "RUNNING", iteration_status: "DRAFT",
+  iteration_link_status: "PLANNED", contact_final_status: "PENDING",
+  contact_retry_exhausted: false
+};
+const sequentialRetries = buildCallIssueTrace({
+  executions: [{
+    ...retryBase, execution_id: "retry-one", provider_attempt_id: "attempt-one",
+    submitted_at: "2026-09-25T09:00:00.000Z",
+    callback_received_at: "2026-09-25T09:05:00.000Z", is_latest_for_contact: false
+  }, {
+    ...retryBase, execution_id: "retry-two", provider_attempt_id: "attempt-two",
+    submitted_at: "2026-09-26T09:00:00.000Z",
+    callback_received_at: "2026-09-26T09:05:00.000Z", is_latest_for_contact: true
+  }],
+  webhooks: [], lifecycleDrifts: []
+});
+assert.equal(sequentialRetries.runtime.incidents.some((item) =>
+  item.code === "DUPLICATE_PROVIDER_START"), false);
+assert.equal(sequentialRetries.history.buckets.some((item) =>
+  item.code === "DUPLICATE_PROVIDER_START"), false);
+
+const overlappingStarts = buildCallIssueTrace({
+  executions: [{
+    ...retryBase, execution_id: "overlap-one", provider_attempt_id: "overlap-attempt-one",
+    submitted_at: "2026-09-28T09:00:00.000Z",
+    callback_received_at: "2026-09-28T09:05:00.000Z", is_latest_for_contact: false
+  }, {
+    ...retryBase, execution_id: "overlap-two", provider_attempt_id: "overlap-attempt-two",
+    submitted_at: "2026-09-28T09:00:05.000Z",
+    callback_received_at: "2026-09-28T09:06:00.000Z", is_latest_for_contact: true
+  }],
+  webhooks: [], lifecycleDrifts: []
+});
+assert.equal(overlappingStarts.runtime.incidents.some((item) =>
+  item.code === "DUPLICATE_PROVIDER_START"), true);
+
 const readyOverview = {
   ...result,
   summary: {

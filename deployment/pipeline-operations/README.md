@@ -26,11 +26,13 @@ point. Its deterministic classifications include:
 - provider rejection before an attempt ID is issued;
 - accepted attempts with callbacks delayed beyond 30 minutes;
 - unmatched or unsuccessfully processed webhook events;
-- submitted agent identity that differs from the frozen Iteration snapshot;
+- an active latest attempt whose submitted agent identity differs from the
+  frozen Iteration snapshot;
 - repeated opening-like agent turns inside one provider interaction;
 - connected calls missing transcript or structured-response evidence;
 - connected conversations that do not meet completion policy;
-- multiple provider starts for one Run contact; and
+- overlapping provider starts for one Run contact (sequential governed retries
+  are retained as history, not reported as duplicate launches); and
 - resolved contacts left inside an open Run.
 
 The separate **Historical issues and implemented controls** view covers the
