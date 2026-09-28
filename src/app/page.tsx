@@ -47,20 +47,31 @@ type Segment = {
   sentiment: Distribution[]; positivePct: number | null;
 };
 type DashboardIntelligence = {
-  campaign: { id: string; name: string; code: string };
-  filters: { mandals: string[]; selectedMandal: string };
+  programs: Array<{ id: string; name: string; code: string }>;
+  program: { id: string; name: string; code: string };
+  campaign: { id: string; name: string; code: string } | null;
+  iteration: { id: string; number: number; name: string } | null;
+  filters: {
+    campaigns: Array<{ id: string; name: string; code: string }>;
+    iterations: Array<{ id: string; number: number; name: string; campaignName: string }>;
+    mandals: string[]; genders: string[]; ageBands: string[];
+    selectedProgramId: string; selectedCampaignId: string; selectedIterationId: string;
+    selectedMandal: string; selectedGender: string; selectedAgeBand: string;
+  };
   minimumBase: number; respondentBase: number | null; suppressed: boolean;
   rating: { value: number | null; scale: number; confidence: string; basis: string };
   sentiment: Distribution[];
   issues: Distribution[];
+  landscape: { party: Distribution[]; candidate: Distribution[]; leadership: Distribution[] };
   age: Segment[];
   gender: Segment[];
   mandalHeatmap: Segment[];
   predictive: {
     status: string; direction: string; confidence: string; statement: string;
     projectedNextRating: number | null;
-    points: Array<{ iterationId: string; iterationNumber: number; iterationName: string; base: number; value: number }>;
+    points: Array<{ iterationId: string; iterationNumber: number; iterationName: string; campaignName: string; base: number; value: number }>;
   };
+  methodology: { sampleType: string; weighted: boolean; analysisUnit: string; disclosure: string };
 };
 type Dashboard = {
   role: PlatformRole; roleBrief?: RoleBrief; summary: Summary; actions: Action[];
@@ -152,16 +163,20 @@ const CHART_COLORS = ["#168b7d", "#d75b72", "#e0a34b", "#6b79b9", "#9b7ab8"];
 
 function DashboardDonut({ items }: { items: Distribution[] }) {
   if (!items.length) return <div className={styles.chartEmpty}>No classified sentiment is available.</div>;
-  let cursor = 0;
   const stops = items.map(function (item, index) {
-    const start = cursor;
-    cursor += item.percentage;
-    return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${cursor}%`;
+    const start = items.slice(0, index).reduce((total, candidate) => total + candidate.percentage, 0);
+    const end = start + item.percentage;
+    return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${end}%`;
   });
   return <div className={styles.donutWrap}>
     <div className={styles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}><div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div></div>
     <div className={styles.legend}>{items.map(function (item, index) { return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{item.percentage.toFixed(1)}%</strong></div>; })}</div>
   </div>;
+}
+
+function LandscapeBars({ items, empty }: { items: Distribution[]; empty: string }) {
+  if (!items.length) return <div className={styles.chartEmpty}>{empty}</div>;
+  return <div className={styles.issueBars}>{items.slice(0, 6).map((item) => <div key={item.value}><div><span>{item.value}</span><strong>{item.percentage.toFixed(1)}%</strong></div><div><i style={{ width: `${item.percentage}%` }} /></div></div>)}</div>;
 }
 
 function SegmentBars({ items }: { items: Segment[] }) {
@@ -181,7 +196,7 @@ function MandalHeatmap({ items }: { items: Segment[] }) {
 function TrendChart({ intelligence }: { intelligence: DashboardIntelligence }) {
   const points = intelligence.predictive.points;
   if (!points.length) return <div className={styles.chartEmpty}>Complete an Iteration with classified outputs to establish a trend.</div>;
-  return <div className={styles.trendChart}>{points.map((point) => <div key={point.iterationId}><div><i style={{ height: `${Math.max((point.value / 5) * 100, 4)}%` }} /><strong>{point.value.toFixed(1)}</strong></div><span>Iteration {point.iterationNumber}</span><small>n={point.base}</small></div>)}</div>;
+  return <div className={styles.trendChart}>{points.map((point) => <div key={point.iterationId}><div><i style={{ height: `${Math.max((point.value / 5) * 100, 4)}%` }} /><strong>{point.value.toFixed(1)}</strong></div><span>Iteration {point.iterationNumber}</span><small>{point.campaignName} · n={point.base}</small></div>)}</div>;
 }
 
 export default function Home() {
@@ -190,8 +205,12 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [programId, setProgramId] = useState("");
   const [campaignId, setCampaignId] = useState("");
+  const [iterationId, setIterationId] = useState("");
   const [mandal, setMandal] = useState("");
+  const [ageBand, setAgeBand] = useState("");
+  const [gender, setGender] = useState("");
 
   const loadDashboard = useCallback(async function (refresh = false) {
     if (refresh) setRefreshing(true);
@@ -199,13 +218,17 @@ export default function Home() {
     setError(null);
     try {
       const query = new URLSearchParams();
+      if (programId) query.set("programId", programId);
       if (campaignId) query.set("campaignId", campaignId);
+      if (iterationId) query.set("iterationId", iterationId);
       if (mandal) query.set("mandal", mandal);
+      if (ageBand) query.set("ageBand", ageBand);
+      if (gender) query.set("gender", gender);
       setData(await apiFetch(`/api/dashboard${query.size ? `?${query.toString()}` : ""}`) as Dashboard);
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load Dashboard"); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [campaignId, mandal]);
+  }, [ageBand, campaignId, gender, iterationId, mandal, programId]);
 
   useEffect(function () {
     if (!user) return;
@@ -241,15 +264,24 @@ export default function Home() {
         {metrics.map(function (metric) { const Icon = metric.icon; return <article key={metric.label} className={styles.metric}><div className={styles.metricIcon}><Icon size={18} /></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></article>; })}
       </section>
       {role !== "CAMPAIGNER" && data.intelligence && <section className={styles.intelligencePanel}>
-        <div className={styles.intelligenceHead}><div><span>EXECUTIVE CAMPAIGN DASHBOARD</span><h2>Sentiment, demographics and geography</h2><p>Dashboard monitors concise aggregate signals. Analysis explains the underlying questions, Runs, evidence gaps and interpretation.</p></div><div className={styles.intelligenceFilters}>
-          <label><span>Campaign</span><select value={campaignId || data.intelligence.campaign.id} onChange={function (event) { setCampaignId(event.target.value); setMandal(""); }}>{data.campaigns.map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select></label>
+        <div className={styles.intelligenceHead}><div><span>PROGRAM RESEARCH DASHBOARD</span><h2>{data.intelligence.program.name}</h2><p>Program-level pulse with optional Campaign, Iteration, Mandal, age and gender drill-downs. Use Analysis for question, Run and evidence diagnosis.</p></div><div className={styles.intelligenceFilters}>
+          <label><span>Program</span><select value={programId || data.intelligence.filters.selectedProgramId} onChange={function (event) { setProgramId(event.target.value); setCampaignId(""); setIterationId(""); setMandal(""); setAgeBand(""); setGender(""); }}>{data.intelligence.programs.map((program) => <option value={program.id} key={program.id}>{program.name} · {program.code}</option>)}</select></label>
+          <label><span>Campaign</span><select value={campaignId} onChange={function (event) { setCampaignId(event.target.value); setIterationId(""); setMandal(""); setAgeBand(""); setGender(""); }}><option value="">All Campaigns</option>{data.intelligence.filters.campaigns.map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select></label>
+          <label><span>Iteration</span><select value={iterationId} onChange={function (event) { setIterationId(event.target.value); setMandal(""); setAgeBand(""); setGender(""); }}><option value="">All Iterations</option>{data.intelligence.filters.iterations.map((iteration) => <option value={iteration.id} key={iteration.id}>{iteration.campaignName} · Iteration {iteration.number}</option>)}</select></label>
           <label><span>Mandal</span><select value={mandal} onChange={(event) => setMandal(event.target.value)}><option value="">All Mandals</option>{data.intelligence.filters.mandals.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label><span>Age</span><select value={ageBand} onChange={(event) => setAgeBand(event.target.value)}><option value="">All age bands</option>{data.intelligence.filters.ageBands.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label><span>Gender</span><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">All genders</option>{data.intelligence.filters.genders.map((value) => <option key={value}>{value}</option>)}</select></label>
         </div></div>
-        {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Filtered result withheld</strong><p>This Mandal has fewer than {data.intelligence.minimumBase} respondents. Choose All Mandals or a larger segment.</p></div></div> : <>
+        {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Filtered result withheld</strong><p>This selected cohort has fewer than {data.intelligence.minimumBase} respondent observations. Broaden the Mandal, age or gender scope.</p></div></div> : <>
           <div className={styles.intelligenceSummary}>
-            <article className={styles.ratingSummary}><span>AGGREGATE CAMPAIGN RATING</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} confidence · {data.intelligence.respondentBase || 0} respondent observations</small></article>
+            <article className={styles.ratingSummary}><span>AGGREGATE PROGRAM PULSE</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} confidence · {data.intelligence.respondentBase || 0} respondent observations</small></article>
             <article className={styles.chartCard}><div className={styles.chartHead}><span>SENTIMENT</span><h3>Recorded sentiment mix</h3></div><DashboardDonut items={data.intelligence.sentiment} /></article>
             <article className={styles.chartCard}><div className={styles.chartHead}><span>AGGREGATE PREDICTIVE OUTLOOK</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? "More iteration history required" : `Next-Iteration projection ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence} confidence</small></div><TrendChart intelligence={data.intelligence} /><p>{data.intelligence.predictive.statement}</p></article>
+          </div>
+          <div className={styles.landscapeGrid}>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>PARTY LANDSCAPE</span><h3>Unaided party salience</h3><small>Shown only from recorded party variables</small></div><LandscapeBars items={data.intelligence.landscape.party} empty="No party-salience output is recorded for this scope." /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>CANDIDATE LANDSCAPE</span><h3>Candidate perception</h3><small>Positive, neutral, negative and uncertain</small></div><DashboardDonut items={data.intelligence.landscape.candidate} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>LEADERSHIP LANDSCAPE</span><h3>Perceived issue leadership</h3><small>Recorded leaders or assessment responses</small></div><LandscapeBars items={data.intelligence.landscape.leadership} empty="No leadership output is recorded for this scope." /></article>
           </div>
           <div className={styles.reportGrid}>
             <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>Sentiment by age group</h3><small>Non-overlapping bands</small></div><SegmentBars items={data.intelligence.age} /></article>
@@ -257,6 +289,7 @@ export default function Home() {
             <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><div className={styles.issueBars}>{data.intelligence.issues.length ? data.intelligence.issues.map((issue) => <div key={issue.value}><div><span>{issue.value}</span><strong>{issue.percentage.toFixed(1)}%</strong></div><div><i style={{ width: `${issue.percentage}%` }} /></div></div>) : <div className={styles.chartEmpty}>No issue priority is available.</div>}</div></article>
           </div>
           <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>Aggregate sentiment intensity by Mandal</h3><small>Cells are withheld below n={data.intelligence.minimumBase}</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /></article>
+          <div className={styles.methodologyNote}><ShieldCheck size={16} /><span>{data.intelligence.methodology.disclosure} Analysis unit: {data.intelligence.methodology.analysisUnit}.</span></div>
         </>}
       </section>}
       <div className={styles.contentGrid}>

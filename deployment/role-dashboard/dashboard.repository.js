@@ -102,6 +102,46 @@ function classifyIssue(value) {
   return "Other recorded priorities";
 }
 
+function firstVariable(record, keys) {
+  const variables = record.response_variables || {};
+  for (const key of keys) {
+    const value = scalarText(variables[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function classifyParty(value) {
+  const text = scalarText(value).toLowerCase();
+  if (!text) return null;
+  if (/don.?t know|do not know|can.?t say|cannot say|none|no party|not sure/.test(text)) return "Uncertain / none";
+  if (/\bbrs\b|bharat rashtra|telangana rashtra/.test(text)) return "BRS";
+  if (/\bbjp\b|bharatiya janata/.test(text)) return "BJP";
+  if (/congress|\binc\b/.test(text)) return "Congress";
+  if (/communist|\bcpi\b|\bcpm\b|left/.test(text)) return "Communist / Left";
+  return scalarText(value);
+}
+
+function leadershipSignal(record) {
+  const leader = firstVariable(record, [
+    "perceived_issue_leader_aided", "perceived_issue_leader", "leadership_preference"
+  ]);
+  if (leader) return classifyParty(leader);
+  const assessment = classifySentiment((record.response_variables || {}).incumbent_assessment);
+  return assessment ? `${assessment} incumbent assessment` : null;
+}
+
+function candidateSentiment(record) {
+  for (const key of [
+    "veeresh_impression", "veeresh_criterion_fit", "candidate_sentiment",
+    "candidate_criterion_fit", "candidate_impression"
+  ]) {
+    const sentiment = classifySentiment((record.response_variables || {})[key]);
+    if (sentiment) return sentiment;
+  }
+  return null;
+}
+
 function distribution(records, derive) {
   const values = new Map();
   for (const record of records) {
@@ -185,19 +225,59 @@ function nextIterationProjection(points) {
 
 function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRows, selection) {
   if (actor.role_code === "CAMPAIGNER") return null;
-  const selectedCampaign = campaigns.find((campaign) => campaign.id === selection.campaignId)
-    || campaigns.find((campaign) => evidenceRows.some((record) => record.campaign_id === campaign.id))
-    || campaigns[0]
+  const programs = Array.from(new Map(campaigns.map((campaign) => [
+    campaign.programId || "unlinked",
+    {
+      id: campaign.programId || "unlinked",
+      name: campaign.programName || "Unlinked research",
+      code: campaign.programCode || "UNLINKED"
+    }
+  ])).values()).sort((left, right) => left.name.localeCompare(right.name));
+  const selectedProgram = programs.find((program) => program.id === selection.programId)
+    || programs.find((program) => campaigns.some((campaign) =>
+      (campaign.programId || "unlinked") === program.id &&
+      evidenceRows.some((record) => record.campaign_id === campaign.id)
+    ))
+    || programs[0]
     || null;
-  if (!selectedCampaign) return null;
+  if (!selectedProgram) return null;
 
-  const campaignRecords = evidenceRows.filter((record) => record.campaign_id === selectedCampaign.id);
-  const mandals = Array.from(new Set(campaignRecords.map((record) => normalizeMandal(record.mandal_name)))).sort();
+  const programCampaigns = campaigns.filter((campaign) =>
+    (campaign.programId || "unlinked") === selectedProgram.id
+  );
+  const selectedCampaign = programCampaigns.find((campaign) =>
+    campaign.id === selection.campaignId
+  ) || null;
+  const campaignScopeIds = new Set(
+    (selectedCampaign ? [selectedCampaign] : programCampaigns).map((campaign) => campaign.id)
+  );
+  const availableIterations = iterationRows
+    .filter((iteration) => campaignScopeIds.has(iteration.campaign_id))
+    .sort((left, right) => {
+      const campaignCompare = String(left.campaign_name || "").localeCompare(String(right.campaign_name || ""));
+      return campaignCompare || count(left.iteration_number) - count(right.iteration_number);
+    });
+  const selectedIteration = availableIterations.find((iteration) =>
+    iteration.id === selection.iterationId
+  ) || null;
+  const scopeRecords = evidenceRows.filter((record) =>
+    campaignScopeIds.has(record.campaign_id) &&
+    (!selectedIteration || record.iteration_id === selectedIteration.id)
+  );
+  const mandals = Array.from(new Set(scopeRecords.map((record) => normalizeMandal(record.mandal_name)))).sort();
+  const genders = Array.from(new Set(scopeRecords.map((record) => normalizeGender(record.gender)))).sort();
+  const ageBands = ["18–29", "30–39", "40–49", "50+"];
   const selectedMandal = mandals.includes(selection.mandal) ? selection.mandal : "";
-  const records = selectedMandal
-    ? campaignRecords.filter((record) => normalizeMandal(record.mandal_name) === selectedMandal)
-    : campaignRecords;
-  const suppressed = Boolean(selectedMandal) && records.length < MINIMUM_REPORTING_BASE;
+  const selectedGender = genders.includes(selection.gender) ? selection.gender : "";
+  const selectedAgeBand = ageBands.includes(selection.ageBand) ? selection.ageBand : "";
+  const records = scopeRecords.filter((record) => {
+    if (selectedMandal && normalizeMandal(record.mandal_name) !== selectedMandal) return false;
+    if (selectedGender && normalizeGender(record.gender) !== selectedGender) return false;
+    if (selectedAgeBand && ageBand(record.age) !== selectedAgeBand) return false;
+    return true;
+  });
+  const hasSegmentFilter = Boolean(selectedMandal || selectedGender || selectedAgeBand);
+  const suppressed = hasSegmentFilter && records.length < MINIMUM_REPORTING_BASE;
   const reportable = suppressed ? [] : records;
   const sentiment = distribution(reportable, respondentSentiment);
   const issues = distribution(reportable, (record) => {
@@ -207,15 +287,15 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       variables.priority_development || variables.desired_change || variables.expected_change
     );
   }).slice(0, 6);
-  const campaignIterations = iterationRows
-    .filter((iteration) => iteration.campaign_id === selectedCampaign.id)
-    .sort((left, right) => count(left.iteration_number) - count(right.iteration_number));
-  const trend = campaignIterations.map((iteration) => {
-    const iterationRecords = campaignRecords.filter((record) => record.iteration_id === iteration.id);
+  const trend = availableIterations.map((iteration) => {
+    const iterationRecords = evidenceRows.filter((record) =>
+      record.campaign_id === iteration.campaign_id && record.iteration_id === iteration.id
+    );
     return {
       iterationId: iteration.id,
       iterationNumber: count(iteration.iteration_number),
       iterationName: iteration.iteration_name,
+      campaignName: iteration.campaign_name,
       base: iterationRecords.length,
       value: iterationRating(iterationRecords)
     };
@@ -231,8 +311,40 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       : "Directional";
 
   return {
-    campaign: { id: selectedCampaign.id, name: selectedCampaign.name, code: selectedCampaign.code },
-    filters: { mandals, selectedMandal },
+    programs,
+    program: selectedProgram,
+    campaign: selectedCampaign ? {
+      id: selectedCampaign.id,
+      name: selectedCampaign.name,
+      code: selectedCampaign.code
+    } : null,
+    iteration: selectedIteration ? {
+      id: selectedIteration.id,
+      number: count(selectedIteration.iteration_number),
+      name: selectedIteration.iteration_name
+    } : null,
+    filters: {
+      campaigns: programCampaigns.map((campaign) => ({
+        id: campaign.id,
+        name: campaign.name,
+        code: campaign.code
+      })),
+      iterations: availableIterations.map((iteration) => ({
+        id: iteration.id,
+        number: count(iteration.iteration_number),
+        name: iteration.iteration_name,
+        campaignName: iteration.campaign_name
+      })),
+      mandals,
+      genders,
+      ageBands,
+      selectedProgramId: selectedProgram.id,
+      selectedCampaignId: selectedCampaign?.id || "",
+      selectedIterationId: selectedIteration?.id || "",
+      selectedMandal,
+      selectedGender,
+      selectedAgeBand
+    },
     minimumBase: MINIMUM_REPORTING_BASE,
     respondentBase: suppressed ? null : reportable.length,
     suppressed,
@@ -244,16 +356,33 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
     },
     sentiment,
     issues,
+    landscape: {
+      party: distribution(reportable, (record) => classifyParty(firstVariable(record, [
+        "party_salience_unaided", "party_attention", "party_preference"
+      ]))).slice(0, 6),
+      candidate: distribution(reportable, candidateSentiment),
+      leadership: distribution(reportable, leadershipSignal).slice(0, 6)
+    },
     age: segmentedSentiment(reportable, (record) => ageBand(record.age), ["18–29", "30–39", "40–49", "50+", "Unknown"]),
     gender: segmentedSentiment(reportable, (record) => normalizeGender(record.gender), ["Female", "Male", "Other / self-described", "Unknown"]),
-    mandalHeatmap: segmentedSentiment(campaignRecords, (record) => normalizeMandal(record.mandal_name)),
+    mandalHeatmap: segmentedSentiment(scopeRecords.filter((record) => {
+      if (selectedGender && normalizeGender(record.gender) !== selectedGender) return false;
+      if (selectedAgeBand && ageBand(record.age) !== selectedAgeBand) return false;
+      return true;
+    }), (record) => normalizeMandal(record.mandal_name)),
     predictive: {
       status: "DIRECTIONAL",
       direction: trendDirection(trend),
       points: trend,
       projectedNextRating: nextIterationProjection(trend),
       confidence: predictiveConfidence,
-      statement: "Aggregate iteration trend; not an election forecast or participant-level prediction."
+      statement: "Aggregate Iteration trend across the selected Program scope; not an election forecast or participant-level prediction."
+    },
+    methodology: {
+      sampleType: "UNWEIGHTED_DIRECTIONAL",
+      weighted: false,
+      analysisUnit: "Latest connected structured response per respondent in each Iteration",
+      disclosure: "Demo results are unweighted and directional. Segment cells below five respondents are withheld."
     }
   };
 }
@@ -273,6 +402,9 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows, evidenceRow
     id: row.id,
     name: row.campaign_name,
     code: row.campaign_code,
+    programId: row.program_id,
+    programName: row.program_name,
+    programCode: row.program_code,
     status: row.status,
     managerAssigned: Boolean(row.campaign_manager_user_id),
     updatedAt: row.updated_at,
@@ -560,8 +692,11 @@ export async function getRoleDashboard(actor, selection = {}) {
 
   const campaignsPromise = db.query(`
     SELECT campaign.id, campaign.campaign_code, campaign.campaign_name,
-      campaign.status, campaign.campaign_manager_user_id, campaign.updated_at
+      campaign.program_id, program.study_name AS program_name,
+      program.study_code AS program_code, campaign.status,
+      campaign.campaign_manager_user_id, campaign.updated_at
     FROM campaigns campaign
+    LEFT JOIN survey_studies program ON program.id = campaign.program_id
     WHERE campaign.status <> 'ARCHIVED' AND ${scope.sql}
     ORDER BY campaign.updated_at DESC
   `, scope.values);
@@ -569,7 +704,8 @@ export async function getRoleDashboard(actor, selection = {}) {
   const iterationsPromise = db.query(`
     SELECT iteration.id, link.campaign_id, iteration.iteration_number,
       iteration.iteration_name, COALESCE(link.status, iteration.status) AS status,
-      iteration.questionnaire_id, iteration.voice_agent_id
+      iteration.questionnaire_id, iteration.voice_agent_id,
+      campaign.campaign_name, campaign.program_id
     FROM campaign_iteration_links link
     JOIN campaigns campaign ON campaign.id = link.campaign_id
     JOIN program_iterations iteration ON iteration.id = link.iteration_id

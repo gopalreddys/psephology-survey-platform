@@ -11,6 +11,8 @@ const repository = readFileSync(
 const routes = readFileSync(path.join(here, "analytics-workspace.routes.js"), "utf8");
 
 assert.match(repository, /campaignReviewVisibilitySql/);
+assert.match(repository, /campaign\.program_id/);
+assert.match(repository, /programId: campaign\.program_id/);
 assert.match(repository, /CAMPAIGN_MANAGER/);
 assert.match(repository, /callbackCoveragePct/);
 assert.match(repository, /transcriptCoveragePct/);

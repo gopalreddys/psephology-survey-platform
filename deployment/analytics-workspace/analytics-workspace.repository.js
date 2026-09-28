@@ -183,6 +183,7 @@ function campaignSummary(campaign, iterations) {
     targetType: campaign.target_type,
     targetName: campaign.target_name,
     targetCode: campaign.target_code,
+    programId: campaign.program_id,
     programName: campaign.program_name,
     campaignManagerName: campaign.campaign_manager_name,
     iterationCount: iterations.length,
@@ -219,7 +220,7 @@ export async function getAnalyticsWorkspace(actor) {
     SELECT campaign.id, campaign.campaign_code, campaign.campaign_name,
       campaign.status, campaign.survey_stage, campaign.target_type,
       campaign.target_name, campaign.target_code,
-      program.study_name AS program_name,
+      campaign.program_id, program.study_name AS program_name,
       manager.full_name AS campaign_manager_name
     FROM campaigns campaign
     LEFT JOIN survey_studies program ON program.id = campaign.program_id

@@ -12,8 +12,12 @@ router.get(
   async function (req, res) {
     try {
       return res.json(await getRoleDashboard(req.platformUser, {
+        programId: req.query.programId || "",
         campaignId: req.query.campaignId || "",
-        mandal: req.query.mandal || ""
+        iterationId: req.query.iterationId || "",
+        mandal: req.query.mandal || "",
+        ageBand: req.query.ageBand || "",
+        gender: req.query.gender || ""
       }));
     } catch (error) {
       console.error("Unable to load role Dashboard:", error);

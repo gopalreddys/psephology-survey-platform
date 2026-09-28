@@ -26,6 +26,7 @@ import { useCurrentUser, type PlatformRole } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./analytics.module.css";
 import roleStyles from "./role-lens.module.css";
+import filterStyles from "./portfolio-filters.module.css";
 
 type Questionnaire = {
   id: string;
@@ -70,6 +71,7 @@ type CampaignAnalytics = {
   targetType: string;
   targetName: string;
   targetCode: string | null;
+  programId: string | null;
   programName: string | null;
   campaignManagerName: string | null;
   iterationCount: number;
@@ -242,6 +244,7 @@ export default function AnalyticsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [programId, setProgramId] = useState("");
   const [expandedCampaignId, setExpandedCampaignId] = useState("");
 
   const loadAnalytics = useCallback(async function (refresh = false) {
@@ -276,8 +279,9 @@ export default function AnalyticsPage() {
 
   const visibleCampaigns = useMemo(function () {
     const term = search.trim().toLowerCase();
-    if (!term) return data?.campaigns || [];
     return (data?.campaigns || []).filter(function (campaign) {
+      if (programId && (campaign.programId || "unlinked") !== programId) return false;
+      if (!term) return true;
       return [
         campaign.name,
         campaign.code,
@@ -286,7 +290,14 @@ export default function AnalyticsPage() {
         campaign.campaignManagerName
       ].some((value) => String(value || "").toLowerCase().includes(term));
     });
-  }, [data, search]);
+  }, [data, programId, search]);
+
+  const programs = useMemo(function () {
+    return Array.from(new Map((data?.campaigns || []).map((campaign) => [
+      campaign.programId || "unlinked",
+      { id: campaign.programId || "unlinked", name: campaign.programName || "Unlinked research" }
+    ])).values()).sort((left, right) => left.name.localeCompare(right.name));
+  }, [data]);
 
   if (user?.role.code === "CAMPAIGNER") {
     return (
@@ -382,14 +393,17 @@ export default function AnalyticsPage() {
                   <div><span>CAMPAIGN → ITERATION</span><h2>Analysis portfolio</h2></div>
                   <p>Select a Campaign to examine each Iteration before opening its detailed findings.</p>
                 </div>
-                <label className={styles.search}>
-                  <Search size={16} />
-                  <input
-                    value={search}
-                    onChange={function (event) { setSearch(event.target.value); }}
-                    placeholder="Search Campaign, target or manager"
-                  />
-                </label>
+                <div className={filterStyles.portfolioFilters}>
+                  <label className={filterStyles.programFilter}><span>Program</span><select value={programId} onChange={function (event) { setProgramId(event.target.value); setExpandedCampaignId(""); }}><option value="">All Programs</option>{programs.map((program) => <option value={program.id} key={program.id}>{program.name}</option>)}</select></label>
+                  <label className={styles.search}>
+                    <Search size={16} />
+                    <input
+                      value={search}
+                      onChange={function (event) { setSearch(event.target.value); }}
+                      placeholder="Search Campaign, target or manager"
+                    />
+                  </label>
+                </div>
               </div>
 
               {!visibleCampaigns.length ? (

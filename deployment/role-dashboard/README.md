@@ -22,16 +22,22 @@ Each role receives a distinct operating brief and decision boundary:
 - Campaigner sees only their execution queue, pending/retry contacts and callback follow-up.
 
 For Super Admin, Admin and Campaign Manager roles, the Dashboard additionally
-provides an executive campaign-intelligence layer:
+provides an executive program-intelligence layer:
 
-- campaign and Mandal selectors;
-- aggregate five-point campaign sentiment rating;
+- Program, Campaign, Iteration, Mandal, age and gender selectors;
+- aggregate five-point Program pulse;
 - positive, neutral, negative and uncertain sentiment distribution;
+- unaided party-salience, candidate-perception and issue-leadership landscapes;
 - non-overlapping age cohorts: 18–29, 30–39, 40–49 and 50+;
 - gender-level aggregate reporting;
 - Mandal sentiment heatmap with suppression below five respondents;
 - issue-priority chart; and
-- aggregate Iteration trend, next-Iteration projection and confidence label.
+- aggregate cross-Iteration trend, next-Iteration projection and confidence label.
+
+The demo uses unweighted directional evidence. The latest connected structured
+response per respondent is retained within each Iteration, filtered cohorts below
+five observations are withheld, and direct party support must not be inferred when
+the questionnaire records only proxy variables.
 
 Analysis remains the detailed evidence workspace for questionnaire performance,
 Run/Iteration diagnosis and interpretation. Dashboard visualizations are concise

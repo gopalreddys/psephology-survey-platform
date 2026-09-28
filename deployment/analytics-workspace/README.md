@@ -24,6 +24,10 @@ The Analytics landing page applies a role-specific decision lens without changin
 - Campaign Manager receives respondent coverage and analysis-readiness signals for assigned Campaigns.
 - Campaigner remains excluded from portfolio Analytics and uses the execution Dashboard instead.
 
+The landing portfolio can be narrowed by Program before selecting a Campaign.
+The detailed workspace then keeps the diagnostic hierarchy explicit: Campaign →
+Iteration → Run, followed by gender, age-band and Mandal cohort filters.
+
 Phase 1 strategic Campaign analysis adds:
 
 - a directional/demo validity banner;
