@@ -11,7 +11,7 @@ const testableRepository = repository.replace(
   'import { getDb } from "../db/postgres.js";',
   "const getDb = async () => { throw new Error('Unexpected database access'); };"
 );
-const { evaluatePlatformHealth, getPipelineOverview } = await import(
+const { buildCallIssueTrace, evaluatePlatformHealth, getPipelineOverview } = await import(
   `data:text/javascript,${encodeURIComponent(testableRepository)}`
 );
 
@@ -24,6 +24,8 @@ assert.match(repository, /systemctl/);
 assert.match(repository, /STALE_CALLBACK_RECOVERY/);
 assert.match(repository, /End-to-end conversation canary/);
 assert.match(repository, /iteration_configuration_gaps/);
+assert.match(repository, /CONVERSATION_OPENING_LOOP/);
+assert.match(repository, /createInstantOutboundCall/);
 assert.doesNotMatch(repository, /raw_payload|voter\.phone_number|interaction_transcript\s+AS/);
 
 const calls = [];
@@ -51,6 +53,23 @@ const db = { query: async (sql) => {
     enabled_agents: 2, invalid_enabled_agents: 0,
     open_iterations: 1, iteration_configuration_gaps: 0
   }] };
+  if (sql.includes("AS submitted_app_id")) return { rows: [{
+    execution_id: "trace", run_contact_id: "contact",
+    provider_attempt_id: "provider", execution_status: "COMPLETED",
+    submitted_at: "2026-09-27T08:00:00.000Z",
+    callback_received_at: "2026-09-27T08:10:00.000Z",
+    submitted_app_id: "Political-A-test", submitted_app_version: "5",
+    submitted_connection_id: "connection", snapshot_app_id: "Political-A-test",
+    snapshot_app_version: "5", snapshot_connection_id: "connection",
+    connectivity_status: "connected", normalized_status: "SUCCESS_COMPLETE",
+    interaction_transcript: [
+      { role: "agent", text: "Hello, do you have two minutes?" },
+      { role: "user", text: "Yes" },
+      { role: "agent", text: "Hello, do you have two minutes?" }
+    ],
+    transcript_turns: 3, response_variables: 4,
+    campaign_name: "Campaign", iteration_number: 2, run_number: 3
+  }] };
   if (sql.includes("AS transcript_turns")) return { rows: [{
     execution_id: "canary", callback_received_at: "2026-09-27T08:10:00.000Z",
     created_at: "2026-09-27T08:00:00.000Z", connectivity_status: "connected",
@@ -59,6 +78,7 @@ const db = { query: async (sql) => {
     app_version: 5, connection_id: "connection", campaign_name: "Campaign",
     iteration_number: 2, run_number: 3
   }] };
+  if (sql.includes("AS resolved_contacts")) return { rows: [] };
   if (sql.includes("AS execution_id")) return { rows: [{
     execution_id: "execution", campaign_name: "Campaign"
   }] };
@@ -66,13 +86,43 @@ const db = { query: async (sql) => {
 } };
 
 const result = await getPipelineOverview({ db });
-assert.equal(calls.length, 8);
+assert.equal(calls.length, 10);
 assert.equal(result.summary.delayed_callbacks, 1);
 assert.equal(result.summary.unresolved_total, 1);
 assert.equal(result.summary.missing_transcripts, 1);
 assert.equal(result.delayedCalls.length, 1);
 assert.equal(result.unresolvedWebhooks.length, 1);
+assert.equal(result.issueTrace.status, "ATTENTION_REQUIRED");
+assert.equal(result.issueTrace.incidents.some((item) =>
+  item.code === "CONVERSATION_OPENING_LOOP"), true);
 assert.deepEqual(result.database, { status: "reachable" });
+
+const trace = buildCallIssueTrace({
+  now: new Date("2026-09-28T08:00:00.000Z"),
+  executions: [{
+    execution_id: "rejected", execution_status: "FAILED",
+    provider_attempt_id: null,
+    error_message: "Sarvam Instant Outbound returned 422 for +919999999999",
+    created_at: "2026-09-28T07:00:00.000Z", campaign_name: "Campaign",
+    iteration_number: 1, run_number: 1
+  }, {
+    execution_id: "drift", run_contact_id: "contact", execution_status: "SUBMITTED",
+    provider_attempt_id: "attempt", callback_received_at: null,
+    submitted_at: "2026-09-28T06:00:00.000Z",
+    submitted_app_id: "Agent", submitted_app_version: "5",
+    submitted_connection_id: "connection-a", snapshot_app_id: "Agent",
+    snapshot_app_version: "4", snapshot_connection_id: "connection-a"
+  }],
+  webhooks: [], lifecycleDrifts: []
+});
+assert.equal(trace.critical, 3);
+assert.deepEqual(
+  trace.incidents.map((item) => item.code).sort(),
+  ["AGENT_DEPLOYMENT_DRIFT", "CALLBACK_DELAYED", "PROVIDER_REJECTED"].sort()
+);
+assert.equal(trace.incidents[0].involved.length > 0, true);
+assert.equal(trace.incidents[0].preliminaryFixes.length, 3);
+assert.equal(trace.incidents.some((item) => item.evidence.includes("9999999999")), false);
 
 const readyOverview = {
   ...result,

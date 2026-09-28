@@ -7,6 +7,31 @@ conversation proof. The endpoint remains `GET /api/pipeline`, is authenticated
 and restricted to `SUPER_ADMIN`. It does not launch calls, change lifecycle
 state, or return webhook payloads, transcripts or voter phone numbers.
 
+## Call workflow issue tracer
+
+Platform Health also includes a seven-day, read-only issue tracer. It correlates
+the launch audit, frozen voice-agent snapshot, provider acceptance, callback,
+stored conversation evidence and Run lifecycle without sending a provider
+request. Its deterministic classifications include:
+
+- provider rejection before an attempt ID is issued;
+- accepted attempts with callbacks delayed beyond 30 minutes;
+- unmatched or unsuccessfully processed webhook events;
+- submitted agent identity that differs from the frozen Iteration snapshot;
+- repeated opening-like agent turns inside one provider interaction;
+- connected calls missing transcript or structured-response evidence;
+- connected conversations that do not meet completion policy;
+- multiple provider starts for one Run contact; and
+- resolved contacts left inside an open Run.
+
+Each observation shows its workflow stage, sanitized evidence, relevant runtime
+programs and functions, and preliminary corrective actions. It links to the
+existing role-protected call evidence when an execution is available. Normal
+busy/no-answer/failed telephony outcomes are labelled operational rather than
+automatically treated as an application defect. The tracer never returns voter
+identity or transcript text; phone-like sequences in diagnostic messages are
+redacted.
+
 The sidebar and page call this workspace **Platform Health**. Its launch status
 is one of:
 
@@ -39,7 +64,7 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/rea
 
 Build and redeploy the frontend using the existing hosting workflow. Then sign
 in as Super Admin, open **Platform Health**, and verify that the readiness banner,
-eight checklist items and operational diagnostics load. A different role must
+eight checklist items, issue tracer and operational diagnostics load. A different role must
 receive `403` from the API and cannot see the sidebar entry. No database
 migration is required; the endpoint uses the existing voice-agent, Iteration,
 call, webhook and lifecycle tables.

@@ -44,6 +44,339 @@ export async function recoveryTimerStatus() {
   };
 }
 
+function transcriptTurns(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function turnText(turn) {
+  return String(
+    turn?.indic_text || turn?.en_text || turn?.text ||
+    turn?.content || turn?.message || turn?.utterance || ""
+  ).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+function repeatedOpeningTurns(transcript) {
+  const agentTurns = transcriptTurns(transcript)
+    .filter((turn) => String(turn?.role || "").toLowerCase() === "agent")
+    .map(turnText).filter(Boolean);
+  const first = agentTurns[0] || "";
+  if (!first) return 0;
+  const firstTokens = new Set(first.split(" ").filter(Boolean));
+  return agentTurns.filter((text) => {
+    const tokens = new Set(text.split(" ").filter(Boolean));
+    const shared = Array.from(firstTokens).filter((token) => tokens.has(token)).length;
+    return (2 * shared) / (firstTokens.size + tokens.size || 1) >= 0.78;
+  }).length;
+}
+
+const TRACE_DEFINITIONS = {
+  PROVIDER_REJECTED: {
+    severity: "CRITICAL", functionality: "Provider submission",
+    situation: "The platform reserved the attempt, but Sarvam did not accept it.",
+    diagnosis: "The failure occurred before a provider attempt ID was returned.",
+    involved: [
+      ["src/services/run-launch.service.js", "launchRun"],
+      ["src/services/sarvam-execution.service.js", "executeSarvamCall / prepareSarvamExecution"],
+      ["src/repositories/voice-agents.repository.js", "getSarvamVoiceAgentForRunContact"],
+      ["src/clients/sarvam.js", "createInstantOutboundCall"]
+    ],
+    fixes: [
+      "Inspect the safe provider error and reject another bulk launch until it is understood.",
+      "Compare the Iteration snapshot with the committed Sarvam app version, connection and outbound number.",
+      "Validate that only registered runtime variables are sent, then retry one controlled contact."
+    ]
+  },
+  CALLBACK_DELAYED: {
+    severity: "CRITICAL", functionality: "Callback processing",
+    situation: "Sarvam accepted the attempt, but no callback was recorded within 30 minutes.",
+    diagnosis: "The execution is still active without authoritative completion evidence.",
+    involved: [
+      ["src/clients/sarvam.js", "createInstantOutboundCall"],
+      ["src/routes/sarvam-outbound-webhook.routes.js", "POST callback handler"],
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"],
+      ["src/repositories/stale-callback-recovery.repository.js", "recoverStaleCallbacks"]
+    ],
+    fixes: [
+      "Verify the public webhook URL and recent Sarvam delivery history.",
+      "Confirm the lifecycle recovery timer is healthy and run recovery only after the threshold.",
+      "Do not relaunch the same contact while an accepted provider attempt remains unresolved."
+    ]
+  },
+  UNMATCHED_WEBHOOK: {
+    severity: "CRITICAL", functionality: "Webhook correlation",
+    situation: "A Sarvam callback could not be matched to a platform execution.",
+    diagnosis: "Provider attempt ID or execution metadata did not correlate with the launch audit record.",
+    involved: [
+      ["src/routes/sarvam-outbound-webhook.routes.js", "POST callback handler"],
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult / metadataFrom"],
+      ["src/services/sarvam-execution.service.js", "executeSarvamCall"]
+    ],
+    fixes: [
+      "Compare the callback attempt ID with call_executions.provider_attempt_id.",
+      "Verify callback metadata retains call_execution_id and run correlation.",
+      "Reconcile the event only after identifying the single authoritative execution."
+    ]
+  },
+  WEBHOOK_PROCESSING_FAILURE: {
+    severity: "CRITICAL", functionality: "Webhook processing",
+    situation: "A received Sarvam webhook was not processed successfully.",
+    diagnosis: "The callback reached AWS but failed during validation, persistence or lifecycle reconciliation.",
+    involved: [
+      ["src/routes/sarvam-outbound-webhook.routes.js", "POST callback handler"],
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"],
+      ["src/repositories/run-lifecycle.repository.js", "reconcileRunLifecycle"]
+    ],
+    fixes: [
+      "Inspect the stored safe processing error and API journal for the same event time.",
+      "Correct validation or database state before replaying the exact event.",
+      "Use the event hash to prevent a successful callback from being applied twice."
+    ]
+  },
+  CONVERSATION_OPENING_LOOP: {
+    severity: "CRITICAL", functionality: "Conversation runtime",
+    situation: "One provider interaction repeated an opening-like agent turn.",
+    diagnosis: "A single session reached Sarvam, but its conversation state returned to the greeting.",
+    involved: [
+      ["src/services/sarvam-execution.service.js", "executeSarvamCall / runtime context merge"],
+      ["src/routes/sarvam-runtime.routes.js", "load_runtime_context"],
+      ["src/clients/sarvam.js", "createInstantOutboundCall"],
+      ["Sarvam committed Agent App", "Greeting and system instructions"]
+    ],
+    fixes: [
+      "Confirm there is exactly one execution, provider attempt and interaction for the contact.",
+      "Verify the runtime hook received run_contact_id and returned valid conversation-state JSON.",
+      "Keep the Greeting provider-owned and run one canary before resuming the batch."
+    ]
+  },
+  AGENT_DEPLOYMENT_DRIFT: {
+    severity: "CRITICAL", functionality: "Voice-agent selection",
+    situation: "The submitted provider deployment differs from the frozen Iteration snapshot.",
+    diagnosis: "The launch did not preserve the reviewed agent identity end to end.",
+    involved: [
+      ["src/repositories/voice-agents.repository.js", "voiceAgentSnapshot / getSarvamVoiceAgentForRunContact"],
+      ["src/services/sarvam-execution.service.js", "executeSarvamCall"],
+      ["src/clients/sarvam.js", "createInstantOutboundCall"]
+    ],
+    fixes: [
+      "Stop the Run and compare app ID, version and connection ID with the Iteration snapshot.",
+      "Do not edit a frozen Iteration after its first execution.",
+      "Use a fresh Iteration when a different committed deployment is required."
+    ]
+  },
+  CONNECTED_EVIDENCE_GAP: {
+    severity: "WARNING", functionality: "Evidence persistence",
+    situation: "The call connected, but its transcript or structured response evidence is incomplete.",
+    diagnosis: "The provider conversation finished without the evidence required for research closeout.",
+    involved: [
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"],
+      ["deployment/sarvam-outbound-webhook/reconcile-sarvam-outbound-attempt.js", "transcript reconciliation"],
+      ["src/repositories/run-lifecycle.repository.js", "reconcileRunLifecycle"]
+    ],
+    fixes: [
+      "Inspect the provider attempt and retrieve its authoritative transcript before closing the Run.",
+      "Validate final agent variable names against the questionnaire output schema.",
+      "Reconcile stored evidence; never fabricate missing responses."
+    ]
+  },
+  CONNECTED_INCOMPLETE: {
+    severity: "WARNING", functionality: "Completion classification",
+    situation: "The call connected but did not meet the research completion policy.",
+    diagnosis: "Conversation evidence exists, but the normalized outcome is not a successful completion.",
+    involved: [
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"],
+      ["src/repositories/call-completion-policy.js", "classifyCallCompletion"],
+      ["src/repositories/run-lifecycle.repository.js", "reconcileRunLifecycle"]
+    ],
+    fixes: [
+      "Compare transcript progress with the required output variables.",
+      "Check whether the respondent refused, disconnected, or the agent failed to advance.",
+      "Tune the committed agent only after separating conversation failure from delivery failure."
+    ]
+  },
+  DUPLICATE_PROVIDER_START: {
+    severity: "WARNING", functionality: "Launch idempotency",
+    situation: "One Run contact has more than one provider start in the trace window.",
+    diagnosis: "A repeated click, retry race or missing idempotency guard may have submitted duplicate calls.",
+    involved: [
+      ["src/routes/runs.routes.js", "POST /runs/:runId/launch"],
+      ["src/services/run-launch.service.js", "launchRun"],
+      ["src/services/sarvam-execution.service.js", "executeSarvamCall"]
+    ],
+    fixes: [
+      "Compare execution timestamps and attempt-cycle IDs before treating this as a defect.",
+      "Preserve the launch idempotency key and disable repeated submission while a request is active.",
+      "If the starts belong to governed retries, record them as expected rather than merging them."
+    ]
+  },
+  RUN_LIFECYCLE_DRIFT: {
+    severity: "WARNING", functionality: "Run lifecycle",
+    situation: "All selected contacts are resolved and no call is active, but the Run remains open.",
+    diagnosis: "The final callback did not close the Run and its active cycle consistently.",
+    involved: [
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"],
+      ["src/repositories/run-lifecycle.repository.js", "reconcileRunLifecycle"],
+      ["deployment/sarvam-outbound-webhook/finalize-resolved-runs.js", "finalize resolved Runs"]
+    ],
+    fixes: [
+      "Run the lifecycle reconciliation in dry-run mode and inspect the candidate.",
+      "Verify every selected contact has a terminal final status.",
+      "Apply closeout only when there are no active executions."
+    ]
+  },
+  PROVIDER_DELIVERY_FAILURE: {
+    severity: "INFO", functionality: "Telephony delivery",
+    situation: "The provider returned a failed delivery outcome after accepting the attempt.",
+    diagnosis: "This is normally a network, handset or provider outcome rather than a platform defect.",
+    involved: [
+      ["src/clients/sarvam.js", "createInstantOutboundCall"],
+      ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"]
+    ],
+    fixes: [
+      "Review the provider failure reason and retry eligibility.",
+      "Do not change application code for normal busy or no-answer outcomes.",
+      "Escalate only when the same technical reason repeats across multiple contacts."
+    ]
+  }
+};
+
+function safeEvidence(value) {
+  return String(value || "No additional diagnostic detail was recorded.")
+    .replace(/\+?\d[\d\s()-]{7,}\d/g, "[REDACTED]")
+    .slice(0, 600);
+}
+
+function traceIncident(code, row, evidence, suffix = "") {
+  const definition = TRACE_DEFINITIONS[code];
+  return {
+    id: `${code}:${row.execution_id || row.id || row.run_id || "event"}${suffix}`,
+    code,
+    severity: definition.severity,
+    functionality: definition.functionality,
+    situation: definition.situation,
+    diagnosis: definition.diagnosis,
+    evidence: safeEvidence(evidence),
+    executionId: row.execution_id || null,
+    campaignName: row.campaign_name || null,
+    iterationNumber: row.iteration_number === undefined ? null : Number(row.iteration_number),
+    runNumber: row.run_number === undefined ? null : Number(row.run_number),
+    observedAt: row.callback_received_at || row.updated_at || row.received_at ||
+      row.submitted_at || row.created_at || null,
+    involved: definition.involved.map(([program, method]) => ({ program, method })),
+    preliminaryFixes: definition.fixes
+  };
+}
+
+export function buildCallIssueTrace({ executions = [], webhooks = [], lifecycleDrifts = [], now = new Date() }) {
+  const incidents = [];
+  const byContact = new Map();
+
+  for (const row of executions) {
+    const status = String(row.execution_status || "").toUpperCase();
+    const connectivity = String(row.connectivity_status || "").toLowerCase();
+    const normalized = String(row.normalized_status || "").toUpperCase();
+    const transcriptCount = Number(row.transcript_turns || 0);
+    const responseCount = Number(row.response_variables || 0);
+    const submittedAt = new Date(row.submitted_at || row.created_at);
+    const delayed = !row.callback_received_at &&
+      ["PENDING", "SUBMITTED", "RUNNING"].includes(status) &&
+      Number.isFinite(submittedAt.getTime()) &&
+      now.getTime() - submittedAt.getTime() > 30 * 60 * 1000;
+    const deploymentDrift = Boolean(row.submitted_app_id && row.snapshot_app_id) && (
+      row.submitted_app_id !== row.snapshot_app_id ||
+      Number(row.submitted_app_version || 0) !== Number(row.snapshot_app_version || 0) ||
+      row.submitted_connection_id !== row.snapshot_connection_id
+    );
+
+    if (status === "FAILED" && !row.provider_attempt_id) {
+      incidents.push(traceIncident("PROVIDER_REJECTED", row,
+        row.error_message || "Provider attempt ID was not recorded."));
+    }
+    if (delayed) {
+      incidents.push(traceIncident("CALLBACK_DELAYED", row,
+        `Status ${status}; submitted ${row.submitted_at || row.created_at}; callback absent.`));
+    }
+    if (deploymentDrift) {
+      incidents.push(traceIncident("AGENT_DEPLOYMENT_DRIFT", row,
+        `Submitted ${row.submitted_app_id} v${row.submitted_app_version || "?"}; snapshot ${row.snapshot_app_id} v${row.snapshot_app_version || "?"}.`));
+    }
+    if (connectivity === "connected" && repeatedOpeningTurns(row.interaction_transcript) > 1) {
+      incidents.push(traceIncident("CONVERSATION_OPENING_LOOP", row,
+        "A single stored interaction contains more than one highly similar opening-like agent turn."));
+    }
+    if (connectivity === "connected" && (transcriptCount === 0 || responseCount === 0)) {
+      incidents.push(traceIncident("CONNECTED_EVIDENCE_GAP", row,
+        `${transcriptCount} transcript turn(s); ${responseCount} structured response variable(s).`));
+    } else if (connectivity === "connected" && normalized &&
+        !["SUCCESS_COMPLETE", "SUCCESS_PULSE", "SUCCESS_SUBSTANTIAL"].includes(normalized)) {
+      incidents.push(traceIncident("CONNECTED_INCOMPLETE", row,
+        `${transcriptCount} transcript turn(s); normalized outcome ${normalized}.`));
+    }
+    if (status === "FAILED" && row.provider_attempt_id &&
+        ["failed", "busy", "no_answer"].includes(connectivity)) {
+      incidents.push(traceIncident("PROVIDER_DELIVERY_FAILURE", row,
+        row.failure_reason || `Provider connectivity status ${connectivity}.`));
+    }
+
+    if (row.run_contact_id && row.provider_attempt_id) {
+      const starts = byContact.get(row.run_contact_id) || [];
+      starts.push(row);
+      byContact.set(row.run_contact_id, starts);
+    }
+  }
+
+  for (const starts of byContact.values()) {
+    const uniqueAttempts = new Set(starts.map((row) => row.provider_attempt_id));
+    if (uniqueAttempts.size > 1) {
+      const row = starts[0];
+      incidents.push(traceIncident("DUPLICATE_PROVIDER_START", row,
+        `${uniqueAttempts.size} provider attempt IDs are recorded for one Run contact.`, ":duplicate"));
+    }
+  }
+
+  for (const row of webhooks) {
+    const code = String(row.delivery_status || "").toUpperCase() === "UNMATCHED"
+      ? "UNMATCHED_WEBHOOK" : "WEBHOOK_PROCESSING_FAILURE";
+    incidents.push(traceIncident(code, row,
+      row.error_message || `Webhook delivery status ${row.delivery_status}.`));
+  }
+  for (const row of lifecycleDrifts) {
+    incidents.push(traceIncident("RUN_LIFECYCLE_DRIFT", row,
+      `${row.resolved_contacts}/${row.selected_contacts} contacts resolved; ${row.active_executions} active executions; Run status ${row.run_status}.`));
+  }
+
+  const severityOrder = { CRITICAL: 0, WARNING: 1, INFO: 2 };
+  incidents.sort((a, b) => (severityOrder[a.severity] - severityOrder[b.severity]) ||
+    String(b.observedAt || "").localeCompare(String(a.observedAt || "")));
+  const totals = incidents.reduce((result, item) => {
+    result[item.severity.toLowerCase()] += 1;
+    result.byFunctionality[item.functionality] =
+      (result.byFunctionality[item.functionality] || 0) + 1;
+    return result;
+  }, { critical: 0, warning: 0, info: 0, byFunctionality: {} });
+
+  return {
+    status: totals.critical > 0 ? "ATTENTION_REQUIRED"
+      : totals.warning > 0 ? "WATCH" : "CLEAR",
+    periodHours: 168,
+    total: incidents.length,
+    critical: totals.critical,
+    warning: totals.warning,
+    informational: totals.info,
+    byFunctionality: Object.entries(totals.byFunctionality)
+      .map(([functionality, count]) => ({ functionality, count }))
+      .sort((a, b) => b.count - a.count || a.functionality.localeCompare(b.functionality)),
+    incidents: incidents.slice(0, 40)
+  };
+}
+
 export async function getPipelineOverview(options = {}) {
   const db = options.db || await getDb();
   const [executions, webhooks, recentWebhooks, evidence, recoveryEvents,
@@ -173,7 +506,7 @@ export async function getPipelineOverview(options = {}) {
     `)
   ]);
 
-  const delayed = await db.query(`
+  const [delayed, traceExecutions, lifecycleDrifts] = await Promise.all([db.query(`
     SELECT execution.id AS execution_id, execution.provider_attempt_id,
       execution.status, execution.submitted_at, execution.created_at,
       run.run_number, iteration.iteration_number, iteration.iteration_name,
@@ -189,7 +522,72 @@ export async function getPipelineOverview(options = {}) {
         < now() - interval '30 minutes'
     ORDER BY COALESCE(execution.submitted_at, execution.created_at) ASC
     LIMIT 20
-  `);
+  `), db.query(`
+    SELECT execution.id AS execution_id, execution.run_contact_id,
+      execution.provider_attempt_id, execution.status AS execution_status,
+      execution.error_message, execution.submitted_at,
+      execution.callback_received_at, execution.created_at, execution.updated_at,
+      execution.request_payload #>> '{providerDeployment,app_id}' AS submitted_app_id,
+      execution.request_payload #>> '{providerDeployment,app_version}' AS submitted_app_version,
+      execution.request_payload #>> '{providerDeployment,connection_id}' AS submitted_connection_id,
+      iteration.voice_agent_snapshot ->> 'app_id' AS snapshot_app_id,
+      iteration.voice_agent_snapshot ->> 'app_version' AS snapshot_app_version,
+      iteration.voice_agent_snapshot ->> 'connection_id' AS snapshot_connection_id,
+      call_record.connectivity_status, call_record.failure_reason,
+      call_record.normalized_status, call_record.interaction_transcript,
+      CASE WHEN jsonb_typeof(call_record.interaction_transcript) = 'array'
+        THEN jsonb_array_length(call_record.interaction_transcript) ELSE 0 END AS transcript_turns,
+      CASE WHEN jsonb_typeof(call_record.response_variables) = 'object'
+        THEN (SELECT COUNT(*) FROM jsonb_object_keys(call_record.response_variables))
+        ELSE 0 END AS response_variables,
+      campaign.campaign_name, iteration.iteration_number, run.run_number
+    FROM call_executions execution
+    JOIN campaign_runs run ON run.id = execution.run_id
+    JOIN program_iterations iteration ON iteration.id = run.iteration_id
+    LEFT JOIN campaign_iteration_links link ON link.iteration_id = iteration.id
+    LEFT JOIN campaigns campaign ON campaign.id = link.campaign_id
+    LEFT JOIN LATERAL (
+      SELECT item.* FROM calls item
+      WHERE item.attempt_id = execution.provider_attempt_id
+      ORDER BY item.updated_at DESC NULLS LAST LIMIT 1
+    ) call_record ON TRUE
+    WHERE execution.created_at >= now() - interval '7 days'
+    ORDER BY execution.created_at DESC
+    LIMIT 250
+  `), db.query(`
+    SELECT run.id AS run_id, run.status AS run_status, run.run_number,
+      iteration.iteration_number, campaign.campaign_name,
+      COUNT(contact.id)::int AS selected_contacts,
+      COUNT(contact.id) FILTER (WHERE contact.final_status <> 'PENDING')::int AS resolved_contacts,
+      (SELECT COUNT(*)::int FROM call_executions active
+        WHERE active.run_id = run.id
+          AND active.callback_received_at IS NULL
+          AND active.status IN ('PENDING', 'SUBMITTED', 'RUNNING')) AS active_executions,
+      MAX(run.updated_at) AS updated_at
+    FROM campaign_runs run
+    JOIN program_iterations iteration ON iteration.id = run.iteration_id
+    LEFT JOIN campaign_iteration_links link ON link.iteration_id = iteration.id
+    LEFT JOIN campaigns campaign ON campaign.id = link.campaign_id
+    JOIN campaign_run_contacts contact ON contact.run_id = run.id
+      AND contact.selection_status = 'SELECTED'
+    WHERE run.status IN ('READY', 'RUNNING')
+    GROUP BY run.id, run.status, run.run_number,
+      iteration.iteration_number, campaign.campaign_name
+    HAVING COUNT(contact.id) > 0
+      AND COUNT(contact.id) FILTER (WHERE contact.final_status <> 'PENDING') = COUNT(contact.id)
+      AND (SELECT COUNT(*) FROM call_executions active
+        WHERE active.run_id = run.id
+          AND active.callback_received_at IS NULL
+          AND active.status IN ('PENDING', 'SUBMITTED', 'RUNNING')) = 0
+    ORDER BY MAX(run.updated_at) DESC
+    LIMIT 20
+  `)]);
+
+  const issueTrace = buildCallIssueTrace({
+    executions: traceExecutions.rows,
+    webhooks: recentWebhooks.rows,
+    lifecycleDrifts: lifecycleDrifts.rows
+  });
 
   return {
     database: { status: "reachable" },
@@ -201,6 +599,7 @@ export async function getPipelineOverview(options = {}) {
     latestConversation: latestConversation.rows[0] || null,
     delayedCalls: delayed.rows,
     unresolvedWebhooks: recentWebhooks.rows,
+    issueTrace,
     generatedAt: new Date().toISOString()
   };
 }

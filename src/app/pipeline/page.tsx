@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Database,
-  ListChecks, Radio, RefreshCw, ShieldCheck, Webhook
+  Activity, AlertTriangle, Bot, Bug, CheckCircle2, Clock3, Code2, Database,
+  ListChecks, Radio, RefreshCw, ShieldCheck, Webhook, Workflow, Wrench
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
@@ -46,6 +46,22 @@ type WebhookEvent = {
   id: string; attempt_id: string; delivery_status: string;
   error_message: string | null; received_at: string;
   processed_at: string | null; execution_id: string | null;
+};
+type TraceIncident = {
+  id: string;
+  code: string;
+  severity: "CRITICAL" | "WARNING" | "INFO";
+  functionality: string;
+  situation: string;
+  diagnosis: string;
+  evidence: string;
+  executionId: string | null;
+  campaignName: string | null;
+  iterationNumber: number | null;
+  runNumber: number | null;
+  observedAt: string | null;
+  involved: Array<{ program: string; method: string }>;
+  preliminaryFixes: string[];
 };
 type Pipeline = {
   api: { status: string };
@@ -89,6 +105,16 @@ type Pipeline = {
       blocking: boolean;
     }>;
   };
+  issueTrace: {
+    status: "CLEAR" | "WATCH" | "ATTENTION_REQUIRED";
+    periodHours: number;
+    total: number;
+    critical: number;
+    warning: number;
+    informational: number;
+    byFunctionality: Array<{ functionality: string; count: number }>;
+    incidents: TraceIncident[];
+  };
   delayedCalls: DelayedCall[];
   unresolvedWebhooks: WebhookEvent[];
   generatedAt: string;
@@ -108,6 +134,7 @@ export default function PipelinePage() {
   const [data, setData] = useState<Pipeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const [issueFilter, setIssueFilter] = useState<"ALL" | TraceIncident["severity"]>("ALL");
 
   const load = useCallback(async function () {
     setLoading(true);
@@ -210,6 +237,65 @@ export default function PipelinePage() {
             <Metric icon={Webhook} label="Webhooks, 24 hours" value={`${count(data.summary.processed_24h)}/${count(data.summary.received_24h)}`} detail={`${count(data.summary.unresolved_total)} unresolved overall`} warn={data.summary.unresolved_total > 0} />
             <Metric icon={AlertTriangle} label="Failed attempts, 24 hours" value={count(data.summary.failed_attempts_24h)} detail={`${count(data.summary.provider_accepted_24h)}/${count(data.summary.attempts_24h)} submissions accepted by provider`} warn={data.summary.failed_attempts_24h > 0} />
             <Metric icon={Database} label="Evidence gaps" value={count(data.summary.missing_transcripts + data.summary.missing_responses)} detail={`${count(data.summary.missing_transcripts)} transcripts · ${count(data.summary.missing_responses)} response sets`} warn={data.summary.missing_transcripts + data.summary.missing_responses > 0} />
+          </section>
+
+          <section className={styles.tracePanel} data-status={data.issueTrace.status}>
+            <div className={styles.traceHead}>
+              <div className={styles.traceTitle}>
+                <div className={styles.traceIcon}><Bug size={23} /></div>
+                <div><span>CALL WORKFLOW OBSERVABILITY</span><h2>Issue tracer</h2>
+                  <p>Deterministic diagnosis for the last {Math.round(data.issueTrace.periodHours / 24)} days. Transcript content and voter identity remain hidden.</p></div>
+              </div>
+              <div className={styles.traceTotals}>
+                <div><strong>{data.issueTrace.critical}</strong><span>Critical</span></div>
+                <div><strong>{data.issueTrace.warning}</strong><span>Warning</span></div>
+                <div><strong>{data.issueTrace.informational}</strong><span>Operational</span></div>
+              </div>
+            </div>
+
+            {data.issueTrace.byFunctionality.length ? <div className={styles.functionalityStrip}>
+              {data.issueTrace.byFunctionality.map((item) => <div key={item.functionality}>
+                <Workflow size={14} /><span>{item.functionality}</span><strong>{item.count}</strong>
+              </div>)}
+            </div> : null}
+
+            <div className={styles.traceToolbar}>
+              <strong>{data.issueTrace.status === "CLEAR" ? "No traced workflow issue" : `${data.issueTrace.total} traced observation(s)`}</strong>
+              <div>{(["ALL", "CRITICAL", "WARNING", "INFO"] as const).map((filter) =>
+                <button key={filter} type="button" data-active={issueFilter === filter}
+                  onClick={() => setIssueFilter(filter)}>{filter === "INFO" ? "OPERATIONAL" : filter}</button>)}</div>
+            </div>
+
+            <div className={styles.traceList}>
+              {data.issueTrace.incidents.filter((item) => issueFilter === "ALL" || item.severity === issueFilter)
+                .map((item) => <details key={item.id} className={styles.traceItem} data-severity={item.severity}>
+                  <summary>
+                    <div className={styles.traceBadge}>{item.severity === "INFO" ? "OPERATIONAL" : item.severity}</div>
+                    <div><strong>{item.code.replaceAll("_", " ")}</strong>
+                      <span>{item.functionality} · {item.campaignName || "Platform"}
+                        {item.iterationNumber !== null ? ` · Iteration ${item.iterationNumber}` : ""}
+                        {item.runNumber !== null ? ` · Run ${item.runNumber}` : ""}</span></div>
+                    <time>{dateTime(item.observedAt)}</time>
+                  </summary>
+                  <div className={styles.traceBody}>
+                    <div className={styles.traceNarrative}>
+                      <div><span>Situation</span><p>{item.situation}</p></div>
+                      <div><span>Observed evidence</span><p>{item.evidence}</p></div>
+                      <div><span>Preliminary diagnosis</span><p>{item.diagnosis}</p></div>
+                    </div>
+                    <div className={styles.traceColumns}>
+                      <div><h3><Code2 size={16} /> Programs and functions involved</h3>
+                        <ul>{item.involved.map((entry) => <li key={`${entry.program}:${entry.method}`}>
+                          <code>{entry.program}</code><span>{entry.method}</span></li>)}</ul></div>
+                      <div><h3><Wrench size={16} /> Preliminary fixes</h3>
+                        <ol>{item.preliminaryFixes.map((fix) => <li key={fix}>{fix}</li>)}</ol></div>
+                    </div>
+                    {item.executionId ? <Link className={styles.inspectLink} href={`/calls?executionId=${item.executionId}`}>Inspect authorized call evidence →</Link> : null}
+                  </div>
+                </details>)}
+              {data.issueTrace.incidents.filter((item) => issueFilter === "ALL" || item.severity === issueFilter).length === 0 ?
+                <p className={styles.empty}>No observations match this severity.</p> : null}
+            </div>
           </section>
 
           <section className={styles.grid}>
