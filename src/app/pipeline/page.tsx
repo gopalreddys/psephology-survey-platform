@@ -62,6 +62,10 @@ type TraceIncident = {
   observedAt: string | null;
   involved: Array<{ program: string; method: string }>;
   preliminaryFixes: string[];
+  matchedHistoricalControl: {
+    implementedSolution: string;
+    controlPrograms: string[];
+  } | null;
 };
 type Pipeline = {
   api: { status: string };
@@ -106,14 +110,30 @@ type Pipeline = {
     }>;
   };
   issueTrace: {
-    status: "CLEAR" | "WATCH" | "ATTENTION_REQUIRED";
-    periodHours: number;
-    total: number;
-    critical: number;
-    warning: number;
-    informational: number;
-    byFunctionality: Array<{ functionality: string; count: number }>;
-    incidents: TraceIncident[];
+    runtime: {
+      status: "CLEAR" | "WATCH" | "ATTENTION_REQUIRED";
+      total: number;
+      showstoppers: number;
+      warnings: number;
+      informational: number;
+      byFunctionality: Array<{ functionality: string; count: number }>;
+      incidents: TraceIncident[];
+    };
+    history: {
+      periodDays: number;
+      resolvedObservations: number;
+      buckets: Array<{
+        code: string;
+        functionality: string;
+        severity: TraceIncident["severity"];
+        occurrences: number;
+        firstSeen: string | null;
+        lastSeen: string | null;
+        solutionStatus: "IMPLEMENTED";
+        implementedSolution: string;
+        controlPrograms: string[];
+      }>;
+    };
   };
   delayedCalls: DelayedCall[];
   unresolvedWebhooks: WebhookEvent[];
@@ -239,35 +259,35 @@ export default function PipelinePage() {
             <Metric icon={Database} label="Evidence gaps" value={count(data.summary.missing_transcripts + data.summary.missing_responses)} detail={`${count(data.summary.missing_transcripts)} transcripts · ${count(data.summary.missing_responses)} response sets`} warn={data.summary.missing_transcripts + data.summary.missing_responses > 0} />
           </section>
 
-          <section className={styles.tracePanel} data-status={data.issueTrace.status}>
+          <section className={styles.tracePanel} data-status={data.issueTrace.runtime.status}>
             <div className={styles.traceHead}>
               <div className={styles.traceTitle}>
                 <div className={styles.traceIcon}><Bug size={23} /></div>
-                <div><span>CALL WORKFLOW OBSERVABILITY</span><h2>Issue tracer</h2>
-                  <p>Deterministic diagnosis for the last {Math.round(data.issueTrace.periodHours / 24)} days. Transcript content and voter identity remain hidden.</p></div>
+                <div><span>CALL WORKFLOW OBSERVABILITY</span><h2>Runtime issue tracer</h2>
+                  <p>Only unresolved conditions affecting an active call workflow appear here. Resolved observations are kept in the separate history below.</p></div>
               </div>
               <div className={styles.traceTotals}>
-                <div><strong>{data.issueTrace.critical}</strong><span>Critical</span></div>
-                <div><strong>{data.issueTrace.warning}</strong><span>Warning</span></div>
-                <div><strong>{data.issueTrace.informational}</strong><span>Operational</span></div>
+                <div><strong>{data.issueTrace.runtime.showstoppers}</strong><span>Showstoppers</span></div>
+                <div><strong>{data.issueTrace.runtime.warnings}</strong><span>Warnings</span></div>
+                <div><strong>{data.issueTrace.runtime.total}</strong><span>Active issues</span></div>
               </div>
             </div>
 
-            {data.issueTrace.byFunctionality.length ? <div className={styles.functionalityStrip}>
-              {data.issueTrace.byFunctionality.map((item) => <div key={item.functionality}>
+            {data.issueTrace.runtime.byFunctionality.length ? <div className={styles.functionalityStrip}>
+              {data.issueTrace.runtime.byFunctionality.map((item) => <div key={item.functionality}>
                 <Workflow size={14} /><span>{item.functionality}</span><strong>{item.count}</strong>
               </div>)}
             </div> : null}
 
             <div className={styles.traceToolbar}>
-              <strong>{data.issueTrace.status === "CLEAR" ? "No traced workflow issue" : `${data.issueTrace.total} traced observation(s)`}</strong>
+              <strong>{data.issueTrace.runtime.status === "CLEAR" ? "No active workflow issue" : `${data.issueTrace.runtime.total} runtime issue(s) need review`}</strong>
               <div>{(["ALL", "CRITICAL", "WARNING", "INFO"] as const).map((filter) =>
                 <button key={filter} type="button" data-active={issueFilter === filter}
                   onClick={() => setIssueFilter(filter)}>{filter === "INFO" ? "OPERATIONAL" : filter}</button>)}</div>
             </div>
 
             <div className={styles.traceList}>
-              {data.issueTrace.incidents.filter((item) => issueFilter === "ALL" || item.severity === issueFilter)
+              {data.issueTrace.runtime.incidents.filter((item) => issueFilter === "ALL" || item.severity === issueFilter)
                 .map((item) => <details key={item.id} className={styles.traceItem} data-severity={item.severity}>
                   <summary>
                     <div className={styles.traceBadge}>{item.severity === "INFO" ? "OPERATIONAL" : item.severity}</div>
@@ -290,12 +310,40 @@ export default function PipelinePage() {
                       <div><h3><Wrench size={16} /> Preliminary fixes</h3>
                         <ol>{item.preliminaryFixes.map((fix) => <li key={fix}>{fix}</li>)}</ol></div>
                     </div>
+                    {item.matchedHistoricalControl ? <div className={styles.knownControl}>
+                      <ShieldCheck size={17} />
+                      <div><span>Matched historical control</span>
+                        <p>{item.matchedHistoricalControl.implementedSolution}</p>
+                        <div className={styles.controlTags}>{item.matchedHistoricalControl.controlPrograms.map((program) =>
+                          <code key={program}>{program}</code>)}</div>
+                      </div>
+                    </div> : null}
                     {item.executionId ? <Link className={styles.inspectLink} href={`/calls?executionId=${item.executionId}`}>Inspect authorized call evidence →</Link> : null}
                   </div>
                 </details>)}
-              {data.issueTrace.incidents.filter((item) => issueFilter === "ALL" || item.severity === issueFilter).length === 0 ?
-                <p className={styles.empty}>No observations match this severity.</p> : null}
+              {data.issueTrace.runtime.incidents.filter((item) => issueFilter === "ALL" || item.severity === issueFilter).length === 0 ?
+                <p className={styles.empty}>No active runtime issue matches this severity.</p> : null}
             </div>
+          </section>
+
+          <section className={styles.historyPanel}>
+            <div className={styles.historyHead}>
+              <div><span>RESOLVED ISSUE KNOWLEDGE</span><h2>Historical issues and implemented controls</h2>
+                <p>{data.issueTrace.history.resolvedObservations} resolved observation(s), grouped into reusable diagnostic knowledge from the last {data.issueTrace.history.periodDays} days.</p></div>
+              <ShieldCheck size={25} />
+            </div>
+            {data.issueTrace.history.buckets.length ? <div className={styles.historyGrid}>
+              {data.issueTrace.history.buckets.map((bucket) => <article key={bucket.code} className={styles.historyCard}>
+                <div className={styles.historyCardHead}>
+                  <div><span>{bucket.functionality}</span><strong>{bucket.code.replaceAll("_", " ")}</strong></div>
+                  <b>{bucket.occurrences}</b>
+                </div>
+                <p>{bucket.implementedSolution}</p>
+                <div className={styles.controlTags}>{bucket.controlPrograms.map((program) =>
+                  <code key={program}>{program}</code>)}</div>
+                <footer><span>{bucket.solutionStatus}</span><small>Last observed {dateTime(bucket.lastSeen)}</small></footer>
+              </article>)}
+            </div> : <p className={styles.empty}>No resolved issue history is available in this period.</p>}
           </section>
 
           <section className={styles.grid}>

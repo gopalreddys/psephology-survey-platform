@@ -247,14 +247,82 @@ const TRACE_DEFINITIONS = {
   }
 };
 
+const IMPLEMENTED_CONTROLS = {
+  PROVIDER_REJECTED: {
+    solution: "Registered-variable allow-list, safe provider validation details and guarded rejected-execution recovery.",
+    programs: ["sarvam-agent-variable-handoff", "voice-agent-catalog"]
+  },
+  CALLBACK_DELAYED: {
+    solution: "Thirty-minute stale-callback recovery with a supervised systemd timer and lifecycle reconciliation.",
+    programs: ["campaign-lifecycle-governance", "run-lifecycle-automation"]
+  },
+  UNMATCHED_WEBHOOK: {
+    solution: "Attempt-ID plus execution-metadata correlation and idempotent webhook event storage.",
+    programs: ["sarvam-outbound-webhook"]
+  },
+  WEBHOOK_PROCESSING_FAILURE: {
+    solution: "Hashed event idempotency, transactional processing and retained safe processing errors.",
+    programs: ["sarvam-outbound-webhook", "database-resilience"]
+  },
+  CONVERSATION_OPENING_LOOP: {
+    solution: "One-time opening contract, compact validated runtime context and mandatory controlled-call canary.",
+    programs: ["sarvam-conversation-flow", "sarvam-agent-variable-handoff"]
+  },
+  AGENT_DEPLOYMENT_DRIFT: {
+    solution: "Frozen Iteration voice-agent snapshot and runtime selection from that snapshot instead of mutable catalogue defaults.",
+    programs: ["voice-agent-catalog", "iteration-agent-version"]
+  },
+  CONNECTED_EVIDENCE_GAP: {
+    solution: "Authoritative attempt/transcript reconciliation and evidence-aware Iteration closeout.",
+    programs: ["sarvam-outbound-webhook", "iteration-closeout"]
+  },
+  CONNECTED_INCOMPLETE: {
+    solution: "Deterministic completion policy based on connected evidence and meaningful response variables.",
+    programs: ["sarvam-outbound-webhook", "iteration-closeout"]
+  },
+  DUPLICATE_PROVIDER_START: {
+    solution: "Reviewed contact allow-list, launch idempotency and active-request suppression.",
+    programs: ["run-contact-selection", "run-bulk-launch"]
+  },
+  RUN_LIFECYCLE_DRIFT: {
+    solution: "Transactional final-callback reconciliation plus guarded dry-run closeout recovery.",
+    programs: ["run-lifecycle-automation", "campaign-lifecycle-governance"]
+  },
+  PROVIDER_DELIVERY_FAILURE: {
+    solution: "Normalized delivery outcomes and governed retry eligibility without misclassifying busy/no-answer as code defects.",
+    programs: ["sarvam-outbound-webhook", "run-retry-cohort"]
+  }
+};
+
 function safeEvidence(value) {
   return String(value || "No additional diagnostic detail was recorded.")
     .replace(/\+?\d[\d\s()-]{7,}\d/g, "[REDACTED]")
     .slice(0, 600);
 }
 
+function isOpenExecutionWorkflow(row) {
+  const runOpen = ["READY", "RUNNING"].includes(
+    String(row.run_status || "").toUpperCase()
+  );
+  const iterationOpen = !["COMPLETED", "CANCELLED", "ARCHIVED"].includes(
+    String(row.iteration_link_status || row.iteration_status || "PLANNED").toUpperCase()
+  );
+  const contactUnresolved = String(row.contact_final_status || "PENDING").toUpperCase() === "PENDING" &&
+    row.contact_retry_exhausted !== true;
+  const latest = row.is_latest_for_contact !== false;
+  return runOpen && iterationOpen && contactUnresolved && latest;
+}
+
+function isRuntimeIssue(code, row) {
+  if (["CALLBACK_DELAYED", "UNMATCHED_WEBHOOK", "WEBHOOK_PROCESSING_FAILURE",
+    "RUN_LIFECYCLE_DRIFT"].includes(code)) return true;
+  if (code === "PROVIDER_DELIVERY_FAILURE") return false;
+  return isOpenExecutionWorkflow(row);
+}
+
 function traceIncident(code, row, evidence, suffix = "") {
   const definition = TRACE_DEFINITIONS[code];
+  const knownControl = IMPLEMENTED_CONTROLS[code];
   return {
     id: `${code}:${row.execution_id || row.id || row.run_id || "event"}${suffix}`,
     code,
@@ -263,6 +331,7 @@ function traceIncident(code, row, evidence, suffix = "") {
     situation: definition.situation,
     diagnosis: definition.diagnosis,
     evidence: safeEvidence(evidence),
+    runtime: isRuntimeIssue(code, row),
     executionId: row.execution_id || null,
     campaignName: row.campaign_name || null,
     iterationNumber: row.iteration_number === undefined ? null : Number(row.iteration_number),
@@ -270,7 +339,11 @@ function traceIncident(code, row, evidence, suffix = "") {
     observedAt: row.callback_received_at || row.updated_at || row.received_at ||
       row.submitted_at || row.created_at || null,
     involved: definition.involved.map(([program, method]) => ({ program, method })),
-    preliminaryFixes: definition.fixes
+    preliminaryFixes: definition.fixes,
+    matchedHistoricalControl: knownControl ? {
+      implementedSolution: knownControl.solution,
+      controlPrograms: knownControl.programs
+    } : null
   };
 }
 
@@ -355,25 +428,59 @@ export function buildCallIssueTrace({ executions = [], webhooks = [], lifecycleD
   const severityOrder = { CRITICAL: 0, WARNING: 1, INFO: 2 };
   incidents.sort((a, b) => (severityOrder[a.severity] - severityOrder[b.severity]) ||
     String(b.observedAt || "").localeCompare(String(a.observedAt || "")));
-  const totals = incidents.reduce((result, item) => {
+  const runtimeIncidents = incidents.filter((item) => item.runtime);
+  const historicalIncidents = incidents.filter((item) => !item.runtime);
+  const runtimeTotals = runtimeIncidents.reduce((result, item) => {
     result[item.severity.toLowerCase()] += 1;
     result.byFunctionality[item.functionality] =
       (result.byFunctionality[item.functionality] || 0) + 1;
     return result;
   }, { critical: 0, warning: 0, info: 0, byFunctionality: {} });
 
+  const bucketMap = new Map();
+  for (const item of historicalIncidents) {
+    const control = IMPLEMENTED_CONTROLS[item.code];
+    const bucket = bucketMap.get(item.code) || {
+      code: item.code,
+      functionality: item.functionality,
+      severity: item.severity,
+      occurrences: 0,
+      firstSeen: item.observedAt,
+      lastSeen: item.observedAt,
+      solutionStatus: "IMPLEMENTED",
+      implementedSolution: control?.solution || "Audited workflow handling is retained in the platform runbook.",
+      controlPrograms: control?.programs || []
+    };
+    bucket.occurrences += 1;
+    if (String(item.observedAt || "") < String(bucket.firstSeen || "")) {
+      bucket.firstSeen = item.observedAt;
+    }
+    if (String(item.observedAt || "") > String(bucket.lastSeen || "")) {
+      bucket.lastSeen = item.observedAt;
+    }
+    bucketMap.set(item.code, bucket);
+  }
+
   return {
-    status: totals.critical > 0 ? "ATTENTION_REQUIRED"
-      : totals.warning > 0 ? "WATCH" : "CLEAR",
-    periodHours: 168,
-    total: incidents.length,
-    critical: totals.critical,
-    warning: totals.warning,
-    informational: totals.info,
-    byFunctionality: Object.entries(totals.byFunctionality)
-      .map(([functionality, count]) => ({ functionality, count }))
-      .sort((a, b) => b.count - a.count || a.functionality.localeCompare(b.functionality)),
-    incidents: incidents.slice(0, 40)
+    runtime: {
+      status: runtimeTotals.critical > 0 ? "ATTENTION_REQUIRED"
+        : runtimeTotals.warning > 0 ? "WATCH" : "CLEAR",
+      total: runtimeIncidents.length,
+      showstoppers: runtimeTotals.critical,
+      warnings: runtimeTotals.warning,
+      informational: runtimeTotals.info,
+      byFunctionality: Object.entries(runtimeTotals.byFunctionality)
+        .map(([functionality, count]) => ({ functionality, count }))
+        .sort((a, b) => b.count - a.count || a.functionality.localeCompare(b.functionality)),
+      incidents: runtimeIncidents.slice(0, 40)
+    },
+    history: {
+      periodDays: 90,
+      resolvedObservations: historicalIncidents.length,
+      buckets: Array.from(bucketMap.values())
+        .sort((a, b) => b.occurrences - a.occurrences ||
+          String(b.lastSeen || "").localeCompare(String(a.lastSeen || "")))
+    }
   };
 }
 
@@ -535,6 +642,15 @@ export async function getPipelineOverview(options = {}) {
       iteration.voice_agent_snapshot ->> 'connection_id' AS snapshot_connection_id,
       call_record.connectivity_status, call_record.failure_reason,
       call_record.normalized_status, call_record.interaction_transcript,
+      run.status AS run_status, iteration.status AS iteration_status,
+      link.status AS iteration_link_status,
+      contact.final_status AS contact_final_status,
+      contact.retry_exhausted AS contact_retry_exhausted,
+      NOT EXISTS (
+        SELECT 1 FROM call_executions newer
+        WHERE newer.run_contact_id = execution.run_contact_id
+          AND newer.created_at > execution.created_at
+      ) AS is_latest_for_contact,
       CASE WHEN jsonb_typeof(call_record.interaction_transcript) = 'array'
         THEN jsonb_array_length(call_record.interaction_transcript) ELSE 0 END AS transcript_turns,
       CASE WHEN jsonb_typeof(call_record.response_variables) = 'object'
@@ -546,14 +662,17 @@ export async function getPipelineOverview(options = {}) {
     JOIN program_iterations iteration ON iteration.id = run.iteration_id
     LEFT JOIN campaign_iteration_links link ON link.iteration_id = iteration.id
     LEFT JOIN campaigns campaign ON campaign.id = link.campaign_id
+    LEFT JOIN campaign_run_contacts contact ON contact.id = execution.run_contact_id
     LEFT JOIN LATERAL (
       SELECT item.* FROM calls item
       WHERE item.attempt_id = execution.provider_attempt_id
       ORDER BY item.updated_at DESC NULLS LAST LIMIT 1
     ) call_record ON TRUE
-    WHERE execution.created_at >= now() - interval '7 days'
+    WHERE execution.created_at >= now() - interval '90 days'
+      OR (execution.callback_received_at IS NULL
+        AND execution.status IN ('PENDING', 'SUBMITTED', 'RUNNING'))
     ORDER BY execution.created_at DESC
-    LIMIT 250
+    LIMIT 2000
   `), db.query(`
     SELECT run.id AS run_id, run.status AS run_status, run.run_number,
       iteration.iteration_number, campaign.campaign_name,

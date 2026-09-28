@@ -92,9 +92,11 @@ assert.equal(result.summary.unresolved_total, 1);
 assert.equal(result.summary.missing_transcripts, 1);
 assert.equal(result.delayedCalls.length, 1);
 assert.equal(result.unresolvedWebhooks.length, 1);
-assert.equal(result.issueTrace.status, "ATTENTION_REQUIRED");
-assert.equal(result.issueTrace.incidents.some((item) =>
-  item.code === "CONVERSATION_OPENING_LOOP"), true);
+assert.equal(result.issueTrace.runtime.status, "ATTENTION_REQUIRED");
+assert.equal(result.issueTrace.runtime.incidents.some((item) =>
+  item.code === "CONVERSATION_OPENING_LOOP"), false);
+assert.equal(result.issueTrace.history.buckets.some((item) =>
+  item.code === "CONVERSATION_OPENING_LOOP" && item.solutionStatus === "IMPLEMENTED"), true);
 assert.deepEqual(result.database, { status: "reachable" });
 
 const trace = buildCallIssueTrace({
@@ -104,25 +106,32 @@ const trace = buildCallIssueTrace({
     provider_attempt_id: null,
     error_message: "Sarvam Instant Outbound returned 422 for +919999999999",
     created_at: "2026-09-28T07:00:00.000Z", campaign_name: "Campaign",
-    iteration_number: 1, run_number: 1
+    iteration_number: 1, run_number: 1, run_status: "RUNNING",
+    iteration_status: "ACTIVE", iteration_link_status: "IN_PROGRESS",
+    contact_final_status: "PENDING", contact_retry_exhausted: false,
+    is_latest_for_contact: true
   }, {
     execution_id: "drift", run_contact_id: "contact", execution_status: "SUBMITTED",
     provider_attempt_id: "attempt", callback_received_at: null,
     submitted_at: "2026-09-28T06:00:00.000Z",
     submitted_app_id: "Agent", submitted_app_version: "5",
     submitted_connection_id: "connection-a", snapshot_app_id: "Agent",
-    snapshot_app_version: "4", snapshot_connection_id: "connection-a"
+    snapshot_app_version: "4", snapshot_connection_id: "connection-a",
+    run_status: "RUNNING", iteration_status: "ACTIVE",
+    iteration_link_status: "IN_PROGRESS", contact_final_status: "PENDING",
+    contact_retry_exhausted: false, is_latest_for_contact: true
   }],
   webhooks: [], lifecycleDrifts: []
 });
-assert.equal(trace.critical, 3);
+assert.equal(trace.runtime.showstoppers, 3);
 assert.deepEqual(
-  trace.incidents.map((item) => item.code).sort(),
+  trace.runtime.incidents.map((item) => item.code).sort(),
   ["AGENT_DEPLOYMENT_DRIFT", "CALLBACK_DELAYED", "PROVIDER_REJECTED"].sort()
 );
-assert.equal(trace.incidents[0].involved.length > 0, true);
-assert.equal(trace.incidents[0].preliminaryFixes.length, 3);
-assert.equal(trace.incidents.some((item) => item.evidence.includes("9999999999")), false);
+assert.equal(trace.runtime.incidents[0].involved.length > 0, true);
+assert.equal(trace.runtime.incidents[0].preliminaryFixes.length, 3);
+assert.equal(trace.runtime.incidents[0].matchedHistoricalControl.controlPrograms.length > 0, true);
+assert.equal(trace.runtime.incidents.some((item) => item.evidence.includes("9999999999")), false);
 
 const readyOverview = {
   ...result,

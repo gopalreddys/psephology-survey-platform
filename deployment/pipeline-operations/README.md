@@ -9,10 +9,19 @@ state, or return webhook payloads, transcripts or voter phone numbers.
 
 ## Call workflow issue tracer
 
-Platform Health also includes a seven-day, read-only issue tracer. It correlates
-the launch audit, frozen voice-agent snapshot, provider acceptance, callback,
-stored conversation evidence and Run lifecycle without sending a provider
-request. Its deterministic classifications include:
+Platform Health separates issue information into two deliberately different
+views. The **Runtime issue tracer** is a priority queue: it contains only
+unresolved conditions that affect the latest attempt of an open Run contact,
+unprocessed callbacks, or an open Run with lifecycle drift. A completed or
+superseded execution cannot remain in this queue. Normal busy and no-answer
+outcomes are never presented as current software bugs.
+
+For each runtime issue the API correlates the launch audit, frozen voice-agent
+snapshot, provider acceptance, callback, stored conversation evidence and Run
+lifecycle without sending a provider request. It returns the workflow stage,
+sanitized evidence, involved programs and functions, preliminary checks, and a
+matched previously implemented control that gives operators a proven starting
+point. Its deterministic classifications include:
 
 - provider rejection before an attempt ID is issued;
 - accepted attempts with callbacks delayed beyond 30 minutes;
@@ -24,13 +33,16 @@ request. Its deterministic classifications include:
 - multiple provider starts for one Run contact; and
 - resolved contacts left inside an open Run.
 
-Each observation shows its workflow stage, sanitized evidence, relevant runtime
-programs and functions, and preliminary corrective actions. It links to the
-existing role-protected call evidence when an execution is available. Normal
-busy/no-answer/failed telephony outcomes are labelled operational rather than
-automatically treated as an application defect. The tracer never returns voter
-identity or transcript text; phone-like sequences in diagnostic messages are
-redacted.
+The separate **Historical issues and implemented controls** view covers the
+previous 90 days. Resolved and superseded observations are bucketed by issue
+type and workflow functionality. Each bucket shows occurrence count, first and
+last observation, the implemented solution, and the deployment packages that
+contain the control. Historical rows are not counted as runtime issues or
+showstoppers.
+
+The tracer links to existing role-protected call evidence when an active
+execution is available. It never returns voter identity or transcript text;
+phone-like sequences in diagnostic messages are redacted.
 
 The sidebar and page call this workspace **Platform Health**. Its launch status
 is one of:
