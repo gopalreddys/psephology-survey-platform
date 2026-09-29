@@ -160,7 +160,7 @@ export default function CampaignsPage() {
                         <span><strong>{group.campaigns.length}</strong> Total</span>
                         <span><strong>{groupRunning}</strong> Running</span>
                         <span><strong>{groupCompleted}</strong> Completed</span>
-                        {group.id !== "unlinked" && <Link href={`/programs/${group.id}`}>Open Program</Link>}
+                        {canCreate && group.id !== "unlinked" && <Link href={`/programs/${group.id}`}>Open Program</Link>}
                       </div>
                     </div>
                     <div className={styles.campaignList}>

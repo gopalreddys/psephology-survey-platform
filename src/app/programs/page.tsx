@@ -618,7 +618,7 @@ export default function ProgramsPage() {
   }
 
   if (!user || !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) {
-    return <AppShell><div className="programs-page"><FeedbackMessage message="Programs are managed by Admin and Super Admin users. Your Campaign Manager access is provided through assigned campaigns." tone="error" className="programs-message" /></div></AppShell>;
+    return <AppShell><div className="programs-page"><FeedbackMessage message="Programs are managed by Admin and Super Admin users. Use Campaigns to access work assigned to your role." tone="error" className="programs-message" /></div></AppShell>;
   }
 
 

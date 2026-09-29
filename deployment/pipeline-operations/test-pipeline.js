@@ -26,6 +26,8 @@ assert.match(repository, /End-to-end conversation canary/);
 assert.match(repository, /iteration_configuration_gaps/);
 assert.match(repository, /CONVERSATION_OPENING_LOOP/);
 assert.match(repository, /createInstantOutboundCall/);
+assert.match(repository, /FROM call_executions execution\s+JOIN LATERAL/);
+assert.match(repository, /"COMPLETED",\s+"SUCCESS_COMPLETE"/);
 assert.doesNotMatch(repository, /raw_payload|voter\.phone_number|interaction_transcript\s+AS/);
 
 const calls = [];
@@ -98,6 +100,19 @@ assert.equal(result.issueTrace.runtime.incidents.some((item) =>
 assert.equal(result.issueTrace.history.buckets.some((item) =>
   item.code === "CONVERSATION_OPENING_LOOP" && item.solutionStatus === "IMPLEMENTED"), true);
 assert.deepEqual(result.database, { status: "reachable" });
+
+const completedEvidence = buildCallIssueTrace({
+  executions: [{
+    execution_id: "completed-evidence", execution_status: "COMPLETED",
+    provider_attempt_id: "completed-attempt", connectivity_status: "connected",
+    normalized_status: "COMPLETED", transcript_turns: 12, response_variables: 8,
+    callback_received_at: "2026-09-28T07:30:00.000Z",
+    created_at: "2026-09-28T07:20:00.000Z", is_latest_for_contact: true
+  }],
+  webhooks: [], lifecycleDrifts: [], now: new Date("2026-09-28T08:00:00.000Z")
+});
+assert.equal(completedEvidence.runtime.incidents.some((item) =>
+  item.code === "CONNECTED_INCOMPLETE"), false);
 
 const trace = buildCallIssueTrace({
   now: new Date("2026-09-28T08:00:00.000Z"),
@@ -210,6 +225,22 @@ assert.equal(health.status, "READY");
 assert.equal(health.blocking, 0);
 assert.equal(health.checks.length, 8);
 assert.equal(health.checks.find((item) => item.id === "conversation-canary").status, "PASS");
+
+const completedCanaryHealth = evaluatePlatformHealth({
+  overview: {
+    ...readyOverview,
+    latestConversation: {
+      ...readyOverview.latestConversation,
+      normalized_status: "COMPLETED"
+    }
+  },
+  timer: { status: "waiting", lastResult: "success" },
+  now: new Date("2026-09-28T08:00:00.000Z")
+});
+assert.equal(
+  completedCanaryHealth.checks.find((item) => item.id === "conversation-canary").status,
+  "PASS"
+);
 
 const blocked = evaluatePlatformHealth({
   overview: {

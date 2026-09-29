@@ -25,6 +25,9 @@ import {
 import AppShell
   from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import {
+  useCurrentUser
+} from "@/hooks/useCurrentUser";
 
 import {
   apiFetch
@@ -44,6 +47,14 @@ type Questionnaire = {
 
 
 export default function QuestionnairesPage() {
+
+  const {
+    user
+  } = useCurrentUser();
+
+  const canManageQuestionnaires =
+    user?.role.code === "SUPER_ADMIN" ||
+    user?.role.code === "ADMIN";
 
   const router =
     useRouter();
@@ -131,9 +142,14 @@ export default function QuestionnairesPage() {
 
   useEffect(
     function () {
+      if (!canManageQuestionnaires) {
+        setLoading(false);
+        return;
+      }
+
       loadData();
     },
-    []
+    [canManageQuestionnaires]
   );
 
 
@@ -278,6 +294,20 @@ export default function QuestionnairesPage() {
       0
     );
 
+
+  if (user && !canManageQuestionnaires) {
+    return (
+      <AppShell>
+        <div className="questionnaire-library-page">
+          <FeedbackMessage
+            message="Questionnaire design is available to Admin and Super Admin roles. Campaign Managers select an approved questionnaire while creating an Iteration; Campaigners use the frozen Iteration questionnaire during execution."
+            tone="error"
+            className="questionnaire-message"
+          />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

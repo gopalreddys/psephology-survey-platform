@@ -78,9 +78,7 @@ const menuItems: MenuItem[] = [
   href: "/questionnaires",
   roles: [
     "SUPER_ADMIN",
-    "ADMIN",
-    "CAMPAIGN_MANAGER",
-    "CAMPAIGNER"
+    "ADMIN"
   ]
 },
 
@@ -122,9 +120,7 @@ const menuItems: MenuItem[] = [
   href: "/voters",
   roles: [
     "SUPER_ADMIN",
-    "ADMIN",
-    "CAMPAIGN_MANAGER",
-    "CAMPAIGNER"
+    "ADMIN"
   ]
   },
 

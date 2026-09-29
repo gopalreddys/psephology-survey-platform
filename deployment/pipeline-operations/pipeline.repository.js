@@ -5,6 +5,18 @@ import { getDb } from "../db/postgres.js";
 const runFile = promisify(execFile);
 const RECOVERY_TIMER = "psephology-lifecycle-recovery.timer";
 const RECOVERY_SERVICE = "psephology-lifecycle-recovery.service";
+const SUCCESSFUL_CONVERSATION_OUTCOMES = new Set([
+  "COMPLETED",
+  "SUCCESS_COMPLETE",
+  "SUCCESS_PULSE",
+  "SUCCESS_SUBSTANTIAL"
+]);
+
+function isSuccessfulConversationOutcome(value) {
+  return SUCCESSFUL_CONVERSATION_OUTCOMES.has(
+    String(value || "").trim().toUpperCase()
+  );
+}
 
 function properties(output) {
   return Object.fromEntries(
@@ -401,7 +413,7 @@ export function buildCallIssueTrace({ executions = [], webhooks = [], lifecycleD
       incidents.push(traceIncident("CONNECTED_EVIDENCE_GAP", row,
         `${transcriptCount} transcript turn(s); ${responseCount} structured response variable(s).`));
     } else if (connectivity === "connected" && normalized &&
-        !["SUCCESS_COMPLETE", "SUCCESS_PULSE", "SUCCESS_SUBSTANTIAL"].includes(normalized)) {
+        !isSuccessfulConversationOutcome(normalized)) {
       incidents.push(traceIncident("CONNECTED_INCOMPLETE", row,
         `${transcriptCount} transcript turn(s); normalized outcome ${normalized}.`));
     }
@@ -557,13 +569,23 @@ export async function getPipelineOverview(options = {}) {
       ORDER BY event.received_at DESC LIMIT 20
     `),
     db.query(`
-      SELECT COUNT(*) FILTER (WHERE LOWER(COALESCE(connectivity_status, '')) = 'connected'
-          AND (jsonb_typeof(interaction_transcript) <> 'array'
-            OR interaction_transcript = '[]'::jsonb))::int AS missing_transcripts,
-        COUNT(*) FILTER (WHERE LOWER(COALESCE(connectivity_status, '')) = 'connected'
-          AND (jsonb_typeof(response_variables) <> 'object'
-            OR response_variables = '{}'::jsonb))::int AS missing_responses
-      FROM calls
+      SELECT COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+            AND (jsonb_typeof(call_record.interaction_transcript) <> 'array'
+              OR call_record.interaction_transcript = '[]'::jsonb)
+        )::int AS missing_transcripts,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+            AND (jsonb_typeof(call_record.response_variables) <> 'object'
+              OR call_record.response_variables = '{}'::jsonb)
+        )::int AS missing_responses
+      FROM call_executions execution
+      JOIN LATERAL (
+        SELECT item.* FROM calls item
+        WHERE item.attempt_id = execution.provider_attempt_id
+        ORDER BY item.updated_at DESC NULLS LAST, item.created_at DESC NULLS LAST
+        LIMIT 1
+      ) call_record ON TRUE
     `),
     db.query(`
       SELECT COUNT(*) FILTER (WHERE created_at >= now() - interval '24 hours')::int AS recovered_24h,
@@ -853,7 +875,7 @@ export function evaluatePlatformHealth({ overview, timer, now = new Date() }) {
     const stale = !Number.isFinite(ageMs) || ageMs > 7 * 24 * 60 * 60 * 1000;
     const progressed = numeric(latest.transcript_turns) >= 4 &&
       numeric(latest.response_variables) > 0 &&
-      String(latest.normalized_status || "").toUpperCase() === "SUCCESS_COMPLETE";
+      isSuccessfulConversationOutcome(latest.normalized_status);
     canaryStatus = progressed ? stale ? "WARN" : "PASS" : "FAIL";
     canaryBlocking = !progressed || stale;
     canaryMessage = progressed

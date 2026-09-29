@@ -244,6 +244,7 @@ export default function Home() {
   const role = user?.role.code;
   const summary = data?.summary;
   const metrics = role && summary ? metricsFor(role, summary) : [];
+  const dashboardMatchesRole = Boolean(role && data?.role === role);
 
   return <AppShell><main className={styles.page}>
     <header className={styles.hero}>
@@ -251,7 +252,7 @@ export default function Home() {
       <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
     </header>
     {error && <FeedbackMessage tone="error" message={error} />}
-    {loading ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={23} />Loading your Dashboard…</div> : data && <>
+    {loading || (data && !dashboardMatchesRole) ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={23} />Loading your Dashboard…</div> : data && <>
       <div className={styles.scope}><ShieldCheck size={15} />These figures reflect only Campaigns and Iterations visible to your role. No demo result is presented as a vote forecast.</div>
       {data.roleBrief && <section className={styles.roleBrief} data-status={data.roleBrief.status}>
         <div className={styles.roleBriefMain}>

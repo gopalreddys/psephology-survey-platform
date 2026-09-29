@@ -118,6 +118,9 @@ export default function VotersPage() {
   const canManageElectorate =
     canLaunchDemoCall;
 
+  const canViewVoterMaster =
+    canLaunchDemoCall;
+
   const [
     summary,
     setSummary
@@ -306,6 +309,11 @@ export default function VotersPage() {
   useEffect(
     function () {
 
+      if (!canViewVoterMaster) {
+        setLoading(false);
+        return;
+      }
+
       const loadTimer =
         window.setTimeout(
           function () {
@@ -321,7 +329,7 @@ export default function VotersPage() {
       };
 
     },
-    []
+    [canViewVoterMaster]
   );
 
 
@@ -569,6 +577,20 @@ export default function VotersPage() {
     }
   }
 
+
+  if (user && !canViewVoterMaster) {
+    return (
+      <AppShell>
+        <div className="voter-master-page">
+          <FeedbackMessage
+            message="The canonical Voter Master is available to Admin and Super Admin roles. Campaign Managers and Campaigners work only with governed campaign cohorts and masked Run contacts."
+            tone="error"
+            className="voter-message"
+          />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
