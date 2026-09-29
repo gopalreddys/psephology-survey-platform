@@ -46,6 +46,8 @@ assert.match(repository, /respondentObservations/);
 assert.match(repository, /buildSentimentAnalysis/);
 assert.match(repository, /buildPartyStrengthAnalysis/);
 assert.match(repository, /buildPredictiveAnalysis/);
+assert.match(repository, /directional research judgment/);
+assert.match(repository, /No participant-level political score or category is produced/);
 assert.match(repository, /buildNextIterationPlan/);
 assert.match(repository, /Entire selected Iteration, deduplicated by respondent across Runs/);
 assert.match(repository, /Run selection changes operational metrics/);

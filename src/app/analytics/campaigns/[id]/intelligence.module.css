@@ -74,7 +74,7 @@
 .planGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
 .planGrid article { padding: 16px; border: 1px solid #eadfe1; border-radius: 15px; background: #fff; }
 .planGrid article > strong { display: block; padding-top: 10px; border-top: 1px solid #f0e7e9; color: #59484d; font-size: 10px; line-height: 1.45; }
-.methodology > div:nth-child(2) { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 16px; }
+.methodology > div:nth-child(2) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 16px; }
 .methodology article { padding: 11px; border: 1px solid #e2ebe9; border-radius: 11px; background: #fff; }
 .methodology article span { display: block; color: #7e6d72; font-size: 9px; }
 .methodology article strong { display: block; margin-top: 5px; font-size: 11px; }

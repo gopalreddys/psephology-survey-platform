@@ -644,7 +644,7 @@ export default function ProgramsPage() {
             <p>
               Govern campaign-led voter thought-process
               research from constituency scope through AI
-              conversations, sentiment analysis and predictive analytics.
+              conversations, sentiment analysis and directional research outlooks.
             </p>
 
           </div>
@@ -735,7 +735,7 @@ export default function ProgramsPage() {
             icon={BarChart3}
             label="Research Model"
             value="Voter Intelligence"
-            detail="Campaign-led sentiment and prediction"
+            detail="Campaign-led sentiment and directional outlook"
           />
 
         </section>
@@ -1540,7 +1540,7 @@ export default function ProgramsPage() {
           <ArrowRight size={12} />
 
           <strong>
-            Predictive Analytics
+            Directional Research Outlook
           </strong>
 
         </div>

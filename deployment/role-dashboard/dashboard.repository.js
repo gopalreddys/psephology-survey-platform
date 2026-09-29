@@ -223,6 +223,114 @@ function nextIterationProjection(points) {
   return Number(Math.min(Math.max(points.at(-1).value + averageChange, 1), 5).toFixed(1));
 }
 
+function questionnaireSnapshot(value) {
+  if (!value) return null;
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function researchInstrument(iteration) {
+  const snapshot = questionnaireSnapshot(iteration.questionnaire_snapshot);
+  const code = scalarText(snapshot?.code);
+  const version = scalarText(snapshot?.version);
+  const researchPhase = scalarText(iteration.research_phase).toUpperCase();
+  const sampleDesign = scalarText(iteration.sample_design_type).toUpperCase();
+  if (!code || !version || !researchPhase || !sampleDesign) return null;
+  return {
+    code,
+    version,
+    researchPhase,
+    sampleDesign,
+    key: [code, version, researchPhase, sampleDesign].join("::")
+  };
+}
+
+function buildComparableTrend(availableIterations, evidenceRows, selectedCampaign, selectedIteration) {
+  const trendCampaignId = selectedCampaign?.id || selectedIteration?.campaign_id || null;
+  if (!trendCampaignId) {
+    return {
+      status: "NOT_COMPARABLE",
+      reason: "Select one Campaign before interpreting movement across Iterations.",
+      points: [],
+      includedIterations: 0,
+      excludedIterations: availableIterations.length,
+      instrument: null
+    };
+  }
+
+  const campaignIterations = availableIterations.filter((iteration) =>
+    iteration.campaign_id === trendCampaignId
+  );
+  const evidenceByIteration = new Map();
+  for (const record of evidenceRows) {
+    if (record.campaign_id !== trendCampaignId) continue;
+    const current = evidenceByIteration.get(record.iteration_id) || [];
+    current.push(record);
+    evidenceByIteration.set(record.iteration_id, current);
+  }
+  const referenceIteration = selectedIteration?.campaign_id === trendCampaignId
+    ? selectedIteration
+    : [...campaignIterations].reverse().find((iteration) =>
+        evidenceByIteration.has(iteration.id) && researchInstrument(iteration)
+      ) || null;
+  const instrument = referenceIteration ? researchInstrument(referenceIteration) : null;
+
+  if (!instrument) {
+    return {
+      status: "NOT_COMPARABLE",
+      reason: "Trend unavailable—this research scope has no frozen questionnaire version and research-design identity.",
+      points: [],
+      includedIterations: 0,
+      excludedIterations: campaignIterations.length,
+      instrument: null
+    };
+  }
+
+  const comparableIterations = campaignIterations.filter((iteration) =>
+    researchInstrument(iteration)?.key === instrument.key
+  );
+  const points = comparableIterations.map((iteration) => {
+    const iterationRecords = evidenceByIteration.get(iteration.id) || [];
+    return {
+      iterationId: iteration.id,
+      iterationNumber: count(iteration.iteration_number),
+      iterationName: iteration.iteration_name,
+      campaignName: iteration.campaign_name,
+      base: iterationRecords.length,
+      value: iterationRating(iterationRecords)
+    };
+  }).filter((point) => point.value !== null);
+  const excludedIterations = campaignIterations.length - comparableIterations.length;
+
+  if (points.length < 2) {
+    return {
+      status: "INSUFFICIENT_COMPARABLE_HISTORY",
+      reason: "Trend unavailable—at least two Iterations with the same frozen questionnaire version, research phase and sample design are required.",
+      points,
+      includedIterations: comparableIterations.length,
+      excludedIterations,
+      instrument
+    };
+  }
+
+  return {
+    status: "DIRECTIONAL",
+    reason: `${points.length} instrument-compatible Iterations are included; ${excludedIterations} incompatible Iteration${excludedIterations === 1 ? " is" : "s are"} excluded.`,
+    points,
+    includedIterations: comparableIterations.length,
+    excludedIterations,
+    instrument
+  };
+}
+
 function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRows, selection) {
   if (actor.role_code === "CAMPAIGNER") return null;
   const programs = Array.from(new Map(campaigns.map((campaign) => [
@@ -287,24 +395,20 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       variables.priority_development || variables.desired_change || variables.expected_change
     );
   }).slice(0, 6);
-  const trend = availableIterations.map((iteration) => {
-    const iterationRecords = evidenceRows.filter((record) =>
-      record.campaign_id === iteration.campaign_id && record.iteration_id === iteration.id
-    );
-    return {
-      iterationId: iteration.id,
-      iterationNumber: count(iteration.iteration_number),
-      iterationName: iteration.iteration_name,
-      campaignName: iteration.campaign_name,
-      base: iterationRecords.length,
-      value: iterationRating(iterationRecords)
-    };
-  }).filter((point) => point.value !== null);
+  const trendScope = buildComparableTrend(
+    availableIterations,
+    evidenceRows,
+    selectedCampaign,
+    selectedIteration
+  );
+  const trend = trendScope.points;
   const rating = iterationRating(reportable);
   const confidence = reportable.length >= 100 ? "High"
     : reportable.length >= 30 ? "Moderate"
       : "Directional";
-  const predictiveConfidence = trend.length >= 3 && reportable.length >= 100
+  const predictiveConfidence = trendScope.status !== "DIRECTIONAL"
+    ? "Not assessed"
+    : trend.length >= 3 && reportable.length >= 100
     ? "High"
     : trend.length >= 2 && reportable.length >= 30
       ? "Moderate"
@@ -371,12 +475,28 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       return true;
     }), (record) => normalizeMandal(record.mandal_name)),
     predictive: {
-      status: "DIRECTIONAL",
-      direction: trendDirection(trend),
+      status: trendScope.status,
+      direction: trendScope.status === "NOT_COMPARABLE"
+        ? "Trend unavailable"
+        : trendScope.status === "INSUFFICIENT_COMPARABLE_HISTORY"
+          ? "Insufficient comparable history"
+          : trendDirection(trend),
       points: trend,
-      projectedNextRating: nextIterationProjection(trend),
+      projectedNextRating: trendScope.status === "DIRECTIONAL"
+        ? nextIterationProjection(trend)
+        : null,
       confidence: predictiveConfidence,
-      statement: "Aggregate Iteration trend across the selected Program scope; not an election forecast or participant-level prediction."
+      statement: trendScope.status === "DIRECTIONAL"
+        ? `${trendScope.reason} The result is directional, not an election forecast or participant-level prediction.`
+        : trendScope.reason,
+      comparability: {
+        includedIterations: trendScope.includedIterations,
+        excludedIterations: trendScope.excludedIterations,
+        questionnaireCode: trendScope.instrument?.code || null,
+        questionnaireVersion: trendScope.instrument?.version || null,
+        researchPhase: trendScope.instrument?.researchPhase || null,
+        sampleDesign: trendScope.instrument?.sampleDesign || null
+      }
     },
     methodology: {
       sampleType: "UNWEIGHTED_DIRECTIONAL",
@@ -704,7 +824,9 @@ export async function getRoleDashboard(actor, selection = {}) {
   const iterationsPromise = db.query(`
     SELECT iteration.id, link.campaign_id, iteration.iteration_number,
       iteration.iteration_name, COALESCE(link.status, iteration.status) AS status,
-      iteration.questionnaire_id, iteration.voice_agent_id,
+      iteration.questionnaire_id, iteration.questionnaire_snapshot,
+      iteration.research_phase, iteration.sample_design_type,
+      iteration.voice_agent_id,
       campaign.campaign_name, campaign.program_id
     FROM campaign_iteration_links link
     JOIN campaigns campaign ON campaign.id = link.campaign_id

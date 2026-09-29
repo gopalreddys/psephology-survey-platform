@@ -66,14 +66,14 @@ respondent-observation base and contributing components. The composite is
 directional research evidence, not vote intention, and no participant rating or
 participant-to-band mapping is created or retained.
 
-Party attention is not labelled as vote intention. Predictive output remains
-an aggregate directional judgment while the evidence is a small/demo cohort
+Party attention is not labelled as vote intention. The directional research
+outlook remains an aggregate judgment while the evidence is a small/demo cohort
 without sampling weights and out-of-sample validation. The platform never
 produces an individual voter political-propensity score.
 
 The streamlined Iteration-wide Analysis separates:
 
-- predictive analytics: aggregate party-strength outlook, confidence, drivers
+- directional research outlook: aggregate party-strength signals, confidence, drivers
   and exact contributing output variables;
 - sentiment analysis: positive, neutral, negative and uncertain distributions,
   variable-level coverage and an Iteration judgment;
@@ -84,7 +84,11 @@ The streamlined Iteration-wide Analysis separates:
 - psephology quality controls for sample base, minimum segment size, weighting,
   representativeness, uncertainty and benchmark continuity.
 
-Selecting a Run changes operational metrics only. Predictive, sentiment and
+The quality gate also discloses the AI-assisted outbound voice collection mode,
+states that no sampling margin of error is available for the controlled demo
+cohort, and requires research oversight before findings are used externally.
+
+Selecting a Run changes operational metrics only. Directional-outlook, sentiment and
 party-strength judgments always use all deduplicated respondents in the selected
 Iteration.
 

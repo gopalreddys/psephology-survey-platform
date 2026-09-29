@@ -104,7 +104,7 @@ function IterationJudgments({ data }: { data: StrategicResponse }) {
       <div className={intelligenceStyles.judgmentIntro}><span>ITERATION-WIDE ANALYTICS</span><h2>Two judgments, one evidence base</h2><p>All deduplicated respondents in the selected Iteration are analysed. Run selection affects operational metrics only.</p></div>
       <div className={intelligenceStyles.judgmentGrid}>
         <article className={intelligenceStyles.predictiveCard}>
-          <span>PREDICTIVE ANALYTICS</span>
+          <span>DIRECTIONAL RESEARCH OUTLOOK</span>
           <h3>{data.predictiveAnalysis.outlook}</h3>
           {estimate.value === null
           ? <div className={intelligenceStyles.emptyStars}>☆☆☆☆☆</div>
@@ -129,7 +129,7 @@ function IterationJudgments({ data }: { data: StrategicResponse }) {
         <div className={intelligenceStyles.strengthMeasures}><div><span>Derived from outputs</span><strong>{estimate.value === null ? "Not measured" : `${estimate.value}/5`}</strong><small>{estimate.judgment}</small></div><div><span>Direct neutral 1–5 question</span><strong>{data.partyStrengthAnalysis.directMeasure.value === null ? "Not asked" : `${data.partyStrengthAnalysis.directMeasure.value}/5`}</strong><small>{data.partyStrengthAnalysis.directMeasure.answered} direct answers</small></div></div>
         <div className={intelligenceStyles.strengthComponents}>{estimate.components.map((component) => <div key={component.key}><span>{component.label}</span><strong>{component.value.toFixed(1)}/5</strong><small>{component.answered} answers</small><VariableChips variables={component.variables} /></div>)}</div>
       </article>
-      <div className={intelligenceStyles.analysisGuard}><ShieldAlert size={16} /><span>Predictive output is an aggregate research judgment—not constituency vote share, an election forecast, or a participant-level political score.</span></div>
+      <div className={intelligenceStyles.analysisGuard}><ShieldAlert size={16} /><span>This outlook is an aggregate directional research judgment—not constituency vote share, an election forecast, or a participant-level political score.</span></div>
     </section>
   );
 }
@@ -207,7 +207,7 @@ export default function StrategicCampaignAnalyticsPage() {
       response.predictiveAnalysis ||= {
         outlook: "Insufficient evidence",
         confidence: "Directional",
-        judgment: "Complete the structured outputs before drawing a predictive judgment.",
+        judgment: "Complete the structured outputs before drawing a directional research judgment.",
         respondentBase: response.segment.respondentBase || 0,
         variables: [],
         drivers: [],
@@ -271,7 +271,7 @@ export default function StrategicCampaignAnalyticsPage() {
               <DistributionCard eyebrow="DEVELOPMENT" title="Development priorities" items={data.issueAnalysis.developmentPriorities} empty="No development priority was captured." />
               <DistributionCard eyebrow="CHANGE" title="Changes voters want" items={data.issueAnalysis.desiredChanges} empty="No desired-change output was captured." />
             </div>
-            <p className={intelligenceStyles.methodNote}><ShieldAlert size={15} />Party attention, candidate perception and leadership signals are aggregate evidence components. Their exact output variables are documented in the predictive and sentiment sections above.</p>
+            <p className={intelligenceStyles.methodNote}><ShieldAlert size={15} />Party attention, candidate perception and leadership signals are aggregate evidence components. Their exact output variables are documented in the directional-outlook and sentiment sections above.</p>
           </section>
 
           <section className={styles.findingsSection}><div className={styles.sectionHead}><div><span>WHAT THE EVIDENCE SAYS</span><h2>Evidence-qualified findings</h2></div><p>Each finding shows the output variables used.</p></div>{!data.findings.length ? <div className={styles.noSignal}>No decision finding can be generated from the current evidence.</div> : <div className={styles.findings}>{data.findings.slice(0, 4).map((finding) => <article key={`${finding.type}-${finding.title}`}><div><Target size={17} /><span>{finding.type}</span></div><h3>{finding.title}</h3><strong>{finding.evidence}</strong><p>{finding.caution}</p><VariableChips variables={finding.variables} /></article>)}</div>}</section>
@@ -279,7 +279,7 @@ export default function StrategicCampaignAnalyticsPage() {
           <section className={intelligenceStyles.actionPlan}><div className={styles.sectionHead}><div><span>NEXT-LEVEL SURVEY PLAN</span><h2>Clear actions for the next Iteration</h2></div><p>Prioritized from the complete Iteration evidence.</p></div><div className={intelligenceStyles.planGrid}>{data.nextIterationPlan.map((item) => <article key={item.priority}><span>PRIORITY {item.priority}</span><h3>{item.title}</h3><p>{item.objective}</p><strong>{item.rationale}</strong><VariableChips variables={item.variables} /></article>)}</div></section>
         </>}
 
-        <section className={intelligenceStyles.methodology}><div><span>PSEPHOLOGY QUALITY GATE</span><h2>How to interpret this Analysis</h2><p>{data.methodology.analysisUnit}</p></div><div><article><span>Age bands</span><strong>{data.methodology.ageBands.join(" · ")}</strong></article><article><span>Minimum segment</span><strong>n={data.methodology.minimumSegmentBase}</strong></article><article><span>Weighting</span><strong>{data.methodology.weighting}</strong></article><article><span>Sampling</span><strong>{data.methodology.representativeSampling}</strong></article></div><p><AlertTriangle size={14} />{data.methodology.uncertainty}</p><p><FileQuestion size={14} />{data.methodology.benchmarkRule}</p></section>
+        <section className={intelligenceStyles.methodology}><div><span>PSEPHOLOGY QUALITY GATE</span><h2>How to interpret this Analysis</h2><p>{data.methodology.analysisUnit}</p></div><div><article><span>Age bands</span><strong>{data.methodology.ageBands.join(" · ")}</strong></article><article><span>Minimum segment</span><strong>n={data.methodology.minimumSegmentBase}</strong></article><article><span>Weighting</span><strong>{data.methodology.weighting}</strong></article><article><span>Sampling</span><strong>{data.methodology.representativeSampling}</strong></article><article><span>Collection mode</span><strong>AI-assisted outbound voice interviews</strong></article><article><span>Statistical precision</span><strong>No sampling margin of error</strong></article></div><p><AlertTriangle size={14} />{data.methodology.uncertainty}</p><p><FileQuestion size={14} />{data.methodology.benchmarkRule}</p><p><ShieldAlert size={14} />AI supports interviewing and structured-output capture. Interpretation remains aggregate and should receive research oversight before external use.</p></section>
 
         <section className={styles.validity}><div className={styles.validityLead}><AlertTriangle size={22} /><div><span>INTERPRETATION</span><h2>Directional aggregate evidence</h2><p>Findings describe responding cohorts and do not estimate constituency vote share.</p></div></div><div className={styles.warnings}>{data.validity.warnings.slice(0, 4).map((warning) => <p key={warning}><AlertTriangle size={14} />{warning}</p>)}</div></section>
         <footer className={styles.generated}><FileQuestion size={14} />Generated from stored platform evidence. No individual political profile, propensity score, or targeting list is produced.</footer>

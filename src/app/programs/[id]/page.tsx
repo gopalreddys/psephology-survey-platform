@@ -405,7 +405,7 @@ export default function ProgramDetailPage() {
             </div>
             <div className={styles.researchBoundary}>
               <AlertTriangle size={15} />
-              Program evidence remains directional; representative and predictive reporting is locked until methodology controls are configured.
+              Program evidence remains directional; representative and forecast-grade reporting is locked until methodology controls are configured.
             </div>
           </section>
         </div>

@@ -793,7 +793,7 @@ function buildPredictiveAnalysis(records, partyStrength, sentiment) {
     outlook,
     confidence,
     judgment: value === null
-      ? "Complete the missing structured outputs before drawing a predictive judgment."
+      ? "Complete the missing structured outputs before drawing a directional research judgment."
       : `${outlook}. ${sentiment.judgment}.`,
     respondentBase: records.length,
     variables: Array.from(new Set(
@@ -807,7 +807,7 @@ function buildPredictiveAnalysis(records, partyStrength, sentiment) {
     })),
     limitations: [
       "The result is an aggregate directional estimate, not constituency vote share.",
-      "No participant-level prediction or political category is produced.",
+      "No participant-level political score or category is produced.",
       "Representative sampling, weighting and external outcome calibration are required for electoral forecasting."
     ]
   };
@@ -884,7 +884,7 @@ function buildIterationDashboard(records, {
     },
     predictiveAssessment: {
       status: respondentBase ? "DIRECTIONAL" : "NOT_AVAILABLE",
-      label: respondentBase ? "Aggregate directional outlook" : "No predictive evidence",
+      label: respondentBase ? "Aggregate directional outlook" : "No directional-outlook evidence",
       reasons,
       permittedUse: "Guide aggregate Iteration questionnaire design and compare repeated measures.",
       prohibitedUse: "Do not infer individual vote choice, persuasion likelihood or constituency vote share."
@@ -1094,7 +1094,7 @@ function buildNextIterationPlan({
       priority: 2,
       title: "Reduce uncertainty before testing movement",
       objective: "Use comprehension, awareness and evidence-recall questions before asking evaluative follow-ups.",
-      rationale: `${sentiment.judgment}; predictive confidence is ${predictive.confidence.toLowerCase()}.`,
+      rationale: `${sentiment.judgment}; directional-outlook confidence is ${predictive.confidence.toLowerCase()}.`,
       variables: sentiment.variables.map((variable) => variable.key)
     });
   } else {
@@ -1362,7 +1362,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     warnings.unshift(`Campaign overview uses Iteration ${selectedIteration.number} for current signal distributions; movement is shown separately across compatible Iterations.`);
   }
   if (selectedRun) {
-    warnings.unshift(`Run ${selectedRun.number} changes operational metrics only. Predictive, sentiment and party-strength judgments continue to use all deduplicated respondents in Iteration ${selectedIteration.number}.`);
+    warnings.unshift(`Run ${selectedRun.number} changes operational metrics only. Directional outlook, sentiment and party-strength judgments continue to use all deduplicated respondents in Iteration ${selectedIteration.number}.`);
   }
   if (selectedRecords.length && demoRespondents === selectedRecords.length) {
     warnings.unshift("The selected Iteration contains only controlled demo respondents; all findings are directional demonstrations.");
