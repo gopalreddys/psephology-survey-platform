@@ -583,7 +583,7 @@ export async function getPipelineOverview(options = {}) {
       JOIN LATERAL (
         SELECT item.* FROM calls item
         WHERE item.attempt_id = execution.provider_attempt_id
-        ORDER BY item.updated_at DESC NULLS LAST, item.created_at DESC NULLS LAST
+        ORDER BY item.updated_at DESC NULLS LAST
         LIMIT 1
       ) call_record ON TRUE
     `),
