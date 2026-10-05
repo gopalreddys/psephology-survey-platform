@@ -1,0 +1,59 @@
+{
+  "name": "Psephology Enterprise Leadership Dashboard",
+  "provider": "Amazon Quick Sight",
+  "datasetView": "analytics_research_enterprise_v1",
+  "refresh": "SPICE incremental refresh every 30 minutes during survey operations",
+  "globalFilters": [
+    "program_name",
+    "campaign_name",
+    "constituency_name",
+    "iteration_number",
+    "mandal_name",
+    "gender",
+    "age_band"
+  ],
+  "sheets": [
+    {
+      "name": "Leadership overview",
+      "visuals": [
+        { "type": "KPI", "title": "Respondent base", "measure": "distinct_count(respondent_key)" },
+        { "type": "KPI", "title": "Average party-strength", "measure": "avg(direct_party_strength)" },
+        { "type": "DONUT", "title": "Sentiment mix", "dimension": "respondent_sentiment", "measure": "distinct_count(respondent_key)" },
+        { "type": "BAR", "title": "Party landscape", "dimension": "party_salience", "measure": "distinct_count(respondent_key)" },
+        { "type": "BAR", "title": "Candidate perception", "dimension": "candidate_sentiment", "measure": "distinct_count(respondent_key)" },
+        { "type": "BAR", "title": "Party leadership", "dimension": "party_leadership", "measure": "distinct_count(respondent_key)" }
+      ]
+    },
+    {
+      "name": "Demographic pulse",
+      "visuals": [
+        { "type": "HISTOGRAM", "title": "Respondent age distribution", "measure": "age" },
+        { "type": "STACKED_BAR", "title": "Sentiment by age", "dimension": "age_band", "color": "respondent_sentiment", "measure": "distinct_count(respondent_key)" },
+        { "type": "DONUT", "title": "Gender composition", "dimension": "gender", "measure": "distinct_count(respondent_key)" },
+        { "type": "STACKED_BAR", "title": "Party salience by gender", "dimension": "gender", "color": "party_salience", "measure": "distinct_count(respondent_key)" }
+      ]
+    },
+    {
+      "name": "Geographic intelligence",
+      "visuals": [
+        { "type": "HEAT_TABLE", "title": "Constituency × sentiment", "rows": "constituency_name", "columns": "respondent_sentiment", "measure": "distinct_count(respondent_key)" },
+        { "type": "HEAT_TABLE", "title": "Mandal × party salience", "rows": "mandal_name", "columns": "party_salience", "measure": "distinct_count(respondent_key)" },
+        { "type": "BAR", "title": "Issue priorities by constituency", "dimension": "constituency_name", "group": "issue_priority", "measure": "distinct_count(respondent_key)" }
+      ]
+    },
+    {
+      "name": "Iteration movement",
+      "visuals": [
+        { "type": "LINE", "title": "Party-strength movement", "dimension": "iteration_number", "measure": "avg(direct_party_strength)" },
+        { "type": "STACKED_BAR", "title": "Candidate sentiment by Iteration", "dimension": "iteration_number", "color": "candidate_sentiment", "measure": "distinct_count(respondent_key)" },
+        { "type": "BAR", "title": "Issue movement", "dimension": "iteration_number", "group": "issue_priority", "measure": "distinct_count(respondent_key)" }
+      ]
+    }
+  ],
+  "governance": {
+    "minimumCellSize": 5,
+    "publicEmbedding": false,
+    "rawPiiIncluded": false,
+    "forecastLabel": "Directional research evidence; not an election forecast"
+  }
+}

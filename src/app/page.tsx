@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList,
-  Clock3, FileText, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
+  Clock3, ExternalLink, FileText, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
   ShieldCheck, Users
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -249,7 +249,10 @@ export default function Home() {
   return <AppShell><main className={styles.page}>
     <header className={styles.hero}>
       <div><span>RESEARCH COMMAND CENTER</span><h1>{role ? titleFor(role) : "Dashboard"}</h1><p>{role ? descriptionFor(role) : "Loading your work…"}</p></div>
-      <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
+      <div className={styles.heroActions}>
+        {(role === "SUPER_ADMIN" || role === "ADMIN") && <Link href="/enterprise-dashboard"><BarChart3 size={16} />Amazon Quick preview <ExternalLink size={14} /></Link>}
+        <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
+      </div>
     </header>
     {error && <FeedbackMessage tone="error" message={error} />}
     {loading || (data && !dashboardMatchesRole) ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={23} />Loading your Dashboard…</div> : data && <>

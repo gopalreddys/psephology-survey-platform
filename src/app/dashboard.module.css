@@ -41,6 +41,8 @@
   font-weight: 750;
 }
 .hero button:disabled { opacity: .55; }
+.heroActions { display: flex; align-items: center; gap: 9px; }
+.heroActions > a { display: inline-flex; align-items: center; gap: 7px; padding: 11px 14px; border-radius: 12px; background: #158879; color: #fff; font-size: 11px; font-weight: 800; white-space: nowrap; }
 
 .scope {
   display: flex;
@@ -242,6 +244,7 @@
 @media (max-width: 760px) {
   .page { padding: 15px; }
   .hero { flex-direction: column; padding: 22px; }
+  .heroActions { width: 100%; flex-wrap: wrap; }
   .scope { align-items: flex-start; }
   .metrics, .campaigns { grid-template-columns: 1fr; }
   .campaignTop { flex-direction: column; }
