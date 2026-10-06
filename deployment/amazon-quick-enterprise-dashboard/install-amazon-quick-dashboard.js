@@ -15,6 +15,10 @@ await copyFile(
   path.join(runtimeRoot, "sql/024_amazon_quick_research_reporting.sql")
 );
 await copyFile(
+  path.join(packageRoot, "025_amazon_quick_geographic_heatmap.sql"),
+  path.join(runtimeRoot, "sql/025_amazon_quick_geographic_heatmap.sql")
+);
+await copyFile(
   path.join(packageRoot, "migrate-amazon-quick-dashboard.js"),
   path.join(runtimeRoot, "src/db/migrate-amazon-quick-dashboard.js")
 );

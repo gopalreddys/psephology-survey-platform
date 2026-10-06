@@ -9,6 +9,7 @@
     "constituency_name",
     "iteration_number",
     "mandal_name",
+    "party_name",
     "gender",
     "age_band"
   ],
@@ -35,7 +36,10 @@
     },
     {
       "name": "Geographic intelligence",
+      "datasetView": "analytics_research_geographic_v1",
       "visuals": [
+        { "type": "GEOSPATIAL_HEATMAP", "title": "Party pulse by Mandal", "latitude": "latitude", "longitude": "longitude", "weight": "heat_weight", "filter": "party_name" },
+        { "type": "POINT_MAP", "title": "Party-strength by Mandal", "latitude": "latitude", "longitude": "longitude", "size": "respondent_count", "color": "party_pulse_score" },
         { "type": "HEAT_TABLE", "title": "Constituency × sentiment", "rows": "constituency_name", "columns": "respondent_sentiment", "measure": "distinct_count(respondent_key)" },
         { "type": "HEAT_TABLE", "title": "Mandal × party salience", "rows": "mandal_name", "columns": "party_salience", "measure": "distinct_count(respondent_key)" },
         { "type": "BAR", "title": "Issue priorities by constituency", "dimension": "constituency_name", "group": "issue_priority", "measure": "distinct_count(respondent_key)" }
@@ -52,6 +56,8 @@
   ],
   "governance": {
     "minimumCellSize": 5,
+    "mapAggregationLevel": "MANDAL",
+    "mapCentroidSource": "analytics_geo_reference",
     "publicEmbedding": false,
     "rawPiiIncluded": false,
     "forecastLabel": "Directional research evidence; not an election forecast"

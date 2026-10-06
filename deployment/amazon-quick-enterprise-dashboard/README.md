@@ -12,7 +12,8 @@ the enterprise dashboard is authored and published in AWS.
 - demographic pulse: age histogram, age-band sentiment, gender composition and
   party salience by gender;
 - geographic intelligence: constituency and Mandal heat tables plus issue
-  priorities by constituency;
+  priorities by constituency, with a party-filtered Mandal map over Amazon
+  Quick's native base-map layer;
 - Iteration movement: comparable party-strength, candidate sentiment and issue
   movement across Iterations.
 
@@ -41,7 +42,8 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/rea
 1. Enable Quick Sight Enterprise in `ap-south-1`.
 2. Add the RDS PostgreSQL data source through a VPC connection and grant the
    Quick Sight security group database access. Prefer a reporting/read replica.
-3. Create a SPICE dataset from `analytics_research_enterprise_v1`.
+3. Create a SPICE dataset from `analytics_research_enterprise_v1` and a second
+   SPICE dataset from `analytics_research_geographic_v1`.
 4. Author the four sheets in `quick-dashboard-blueprint.json` and publish the
    dashboard.
 5. Create a Quick Sight Reader for the leadership preview and share the
@@ -60,6 +62,24 @@ QUICKSIGHT_ALLOWED_DOMAINS=https://your-platform.example.com
 For an authenticated internal-only preview, a one-click embed can be used
 instead by setting `QUICKSIGHT_ONE_CLICK_EMBED_URL`. Do not use public
 embedding.
+
+## Geographic map layer
+
+`analytics_research_geographic_v1` supplies latitude, longitude, party label,
+respondent count and aggregate party-strength to an Amazon Quick geospatial
+visual. Configure the visual as **Points on map**, place `latitude` and
+`longitude` in the geospatial field well, use `heat_weight` as the weight, and
+switch the point style to **Heatmap**. Add `party_name` as a sheet filter so
+leadership can compare the aggregate pulse party by party.
+
+The SQL enforces a minimum base of five distinct respondents before a
+geography/party cell can enter the BI dataset. It does not expose voter
+coordinates or identities. The included Serilingampally coordinate is a demo
+centroid. Before statewide production, load authoritative Mandal or
+constituency centroids/boundaries into `analytics_geo_reference` and record the
+source and verification date. Amazon Quick supports latitude/longitude point
+maps and a native heatmap style, so this implementation does not require a
+separate Google Maps or Mapbox API key.
 
 The EC2 instance role needs only:
 
