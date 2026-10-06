@@ -5128,6 +5128,26 @@ textarea.iteration-input {
   font-weight: 650;
 }
 
+.voter-template-button {
+  display: inline-flex;
+  min-height: 36px;
+  cursor: pointer;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border: 1px solid rgba(22,140,127,.2);
+  border-radius: 9px;
+  color: #14766d;
+  background: #f2fffc;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.voter-template-button:hover {
+  background: #e8fbf7;
+}
+
 .voter-selected-file {
   display: inline-flex;
   align-items: center;

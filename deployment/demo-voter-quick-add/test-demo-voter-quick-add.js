@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { validateQuickAddInput } from "./demo-voter-quick-add.validation.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(here, "../..");
 const base = {
   fullName: "  Demo  Participant ",
   phoneNumber: "+91 98765 43210",
@@ -32,6 +33,28 @@ for (const [change, code] of [
     code
   });
 }
+
+const repository = readFileSync(path.join(here, "demo-voter-quick-add.repository.js"), "utf8");
+const routes = readFileSync(path.join(here, "demo-voter-quick-add.routes.js"), "utf8");
+const component = readFileSync(path.join(projectRoot, "src/components/DemoVoterQuickAdd.tsx"), "utf8");
+const iterationPage = readFileSync(path.join(projectRoot, "src/app/iterations/[id]/page.tsx"), "utf8");
+const voterPage = readFileSync(path.join(projectRoot, "src/app/voters/page.tsx"), "utf8");
+const template = readFileSync(path.join(projectRoot, "public/templates/voter-upload-template.csv"), "utf8").trim();
+
+assert.match(routes, /\/voters\/demo-voter-geographies/);
+assert.match(routes, /\/voters\/demo-voters/);
+assert.doesNotMatch(routes, /\/runs\/:runId/);
+assert.match(repository, /ADMIN_VOTER_MASTER_QUICK_ADD/);
+assert.doesNotMatch(repository, /campaign_run_contacts|campaign_runs|program_iterations|assertIterationAccess/);
+assert.match(component, /No Campaign, Iteration, Run or call will be changed/);
+assert.match(component, /\/api\/voters\/demo-voters/);
+assert.doesNotMatch(iterationPage, /DemoVoterQuickAdd|Add demo voter/);
+assert.match(voterPage, /<DemoVoterQuickAdd/);
+assert.match(voterPage, /voter-upload-template\.csv/);
+assert.equal(template.split("\n").length, 1);
+assert.match(template, /full_name/);
+assert.match(template, /epic_number/);
+assert.match(template, /app_id/);
 
 const fixture = mkdtempSync(path.join(tmpdir(), "quick-demo-voter-"));
 try {

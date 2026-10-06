@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Database,
+  Download,
   FileSpreadsheet,
   LoaderCircle,
   MapPinned,
@@ -24,6 +25,7 @@ import {
 
 import AppShell
   from "@/components/AppShell";
+import DemoVoterQuickAdd from "@/components/DemoVoterQuickAdd";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import VoterElectorateManager from "@/components/VoterElectorateManager";
 import {
@@ -310,7 +312,6 @@ export default function VotersPage() {
     function () {
 
       if (!canViewVoterMaster) {
-        setLoading(false);
         return;
       }
 
@@ -696,6 +697,22 @@ export default function VotersPage() {
         </section>
 
 
+        {canLaunchDemoCall && (
+
+          <DemoVoterQuickAdd
+            onAdded={
+              async function () {
+                await Promise.all([
+                  loadData(),
+                  loadDemoContacts()
+                ]);
+              }
+            }
+          />
+
+        )}
+
+
         <section className="voter-upload-panel">
 
           <div className="voter-upload-header">
@@ -777,6 +794,16 @@ export default function VotersPage() {
                 }
               </label>
 
+
+              <a
+                href="/templates/voter-upload-template.csv"
+                download="psephology-voter-upload-template.csv"
+                className="voter-template-button"
+              >
+                <Download size={15} />
+                Download Template
+              </a>
+
             </div>
 
 
@@ -798,8 +825,9 @@ export default function VotersPage() {
             <div className="voter-upload-actions">
 
               <div className="voter-upload-note">
-                Uploaded records are validated before
-                insertion or update.
+                Use the template headers exactly. Required:
+                full_name and either epic_number or app_id.
+                Uploaded records are validated before insertion or update.
               </div>
 
 

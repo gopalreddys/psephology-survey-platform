@@ -1,21 +1,23 @@
-# Admin demo-voter quick add
+# Admin demo-voter entry in Voter Master
 
-This provides an Admin/Super Admin-only form on a READY Run 1. It creates one
-consented demo contact, records an INTERNAL_DEMO identifier and DEMO electorate
-registration, and adds the contact to the frozen cohort in one transaction.
+This provides an Admin/Super Admin-only form on the Voter Data page. It creates
+one consented demo contact and records an `INTERNAL_DEMO` identifier and `DEMO`
+electorate registration in one transaction.
 
 It refuses the operation when:
 
-- the Run is not Run 1 in READY status;
-- any Run execution/attempt has started;
-- a later Run exists;
 - the phone number already exists in voter_master;
-- the geography is not already represented in the Run;
+- the geography is not an active geography already used by Voter Master;
 - consent is not explicitly confirmed; or
 - the live voter_master has unsupported mandatory fields.
 
-No provider call is submitted by this endpoint. The Campaigner must refresh,
-review every recipient and launch separately.
+The operation never changes a Campaign, Iteration, Run, frozen cohort or target
+count. No provider call is submitted. A later governed voter-selection workflow
+may include the new record in a future cohort.
+
+The Voter Data bulk-ingestion panel also exposes a static CSV template whose
+canonical column names match `voter-ingestion.service.js`. `full_name` and either
+`epic_number` or `app_id` are required by the current importer.
 
 ## Install
 
@@ -39,4 +41,5 @@ Then install the API route:
     sudo systemctl restart psephology-api.service
     curl --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:3000/ready
 
-Build/deploy the Next.js UI after installing the API.
+Build/deploy the Next.js UI after installing the API. The quick-add control is
+intentionally absent from Campaign, Iteration and Run pages.

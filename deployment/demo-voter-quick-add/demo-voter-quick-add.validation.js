@@ -23,7 +23,7 @@ export function validateQuickAddInput(input = {}) {
     throw fail("Enter a valid 10-digit Indian mobile number", 400, "PHONE_INVALID");
   }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(geoUnitId)) {
-    throw fail("Select a Run geography", 400, "GEOGRAPHY_REQUIRED");
+    throw fail("Select a voter geography", 400, "GEOGRAPHY_REQUIRED");
   }
   if (input.consentConfirmed !== true) {
     throw fail("Confirm consent for the AI test call and its recording/transcript", 400, "CONSENT_REQUIRED");

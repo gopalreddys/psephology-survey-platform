@@ -2,8 +2,8 @@ import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
 import {
-  addQuickDemoVoterToRun,
-  listQuickAddGeographies
+  addDemoVoterToMaster,
+  listDemoVoterGeographies
 } from "../repositories/demo-voter-quick-add.repository.js";
 
 const router = express.Router();
@@ -11,7 +11,7 @@ const adminRoles = ["SUPER_ADMIN", "ADMIN"];
 
 function replyWithError(res, error) {
   if (error.code === "23505") {
-    return res.status(409).json({ error: "Demo voter or Run recipient already exists", code: "DUPLICATE" });
+    return res.status(409).json({ error: "This demo voter already exists", code: "DUPLICATE" });
   }
   console.error("Demo voter quick add failed:", {
     code: error.code || null
@@ -23,12 +23,12 @@ function replyWithError(res, error) {
 }
 
 router.get(
-  "/runs/:runId/demo-voter-geographies",
+  "/voters/demo-voter-geographies",
   requireAuth,
   requireRole(adminRoles),
   async function (req, res) {
     try {
-      const geographies = await listQuickAddGeographies(req.params.runId, req.platformUser);
+      const geographies = await listDemoVoterGeographies();
       return res.json({ geographies });
     } catch (error) {
       return replyWithError(res, error);
@@ -37,12 +37,12 @@ router.get(
 );
 
 router.post(
-  "/runs/:runId/demo-voters",
+  "/voters/demo-voters",
   requireAuth,
   requireRole(adminRoles),
   async function (req, res) {
     try {
-      const result = await addQuickDemoVoterToRun(req.params.runId, req.platformUser, req.body || {});
+      const result = await addDemoVoterToMaster(req.platformUser, req.body || {});
       return res.status(201).json(result);
     } catch (error) {
       return replyWithError(res, error);

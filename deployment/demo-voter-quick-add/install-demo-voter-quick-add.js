@@ -42,4 +42,4 @@ if (!server.includes(marker)) {
   await writeFile(serverPath, server);
 }
 
-console.log(`Enabled Admin-only pre-launch demo voter quick add in ${runtimeRoot}`);
+console.log(`Enabled Admin-only Voter Master demo voter entry in ${runtimeRoot}`);
