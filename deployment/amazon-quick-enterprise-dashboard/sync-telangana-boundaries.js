@@ -47,6 +47,10 @@ function normalized(value) {
   return String(value || "").trim().toLocaleLowerCase("en-IN");
 }
 
+function isDemoLocality(value) {
+  return normalized(value).replace(/[^a-z]/g, "").startsWith("serilingampall");
+}
+
 function closeRing(ring) {
   const points = ring.map(([longitude, latitude]) => [Number(longitude), Number(latitude)]);
   if (!points.length) return points;
@@ -155,7 +159,7 @@ const rows = fetched.map(({ layer, attributes, geometry }) => {
   } else if (
     layer.type === "STATE" ||
     (layer.type === "DISTRICT" && normalized(name) === demoDistrict) ||
-    (layer.type === "MANDAL" && normalized(name) === normalized(DEMO_CONSTITUENCY) && normalized(district) === demoDistrict)
+    (layer.type === "MANDAL" && isDemoLocality(name) && normalized(district) === demoDistrict)
   ) {
     demoScope = "CONTEXT";
   }

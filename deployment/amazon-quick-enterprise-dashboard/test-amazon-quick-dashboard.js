@@ -32,6 +32,7 @@ assert.doesNotMatch(boundarySql, /phone_number|full_name|epic_number|transcript_
 assert.match(boundarySync, /tgrac\.telangana\.gov\.in/);
 assert.match(boundarySync, /DEMO_CONSTITUENCY = "Serilingampally"/);
 assert.match(boundarySync, /DEMO_CONSTITUENCY_NUMBER = "52"/);
+assert.match(boundarySync, /startsWith\("serilingampall"\)/);
 assert.match(boundarySync, /outSR: "4326"/);
 assert.match(boundarySync, /process\.argv\.includes\("--apply"\)/);
 assert.match(routes, /GenerateEmbedUrlForRegisteredUserCommand/);
