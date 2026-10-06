@@ -10,6 +10,7 @@ import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
+import TelanganaBoundaryMap from "./TelanganaBoundaryMap";
 import styles from "./quick.module.css";
 
 type EmbedResponse = {
@@ -68,6 +69,8 @@ export default function EnterpriseDashboardPage() {
       <ShieldCheck size={18} />
       <div><strong>Governed leadership view</strong><span>Aggregate output variables only. No names, phone numbers, EPIC IDs, transcripts or raw JSON enter the BI dataset.</span></div>
     </section>
+
+    {user && <TelanganaBoundaryMap />}
 
     {loading && <section className={styles.loading}><LoaderCircle size={24} className={styles.spin} />Creating a secure Amazon Quick Sight session…</section>}
 

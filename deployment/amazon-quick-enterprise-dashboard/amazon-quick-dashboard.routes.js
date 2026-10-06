@@ -1,9 +1,13 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
+import { getDb } from "../db/postgres.js";
 
 const router = express.Router();
 const permittedRoles = ["SUPER_ADMIN", "ADMIN"];
+const permittedBoundaryTypes = new Set([
+  "STATE", "DISTRICT", "ASSEMBLY_CONSTITUENCY", "MANDAL"
+]);
 
 function dashboardConfiguration() {
   const allowedDomains = String(process.env.QUICKSIGHT_ALLOWED_DOMAINS || "")
@@ -30,6 +34,79 @@ function missingConfiguration(config) {
     ["QUICKSIGHT_ALLOWED_DOMAINS", config.allowedDomains.length]
   ].filter(([, value]) => !value).map(([name]) => name);
 }
+
+router.get(
+  "/enterprise-dashboard/geography-boundaries",
+  requireAuth,
+  requireRole(permittedRoles),
+  async function (req, res) {
+    try {
+      const boundaryType = String(req.query.layer || "ASSEMBLY_CONSTITUENCY")
+        .trim()
+        .toUpperCase();
+      if (!permittedBoundaryTypes.has(boundaryType)) {
+        return res.status(400).json({
+          error: "Layer must be STATE, DISTRICT, ASSEMBLY_CONSTITUENCY or MANDAL",
+          code: "INVALID_BOUNDARY_LAYER"
+        });
+      }
+
+      const db = await getDb();
+      const result = await db.query(
+        `SELECT
+           boundary_code,
+           boundary_name,
+           parent_district_name,
+           parent_division_name,
+           geometry,
+           demo_scope,
+           source_name,
+           source_url,
+           verified_at
+         FROM analytics_geo_boundary_reference
+         WHERE boundary_type = $1
+           AND is_active = TRUE
+         ORDER BY boundary_name, source_object_id`,
+        [boundaryType]
+      );
+      const first = result.rows[0] || null;
+      return res.json({
+        layer: boundaryType,
+        featureCount: result.rows.length,
+        source: first ? {
+          name: first.source_name,
+          url: first.source_url,
+          verifiedAt: first.verified_at
+        } : null,
+        demoConstituency: {
+          number: 52,
+          name: "Serilingampally",
+          district: "Rangareddy"
+        },
+        featureCollection: {
+          type: "FeatureCollection",
+          features: result.rows.map((row) => ({
+            type: "Feature",
+            properties: {
+              code: row.boundary_code,
+              name: row.boundary_name,
+              district: row.parent_district_name,
+              division: row.parent_division_name,
+              demoScope: row.demo_scope
+            },
+            geometry: row.geometry
+          }))
+        }
+      });
+    } catch (error) {
+      console.error("Unable to load Telangana administrative boundaries:", error);
+      return res.status(503).json({
+        error: "Unable to load Telangana administrative boundaries",
+        code: "BOUNDARY_MAP_UNAVAILABLE"
+      });
+    }
+  }
+);
 
 router.get(
   "/enterprise-dashboard/config",

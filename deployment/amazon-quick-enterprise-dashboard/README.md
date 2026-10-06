@@ -32,6 +32,8 @@ node deployment/amazon-quick-enterprise-dashboard/install-amazon-quick-dashboard
 cd /opt/sarvam-voice-analytics
 npm install --save @aws-sdk/client-quicksight
 node src/db/migrate-amazon-quick-dashboard.js
+node src/jobs/sync-telangana-boundaries.js
+node src/jobs/sync-telangana-boundaries.js --apply
 node --check src/routes/amazon-quick-dashboard.routes.js
 sudo systemctl restart psephology-api.service
 curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/ready
@@ -64,6 +66,27 @@ instead by setting `QUICKSIGHT_ONE_CLICK_EMBED_URL`. Do not use public
 embedding.
 
 ## Geographic map layer
+
+The platform presents two governed geographic views:
+
+1. an official Telangana administrative-boundary explorer, loaded from the
+   Telangana Remote Sensing Applications Centre (TGRAC) ArcGIS service; and
+2. Amazon Quick's aggregate survey map and charts.
+
+The boundary explorer supports State, 33 District, 119 Assembly constituency
+and 621 Mandal features. The deployment sync projects the source geometry to
+EPSG:4326, simplifies it for web presentation and stores the resulting GeoJSON
+in `analytics_geo_boundary_reference`. It identifies **AC 52 Serilingampally**
+as the demo focus and retains Rangareddy and the corresponding Mandal as map
+context. The sync is dry-run by default and only replaces the governed snapshot
+when `--apply` is supplied.
+
+Source service:
+`https://tgrac.telangana.gov.in/arcgis/rest/services/AdministrativeInfoSystem_Folder/Administrative_Information_System_Query/MapServer`
+
+The application endpoint is restricted to Super Admin and Admin, returns one
+requested layer at a time and exposes administrative polygons only. It does
+not return voter locations or respondent identities.
 
 `analytics_research_geographic_v1` supplies latitude, longitude, party label,
 respondent count and aggregate party-strength to an Amazon Quick geospatial

@@ -8,7 +8,8 @@ console.log("Applying Amazon Quick research reporting migration...");
 const db = await getDb();
 for (const migration of [
   "024_amazon_quick_research_reporting.sql",
-  "025_amazon_quick_geographic_heatmap.sql"
+  "025_amazon_quick_geographic_heatmap.sql",
+  "026_telangana_administrative_boundaries.sql"
 ]) {
   const sql = await readFile(path.resolve(here, "../../sql", migration), "utf8");
   await db.query(sql);

@@ -58,6 +58,14 @@
     "minimumCellSize": 5,
     "mapAggregationLevel": "MANDAL",
     "mapCentroidSource": "analytics_geo_reference",
+    "administrativeBoundarySource": "Telangana Remote Sensing Applications Centre (TGRAC)",
+    "administrativeBoundaryLayers": [
+      "STATE",
+      "DISTRICT",
+      "ASSEMBLY_CONSTITUENCY",
+      "MANDAL"
+    ],
+    "demoConstituency": "AC 52 · Serilingampally",
     "publicEmbedding": false,
     "rawPiiIncluded": false,
     "forecastLabel": "Directional research evidence; not an election forecast"

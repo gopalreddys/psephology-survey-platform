@@ -10,6 +10,7 @@ const marker = "AMAZON_QUICK_ENTERPRISE_DASHBOARD_V1";
 await mkdir(path.join(runtimeRoot, "sql"), { recursive: true });
 await mkdir(path.join(runtimeRoot, "src/db"), { recursive: true });
 await mkdir(path.join(runtimeRoot, "src/routes"), { recursive: true });
+await mkdir(path.join(runtimeRoot, "src/jobs"), { recursive: true });
 await copyFile(
   path.join(packageRoot, "024_amazon_quick_research_reporting.sql"),
   path.join(runtimeRoot, "sql/024_amazon_quick_research_reporting.sql")
@@ -19,12 +20,20 @@ await copyFile(
   path.join(runtimeRoot, "sql/025_amazon_quick_geographic_heatmap.sql")
 );
 await copyFile(
+  path.join(packageRoot, "026_telangana_administrative_boundaries.sql"),
+  path.join(runtimeRoot, "sql/026_telangana_administrative_boundaries.sql")
+);
+await copyFile(
   path.join(packageRoot, "migrate-amazon-quick-dashboard.js"),
   path.join(runtimeRoot, "src/db/migrate-amazon-quick-dashboard.js")
 );
 await copyFile(
   path.join(packageRoot, "amazon-quick-dashboard.routes.js"),
   path.join(runtimeRoot, "src/routes/amazon-quick-dashboard.routes.js")
+);
+await copyFile(
+  path.join(packageRoot, "sync-telangana-boundaries.js"),
+  path.join(runtimeRoot, "src/jobs/sync-telangana-boundaries.js")
 );
 
 let server = await readFile(serverPath, "utf8");
@@ -48,4 +57,5 @@ if (!server.includes(marker)) {
 
 console.log(`Enabled Amazon Quick enterprise dashboard integration in ${runtimeRoot}`);
 console.log("Run node src/db/migrate-amazon-quick-dashboard.js before restarting the API.");
+console.log("Run node src/jobs/sync-telangana-boundaries.js --apply to load official TGRAC boundaries.");
 console.log("Install @aws-sdk/client-quicksight when using API-generated embed sessions.");
