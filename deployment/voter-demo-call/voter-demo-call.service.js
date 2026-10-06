@@ -1,4 +1,5 @@
 import { createInstantOutboundCall } from "../clients/sarvam.js";
+import { buildVoterDemoAgentVariables } from "./voter-demo-call-context.js";
 
 const DEFAULT_SARVAM_CONFIGURATION = {
   appId: "Conversatio-040de042-626d",
@@ -85,41 +86,7 @@ export async function dispatchVoterDemoCall({
 }) {
   const configuration = sarvamConfiguration();
   const phoneNumber = normalizeIndianPhone(voter.phone_number);
-  const preferredLanguage = voter.preferred_language || "Telugu";
-
-  const agentVariables = {
-    demo_call_id: demoCallId,
-    voter_id: voter.id,
-    run_contact_id: "",
-    run_id: "",
-    attempt_cycle_id: "",
-    study_id: "",
-    iteration_id: "",
-    iteration_number: "0",
-    user_name: voter.full_name,
-    preferred_language: preferredLanguage,
-    voter_profession: voter.occupation || "",
-    voter_qualification: voter.qualification || "",
-    agent_code: process.env.SARVAM_DEMO_AGENT_CODE || "DEMO",
-    voice_code: process.env.SARVAM_DEMO_VOICE_CODE || "DEFAULT",
-    questionnaire_code:
-      process.env.SARVAM_DEMO_QUESTIONNAIRE_CODE ||
-      "CONTROLLED_DEMO",
-    probe_set: "",
-    max_probes: "1",
-    knowledge_packs: "",
-    source: "VOTER_MASTER_DEMO",
-    analytics_excluded: "true",
-    research_context:
-      "This is a controlled platform demonstration, not a production research interview.",
-    questionnaire_context:
-      "Introduce yourself as an AI assistant, state that this is a demonstration call, confirm that it is a convenient time, ask up to three neutral questions about local civic priorities, and thank the participant.",
-    knowledge_context: "",
-    probe_context:
-      "Do not probe a complete answer. Ask at most one short, neutral clarification only when the response cannot be coded.",
-    agent_style_context:
-      "Be transparent that you are an AI assistant. Be respectful, concise, neutral, and end immediately if the participant asks to stop. After each answer, acknowledge in two to five words and immediately ask the next question. Never repeat, paraphrase, summarize, interpret, praise, or debate the participant's answer."
-  };
+  const agentVariables = buildVoterDemoAgentVariables({ demoCallId, voter });
 
   let providerResponse;
 

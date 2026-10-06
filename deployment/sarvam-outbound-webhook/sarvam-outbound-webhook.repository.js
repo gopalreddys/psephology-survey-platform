@@ -6,14 +6,35 @@ import {
   classifyCallCompletion,
   DEFAULT_TECHNICAL_VARIABLES
 } from "./call-completion-policy.js";
+import {
+  recordVoterDemoCallOutcome
+} from "./voter-demo-calls.repository.js";
 
 const TECHNICAL_VARIABLES = DEFAULT_TECHNICAL_VARIABLES;
 
-function normalizeStatus(status) {
-  const value = String(status || "").trim().toLowerCase();
+function normalizeStatus(payload) {
+  const value = String(
+    payload?.connectivity_status || payload?.status || ""
+  ).trim().toLowerCase();
 
   if (["connected", "no_answer", "busy", "failed"].includes(value)) {
     return value;
+  }
+
+  /* Sarvam's current outbound callback contract separates completion from
+     connectivity. A connected interaction can therefore arrive without the
+     legacy status field. Transcript or interaction evidence is sufficient to
+     classify connectivity, while a terminal failed completion is not. */
+  if (
+    payload?.interaction_id ||
+    (Array.isArray(payload?.interaction_transcript) &&
+      payload.interaction_transcript.length > 0)
+  ) {
+    return "connected";
+  }
+
+  if (String(payload?.completion_status || "").toLowerCase() === "failed") {
+    return "failed";
   }
 
   const error = new Error("Unsupported Sarvam outbound status");
@@ -30,7 +51,7 @@ function scalarText(value) {
 }
 
 function metadataFrom(payload) {
-  return payload?.webhook_config?.metadata || {};
+  return payload?.webhook_config?.metadata || payload?.metadata || {};
 }
 
 function uuidOrNull(value) {
@@ -57,7 +78,12 @@ function eventHash(payload) {
 }
 
 export async function recordSarvamOutboundResult(payload) {
-  const attemptId = String(payload?.attempt_id || "").trim();
+  const attemptId = String(
+    payload?.attempt_id ||
+    payload?.job_id ||
+    payload?.interaction_id ||
+    ""
+  ).trim();
 
   if (!attemptId) {
     const error = new Error("attempt_id is required");
@@ -66,7 +92,7 @@ export async function recordSarvamOutboundResult(payload) {
     throw error;
   }
 
-  const providerStatus = normalizeStatus(payload.status);
+  const providerStatus = normalizeStatus(payload);
   const metadata = metadataFrom(payload);
   const fingerprint = eventHash(payload);
   const storedPayload = payloadForStorage(payload);
@@ -107,6 +133,19 @@ export async function recordSarvamOutboundResult(payload) {
         );
 
     const eventId = eventResult.rows[0].id;
+    const transcript = Array.isArray(payload.interaction_transcript)
+      ? payload.interaction_transcript
+      : [];
+    const finalVariables = {
+      ...(payload.output_agent_variables &&
+      typeof payload.output_agent_variables === "object"
+        ? payload.output_agent_variables
+        : {}),
+      ...(payload.final_agent_variables &&
+      typeof payload.final_agent_variables === "object"
+        ? payload.final_agent_variables
+        : {})
+    };
 
     const executionResult = await db.query(
       `
@@ -139,6 +178,59 @@ export async function recordSarvamOutboundResult(payload) {
     const execution = executionResult.rows[0];
 
     if (!execution) {
+      const demoCallId = uuidOrNull(
+        metadata.demo_call_id || finalVariables.demo_call_id
+      );
+      const demoOutcome = demoCallId
+        ? await recordVoterDemoCallOutcome(db, {
+            demoCallId,
+            providerCallId: attemptId,
+            providerStatus,
+            interactionId: payload.interaction_id || null,
+            disposition: scalarText(finalVariables.disposition),
+            goalStatus: scalarText(
+              payload.goal_status ||
+              payload.goal_evaluation?.status ||
+              payload.evaluation?.goal_status ||
+              (finalVariables.disposition === "survey_completed"
+                ? "PASSED"
+                : finalVariables.disposition
+                  ? "FAILED"
+                  : null)
+            ),
+            durationSeconds: payload.duration ?? null,
+            transcriptTurns: transcript.length,
+            finalAgentVariables: finalVariables,
+            callbackPayload: storedPayload,
+            failureReason: payload.failure_reason || null
+          })
+        : null;
+
+      if (demoOutcome) {
+        await db.query(
+          `
+            UPDATE sarvam_outbound_webhook_events
+            SET delivery_status = 'PROCESSED',
+                processed_at = now(),
+                error_message = NULL
+            WHERE id = $1
+          `,
+          [eventId]
+        );
+        await db.query("COMMIT");
+        return {
+          matched: true,
+          duplicate: false,
+          demoCall: true,
+          demoCallId: demoOutcome.id,
+          attemptId,
+          status: demoOutcome.status,
+          transcriptTurns: transcript.length,
+          disposition: demoOutcome.disposition,
+          goalStatus: demoOutcome.goal_status
+        };
+      }
+
       await db.query(
         `
           UPDATE sarvam_outbound_webhook_events
@@ -161,14 +253,6 @@ export async function recordSarvamOutboundResult(payload) {
       [String(execution.run_id)]
     );
 
-    const transcript = Array.isArray(payload.interaction_transcript)
-      ? payload.interaction_transcript
-      : [];
-    const finalVariables =
-      payload.final_agent_variables &&
-      typeof payload.final_agent_variables === "object"
-        ? payload.final_agent_variables
-        : {};
     const completion = classifyCallCompletion({
       providerStatus,
       finalVariables,

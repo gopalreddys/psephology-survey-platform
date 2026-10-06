@@ -57,12 +57,24 @@ export async function reserveVoterDemoCall({
           preferred_language,
           occupation,
           qualification,
+          age,
+          gender,
+          mandal_name_source,
+          assembly_constituency_name,
+          geography.name AS geography_name,
+          geography.geo_type AS geography_type,
+          parent_geography.name AS parent_geography_name,
+          parent_geography.geo_type AS parent_geography_type,
           contact_status,
           is_active,
           is_demo_contact
         FROM voter_master
-        WHERE id = $1
-        FOR UPDATE
+        LEFT JOIN geo_units geography
+          ON geography.id = voter_master.geo_unit_id
+        LEFT JOIN geo_units parent_geography
+          ON parent_geography.id = geography.parent_id
+        WHERE voter_master.id = $1
+        FOR UPDATE OF voter_master
       `,
       [voterId]
     );
@@ -216,6 +228,65 @@ export async function updateVoterDemoCall(demoCallId, {
   return result.rows[0] || null;
 }
 
+export async function recordVoterDemoCallOutcome(db, {
+  demoCallId,
+  providerCallId,
+  providerStatus,
+  interactionId = null,
+  disposition = null,
+  goalStatus = null,
+  durationSeconds = null,
+  transcriptTurns = 0,
+  finalAgentVariables = {},
+  callbackPayload = {},
+  failureReason = null
+}) {
+  const operationalStatus = providerStatus === "connected"
+    ? "COMPLETED"
+    : "FAILED";
+  const result = await db.query(
+    `
+      UPDATE voter_demo_calls
+      SET
+        status = $3,
+        provider_call_id = COALESCE(provider_call_id, $2),
+        provider_status = $4,
+        interaction_id = $5,
+        disposition = $6,
+        goal_status = $7,
+        duration_seconds = $8,
+        transcript_turns = $9,
+        final_agent_variables = $10::jsonb,
+        callback_payload = $11::jsonb,
+        callback_received_at = now(),
+        completed_at = now(),
+        error_code = CASE WHEN $3 = 'FAILED' THEN 'PROVIDER_CALL_FAILED' ELSE NULL END,
+        error_message = CASE WHEN $3 = 'FAILED' THEN $12 ELSE NULL END,
+        updated_at = now()
+      WHERE ($1::uuid IS NOT NULL AND id = $1::uuid)
+         OR ($1::uuid IS NULL AND $2 IS NOT NULL AND provider_call_id = $2)
+      RETURNING id, status, provider_call_id, disposition, goal_status,
+        callback_received_at
+    `,
+    [
+      demoCallId,
+      providerCallId,
+      operationalStatus,
+      providerStatus,
+      interactionId,
+      disposition,
+      goalStatus,
+      durationSeconds,
+      transcriptTurns,
+      JSON.stringify(finalAgentVariables),
+      JSON.stringify(callbackPayload),
+      failureReason
+    ]
+  );
+
+  return result.rows[0] || null;
+}
+
 export async function listVoterDemoCalls(voterId, limit = 10) {
   const db = await getDb();
   const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 25);
@@ -226,6 +297,13 @@ export async function listVoterDemoCalls(voterId, limit = 10) {
         demo.id,
         demo.status,
         demo.provider_call_id,
+        demo.provider_status,
+        demo.interaction_id,
+        demo.disposition,
+        demo.goal_status,
+        demo.duration_seconds,
+        demo.transcript_turns,
+        demo.callback_received_at,
         demo.preferred_language_snapshot,
         demo.submitted_at,
         demo.completed_at,

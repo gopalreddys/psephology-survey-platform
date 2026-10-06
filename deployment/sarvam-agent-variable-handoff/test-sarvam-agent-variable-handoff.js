@@ -58,6 +58,11 @@ assert.equal(hasCorrectAgentVariableHandoff(first.source), true);
 assert.match(first.source, /agent_variables:\s*normalizedAgentVariables/);
 assert.match(first.source, /registeredInputVariables\.has\(key\)/);
 assert.match(first.source, /const compactRuntimeDefaults =/);
+assert.match(first.source, /const isStandaloneDemoCall =/);
+assert.match(first.source, /VOTER_MASTER_DEMO/);
+assert.match(first.source, /mandal/);
+assert.match(first.source, /mla_constituency/);
+assert.match(first.source, /\.slice\(0, 1800\)/);
 assert.match(first.source, /questionnaire_context: ""/);
 assert.match(first.source, /probe_context: "Probe"/);
 assert.match(first.source, /agent_style_context: "Agent style"/);
@@ -82,7 +87,7 @@ assert.throws(
 );
 
 const upgradedV1Client = first.source
-  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V4", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V5", "SARVAM_AGENT_VARIABLE_HANDOFF_V1")
   .replace(
     /const normalizedAgentVariables =[\s\S]*?\n\s*const body =/m,
     "const body ="
@@ -97,7 +102,7 @@ assert.equal(upgraded.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(upgraded.source), true);
 
 const upgradedV2Client = first.source
-  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V4", "SARVAM_AGENT_VARIABLE_HANDOFF_V2")
+  .replaceAll("SARVAM_AGENT_VARIABLE_HANDOFF_V5", "SARVAM_AGENT_VARIABLE_HANDOFF_V2")
   .replace(
     /\s*const registeredInputVariables = new Set\([\s\S]*?\);\n\n/m,
     "\n"
@@ -115,7 +120,7 @@ assert.equal(
 );
 
 const upgradedV3Client = first.source.replaceAll(
-  "SARVAM_AGENT_VARIABLE_HANDOFF_V4",
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V5",
   "SARVAM_AGENT_VARIABLE_HANDOFF_V3"
 );
 const upgradedFromV3 = patchAgentVariableHandoff(upgradedV3Client);
@@ -123,6 +128,18 @@ assert.equal(upgradedFromV3.changed, true);
 assert.equal(hasCorrectAgentVariableHandoff(upgradedFromV3.source), true);
 assert.equal(
   upgradedFromV3.source.match(/const normalizedAgentVariables/g)?.length,
+  1
+);
+
+const upgradedV4Client = first.source.replaceAll(
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V5",
+  "SARVAM_AGENT_VARIABLE_HANDOFF_V4"
+);
+const upgradedFromV4 = patchAgentVariableHandoff(upgradedV4Client);
+assert.equal(upgradedFromV4.changed, true);
+assert.equal(hasCorrectAgentVariableHandoff(upgradedFromV4.source), true);
+assert.equal(
+  upgradedFromV4.source.match(/const normalizedAgentVariables/g)?.length,
   1
 );
 

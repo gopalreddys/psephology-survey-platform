@@ -76,6 +76,24 @@ The Sarvam request carries `source=VOTER_MASTER_DEMO` and
 Program identifiers. The demo prompt requires transparent AI identification,
 neutral questions and immediate termination when the participant asks to stop.
 
+Standalone demo calls use a short, bounded three-theme questionnaire. The
+completion policy is explicit: Sarvam's strict goal remains
+`disposition = survey_completed`, and it is reached only when all three demo
+themes have meaningful evidence. `substantial_feedback_captured` remains a
+useful but distinct provider outcome. Normal Campaign Run calls retain the
+compact, phone-tested variable handoff that prevents the former repeated
+opening-message regression.
+
+Known Voter Master geography is sent through the demo agent's registered
+`district`, `mandal`, `village`, `area_type` and constituency input variables.
+It is labelled as platform reference data and must never be represented as a
+respondent answer.
+
+Provider callbacks for standalone calls are reconciled into
+`voter_demo_calls`, including operational status, disposition, goal status,
+duration, transcript count and final variables. These records remain excluded
+from Campaign, Iteration, Run and research analytics.
+
 ## Install and verify
 
 ```bash
@@ -105,6 +123,25 @@ GET  /api/voter-demo-contacts
 
 A request without an authenticated token should return `401`; a signed-in
 Campaign Manager or Campaigner should receive `403`.
+
+## Install the context and outcome correction
+
+```bash
+cd /opt/psephology-survey-ui/psephology
+node deployment/voter-demo-call/install-voter-demo-call-outcomes.js \
+  /opt/sarvam-voice-analytics
+
+cd /opt/sarvam-voice-analytics
+node src/db/migrate-voter-demo-call-outcomes.js
+node --check src/clients/sarvam.js
+node --check src/services/voter-demo-call-context.js
+node --check src/services/voter-demo-call.service.js
+node --check src/repositories/voter-demo-calls.repository.js
+node --check src/repositories/sarvam-outbound-webhook.repository.js
+sudo systemctl restart psephology-api.service
+curl --retry 10 --retry-connrefused --retry-delay 1 \
+  http://127.0.0.1:3000/ready
+```
 
 ## Approve demo voters
 
