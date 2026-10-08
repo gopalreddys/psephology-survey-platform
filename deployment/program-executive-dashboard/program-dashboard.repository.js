@@ -392,7 +392,7 @@ async function qualifyVisibleCampaignComparisons(db, campaigns) {
     loadIterationComparability(db, pairIds),
     pairIds.length ? db.query(`
       SELECT id AS call_id, iteration_id, voter_id, connectivity_status,
-        response_variables, updated_at, created_at
+        response_variables, updated_at, first_seen_at
       FROM calls
       WHERE iteration_id = ANY($1::uuid[])
         AND voter_id IS NOT NULL

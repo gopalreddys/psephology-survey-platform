@@ -1135,7 +1135,7 @@ async function loadStrategicEvidence(db, iterationIds) {
       voter.mandal_name_source AS mandal_name,
       call_record.response_variables, call_record.interaction_transcript,
       call_record.connectivity_status, call_record.duration_seconds,
-      call_record.updated_at, call_record.created_at
+      call_record.updated_at, call_record.first_seen_at
     FROM calls call_record
     JOIN program_iterations iteration ON iteration.id = call_record.iteration_id
     LEFT JOIN campaign_runs selected_run ON selected_run.id = call_record.run_id
@@ -1152,7 +1152,7 @@ async function loadStrategicEvidence(db, iterationIds) {
       AND call_record.voter_id IS NOT NULL
       AND jsonb_typeof(call_record.response_variables) = 'object'
       AND call_record.response_variables <> '{}'::jsonb
-    ORDER BY call_record.updated_at DESC NULLS LAST, call_record.created_at DESC, call_record.id DESC
+    ORDER BY call_record.updated_at DESC NULLS LAST, call_record.first_seen_at DESC NULLS LAST, call_record.id DESC
   `, [iterationIds]);
   return result.rows;
 }

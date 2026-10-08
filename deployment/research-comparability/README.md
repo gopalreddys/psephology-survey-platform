@@ -82,6 +82,7 @@ The optional SQL-engine regression test uses an isolated test-only
 
 ```bash
 PGLITE_MODULE_PATH=/absolute/path/to/test/node_modules/@electric-sql/pglite/dist/index.js node deployment/research-comparability/test-shared-comparison-gate-sql.js
+PGLITE_MODULE_PATH=/absolute/path/to/test/node_modules/@electric-sql/pglite/dist/index.js node deployment/research-comparability/test-call-evidence-sql.js
 ```
 
 It covers SQL upgrade/replay, declared methods, provenance, missing evidence,

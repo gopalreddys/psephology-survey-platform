@@ -309,8 +309,8 @@ export function latestStructuredRespondents(records, iterationId) {
     record.response_variables && typeof record.response_variables === "object" &&
     !Array.isArray(record.response_variables) &&
     Object.keys(record.response_variables).length > 0
-  ).sort((left, right) => timestamp(right.updated_at || right.created_at) - timestamp(left.updated_at || left.created_at) ||
-    timestamp(right.created_at) - timestamp(left.created_at) ||
+  ).sort((left, right) => timestamp(right.updated_at || right.first_seen_at) - timestamp(left.updated_at || left.first_seen_at) ||
+    timestamp(right.first_seen_at) - timestamp(left.first_seen_at) ||
     String(right.call_id || right.id || "").localeCompare(String(left.call_id || left.id || "")));
   const respondents = new Map();
   for (const record of ordered) {
@@ -474,14 +474,14 @@ async function loadResponseDistributions(db, iterationIds, comparability) {
   const result = await db.query(`
     SELECT call_record.id AS call_id, call_record.iteration_id, call_record.voter_id,
       call_record.connectivity_status, call_record.response_variables,
-      call_record.updated_at, call_record.created_at
+      call_record.updated_at, call_record.first_seen_at
     FROM calls call_record
     WHERE call_record.iteration_id = ANY($1::uuid[])
       AND call_record.voter_id IS NOT NULL
       AND LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
       AND jsonb_typeof(call_record.response_variables) = 'object'
       AND call_record.response_variables <> '{}'::jsonb
-    ORDER BY call_record.updated_at DESC NULLS LAST, call_record.created_at DESC, call_record.id DESC
+    ORDER BY call_record.updated_at DESC NULLS LAST, call_record.first_seen_at DESC NULLS LAST, call_record.id DESC
   `, [iterationIds]);
   return buildResponseDistributions(result.rows, iterationIds, comparability);
 }

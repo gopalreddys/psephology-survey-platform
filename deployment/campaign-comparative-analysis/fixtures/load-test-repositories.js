@@ -35,3 +35,16 @@ export async function loadTestRepositories(db) {
   });
   return { campaign, analytics };
 }
+
+export async function loadTestProgramRepository(db, campaign) {
+  return loadSource("../../program-executive-dashboard/program-dashboard.repository.js", {
+    getDb: async () => db,
+    canReviewCampaign: (_record, actor) => actor.role_code === "SUPER_ADMIN" || actor.role_code === "ADMIN",
+    recordLifecycleEvent: async () => {},
+    loadIterationComparability,
+    selectConsecutiveComparisonIterations: campaign.selectConsecutiveComparisonIterations,
+    evaluateCompletedIterationComparison: campaign.evaluateCompletedIterationComparison,
+    buildResponseDistributions: campaign.buildResponseDistributions,
+    latestStructuredRespondents: campaign.latestStructuredRespondents
+  });
+}

@@ -22,7 +22,7 @@ export function response(iterationId, voterId, value, overrides = {}) {
     connectivity_status: "connected", run_id: String(voterId || "").endsWith("0") ? "run-a" : "run-b",
     gender: "Female", age: 35, mandal_name: "North", is_demo_contact: false,
     response_variables: { graduate_issue_priority: value },
-    updated_at: "2026-01-02T00:00:00Z", created_at: "2026-01-02T00:00:00Z",
+    updated_at: "2026-01-02T00:00:00Z", first_seen_at: "2026-01-02T00:00:00Z",
     ...overrides
   };
 }
@@ -50,10 +50,23 @@ export function fixtureState() {
   };
 }
 
+// The deployed calls table has updated_at and first_seen_at, but no created_at. Keep mock SQL
+// from accepting columns that real PostgreSQL rejects before returning rows.
+export function assertCallsSchema(sql) {
+  if (!/\bFROM\s+calls\b/i.test(sql)) return;
+  assert.doesNotMatch(sql, /\b(?:call_record|calls)\s*\.\s*created_at\b/i,
+    "calls.created_at is not part of the deployed schema");
+  if (/\bSELECT\s+id\s+AS\s+call_id\b/i.test(sql)) {
+    assert.doesNotMatch(sql.split(/\bFROM\s+calls\b/i)[0], /\bcreated_at\b/i,
+      "unqualified calls.created_at is not part of the deployed schema");
+  }
+}
+
 export function fixtureDb(state) {
   return {
     queries: [],
     async query(sql, params) {
+      assertCallsSchema(sql);
       this.queries.push({ sql, params });
       if (sql.includes("analytics_iteration_comparability_v1")) {
         if (state.missingGate) throw Object.assign(new Error("missing comparison view"), { code: "42P01" });
@@ -71,3 +84,4 @@ export function fixtureDb(state) {
     }
   };
 }
+import assert from "node:assert/strict";

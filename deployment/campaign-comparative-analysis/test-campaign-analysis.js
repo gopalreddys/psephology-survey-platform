@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fixtureState, fixtureDb, iteration, gateRow, response } from "./fixtures/analysis-fixtures.js";
+import { fixtureState, fixtureDb, iteration, gateRow, response, assertCallsSchema } from "./fixtures/analysis-fixtures.js";
 import { loadTestRepositories } from "./fixtures/load-test-repositories.js";
 
 const state = fixtureState();
@@ -8,6 +8,9 @@ const { campaign } = await loadTestRepositories(db);
 const admin = { id: "admin", role_code: "ADMIN" };
 const getAnalysis = () => campaign.getCampaignAnalysis("campaign", admin);
 
+assert.equal(Object.hasOwn(response("i2", "v", "jobs"), "created_at"), false, "call fixtures reflect the deployed schema");
+assert.throws(() => assertCallsSchema("SELECT call_record.created_at FROM calls call_record"), /deployed schema/);
+assert.throws(() => assertCallsSchema("SELECT id AS call_id, created_at FROM calls"), /deployed schema/);
 const eligible = campaign.latestStructuredRespondents(state.records, "i2");
 assert.equal(eligible.length, 12, "one connected nonempty structured response per identified voter");
 assert.equal(eligible.find((record) => record.voter_id === "female-0").response_variables.graduate_issue_priority, "jobs", "newer ineligible calls do not erase the latest eligible answer");
@@ -17,10 +20,20 @@ const subsecond = campaign.latestStructuredRespondents([
 ], "i2");
 assert.equal(subsecond[0].response_variables.graduate_issue_priority, "latest", "PostgreSQL Date values preserve millisecond ordering");
 const sameUpdate = campaign.latestStructuredRespondents([
-  response("i2", "v", "older", { call_id: "z", created_at: "2026-01-01T00:00:00Z" }),
-  response("i2", "v", "latest", { call_id: "a", created_at: "2026-01-02T00:00:00Z" })
+  response("i2", "v", "older", { call_id: "00000000-0000-4000-8000-000000000002", first_seen_at: "2026-01-01T00:00:00Z" }),
+  response("i2", "v", "latest", { call_id: "00000000-0000-4000-8000-000000000001", first_seen_at: "2026-01-02T00:00:00Z" })
 ], "i2");
-assert.equal(sameUpdate[0].response_variables.graduate_issue_priority, "latest", "creation time breaks equal update timestamps before UUID");
+assert.equal(sameUpdate[0].response_variables.graduate_issue_priority, "latest", "persisted first-seen time breaks equal update timestamps before UUID");
+for (const updatedAt of ["2026-01-02T00:00:00Z", null]) {
+  const tiedRecords = [
+    response("i2", "v", "lower UUID", { call_id: "00000000-0000-4000-8000-000000000001", updated_at: updatedAt }),
+    response("i2", "v", "higher UUID", { call_id: "00000000-0000-4000-8000-000000000002", updated_at: updatedAt })
+  ];
+  for (const records of [tiedRecords, [...tiedRecords].reverse()]) {
+    assert.equal(campaign.latestStructuredRespondents(records, "i2")[0].response_variables.graduate_issue_priority,
+      "higher UUID", "call UUID deterministically breaks equal or missing update timestamps regardless of input order");
+  }
+}
 let result = await getAnalysis();
 assert.equal(result.readiness.ready, true);
 assert.equal(result.comparison.status, "COMPARABLE");

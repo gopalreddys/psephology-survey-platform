@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { assertCallsSchema } from "../campaign-comparative-analysis/fixtures/analysis-fixtures.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const runtime = await mkdtemp(path.join(os.tmpdir(), "program-comparability-test-"));
@@ -35,7 +36,7 @@ try {
   const respondents = (wave, size, overrides = {}) => Array.from({ length: size }, (_, index) => ({
     call_id: `${wave.id}-call-${index}`, iteration_id: wave.id, voter_id: `voter-${index}`,
     connectivity_status: "connected", response_variables: { issue_priority: "jobs" },
-    created_at: "2026-09-01T10:00:00Z", updated_at: "2026-09-01T10:00:00Z", ...overrides
+    first_seen_at: "2026-09-01T10:00:00Z", updated_at: "2026-09-01T10:00:00Z", ...overrides
   }));
   const fivePerWave = [...respondents(waves[0], 5), ...respondents(waves[1], 5)];
   const ready = buildProgramComparisonReadiness(waves.slice(0, 2), fivePerWave, metadata);
@@ -132,6 +133,7 @@ try {
   let noVisibleCampaigns = false;
   globalThis.programComparabilityTestDb = {
     async query(sql, values) {
+      assertCallsSchema(sql);
       requests.push({ sql, values });
       if (sql.includes("FROM survey_studies program")) return { rowCount: 1, rows: [{ id: "program-1", study_code: "P1", study_name: "Study", status: "ACTIVE" }] };
       if (sql.includes("WITH campaign_set AS")) return { rows: noVisibleCampaigns
