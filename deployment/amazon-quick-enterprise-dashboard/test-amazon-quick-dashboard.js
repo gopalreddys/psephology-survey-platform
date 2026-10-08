@@ -7,6 +7,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const sql = readFileSync(path.join(here, "024_amazon_quick_research_reporting.sql"), "utf8");
 const geographicSql = readFileSync(path.join(here, "025_amazon_quick_geographic_heatmap.sql"), "utf8");
 const boundarySql = readFileSync(path.join(here, "026_telangana_administrative_boundaries.sql"), "utf8");
+const decisionSql = readFileSync(path.join(here, "027_psephology_decision_reporting.sql"), "utf8");
+const comparabilitySql = readFileSync(path.join(here, "028_research_design_comparability.sql"), "utf8");
 const boundarySync = readFileSync(path.join(here, "sync-telangana-boundaries.js"), "utf8");
 const routes = readFileSync(path.join(here, "amazon-quick-dashboard.routes.js"), "utf8");
 const installer = readFileSync(path.join(here, "install-amazon-quick-dashboard.js"), "utf8");
@@ -29,6 +31,19 @@ for (const layer of ["STATE", "DISTRICT", "ASSEMBLY_CONSTITUENCY", "MANDAL"]) {
   assert.match(boundarySql, new RegExp(layer));
 }
 assert.doesNotMatch(boundarySql, /phone_number|full_name|epic_number|transcript_text/);
+assert.match(decisionSql, /analytics_research_quality_v1/);
+assert.match(decisionSql, /analytics_iteration_movement_v1/);
+assert.match(decisionSql, /demographic_completeness_pct/);
+assert.match(decisionSql, /DIRECTIONAL_NON_PROBABILITY/);
+assert.match(decisionSql, /not statistical confidence/i);
+assert.match(decisionSql, /positive_sentiment_change_pct/);
+assert.doesNotMatch(decisionSql, /phone_number|full_name|epic_number|transcript_text/);
+assert.match(comparabilitySql, /analytics_research_design_registry/);
+assert.match(comparabilitySql, /analytics_iteration_comparability_v1/);
+assert.match(comparabilitySql, /questionnaire_fingerprint/);
+assert.match(comparabilitySql, /comparison_status/);
+assert.match(comparabilitySql, /Movement suppressed/);
+assert.doesNotMatch(comparabilitySql, /phone_number|full_name|epic_number|transcript_text/);
 assert.match(boundarySync, /tgrac\.telangana\.gov\.in/);
 assert.match(boundarySync, /DEMO_CONSTITUENCY = "Serilingampally"/);
 assert.match(boundarySync, /DEMO_CONSTITUENCY_NUMBER = "52"/);
@@ -42,9 +57,20 @@ assert.doesNotMatch(routes, /"CAMPAIGN_MANAGER"/);
 assert.match(routes, /SessionLifetimeInMinutes: 120/);
 assert.match(routes, /AllowedDomains/);
 assert.match(routes, /enterprise-dashboard\/geography-boundaries/);
+assert.match(routes, /enterprise-dashboard\/research-quality/);
+assert.match(routes, /analytics_research_quality_v1/);
+assert.match(routes, /analytics_iteration_movement_v1/);
+assert.match(routes, /enterprise-dashboard\/research-designs\/\:iterationId/);
+assert.match(routes, /permittedSamplingMethods/);
+assert.match(routes, /analytics_iteration_comparability_v1/);
 assert.match(routes, /analytics_geo_boundary_reference/);
 assert.match(installer, /AMAZON_QUICK_ENTERPRISE_DASHBOARD_V1/);
-assert.equal(blueprint.sheets.length, 4);
+assert.match(installer, /027_psephology_decision_reporting\.sql/);
+assert.match(installer, /028_research_design_comparability\.sql/);
+assert.equal(blueprint.sheets.length, 5);
+assert.equal(blueprint.qualityDatasetView, "analytics_research_quality_v1");
+assert.equal(blueprint.movementDatasetView, "analytics_iteration_movement_v1");
+assert.equal(blueprint.comparabilityDatasetView, "analytics_iteration_comparability_v1");
 assert.ok(blueprint.globalFilters.includes("constituency_name"));
 assert.ok(blueprint.sheets.flatMap((sheet) => sheet.visuals).some((visual) => visual.type === "HEAT_TABLE"));
 assert.ok(blueprint.sheets.flatMap((sheet) => sheet.visuals).some((visual) => visual.type === "HISTOGRAM"));
@@ -52,6 +78,7 @@ assert.ok(blueprint.sheets.flatMap((sheet) => sheet.visuals).some((visual) => vi
 assert.equal(blueprint.governance.minimumCellSize, 5);
 assert.equal(blueprint.governance.mapAggregationLevel, "MANDAL");
 assert.equal(blueprint.governance.demoConstituency, "AC 52 · Serilingampally");
+assert.match(blueprint.governance.qualityStatusMeaning, /not statistical confidence/i);
 assert.deepEqual(blueprint.governance.administrativeBoundaryLayers, [
   "STATE", "DISTRICT", "ASSEMBLY_CONSTITUENCY", "MANDAL"
 ]);

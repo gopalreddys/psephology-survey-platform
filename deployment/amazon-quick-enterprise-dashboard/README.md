@@ -15,9 +15,20 @@ the enterprise dashboard is authored and published in AWS.
   priorities by constituency, with a party-filtered Mandal map over Amazon
   Quick's native base-map layer;
 - Iteration movement: comparable party-strength, candidate sentiment and issue
-  movement across Iterations.
+  movement across Iterations, including explicit change from the previous wave;
+- research quality: connection, transcript and structured-output coverage,
+  demographic completeness, fieldwork dates and a qualified evidence status.
 
-The deterministic authoring specification is in
+Admin and Super Admin users can declare the target population, sample frame,
+sampling method, selection method, weighting approach and fieldwork mode for
+each Iteration. The platform compares those declarations with the questionnaire
+snapshot before exposing change from the previous Iteration. A failed gate
+suppresses the movement value instead of presenting incomparable waves as a
+trend.
+
+The research quality status describes operational evidence completeness. It is
+not a statistical confidence level, margin of error or election forecast. The
+deterministic authoring specification is in
 `quick-dashboard-blueprint.json`. Do not display any cell below the governed
 minimum base (currently `n=5` in the application). Do not describe an
 unweighted demo result as an election forecast.
@@ -44,9 +55,11 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/rea
 1. Enable Quick Sight Enterprise in `ap-south-1`.
 2. Add the RDS PostgreSQL data source through a VPC connection and grant the
    Quick Sight security group database access. Prefer a reporting/read replica.
-3. Create a SPICE dataset from `analytics_research_enterprise_v1` and a second
-   SPICE dataset from `analytics_research_geographic_v1`.
-4. Author the four sheets in `quick-dashboard-blueprint.json` and publish the
+3. Create SPICE datasets from `analytics_research_enterprise_v1`,
+   `analytics_research_geographic_v1`, `analytics_research_quality_v1` and
+   `analytics_iteration_movement_v1`. Add
+   `analytics_iteration_comparability_v1` to the Research quality sheet.
+4. Author the five sheets in `quick-dashboard-blueprint.json` and publish the
    dashboard.
 5. Create a Quick Sight Reader for the leadership preview and share the
    dashboard with that Reader.
@@ -87,6 +100,12 @@ Source service:
 The application endpoint is restricted to Super Admin and Admin, returns one
 requested layer at a time and exposes administrative polygons only. It does
 not return voter locations or respondent identities.
+
+`GET /api/enterprise-dashboard/research-quality` supplies the native quality
+gate shown above the embedded dashboard. It returns aggregate campaign evidence
+coverage and Iteration movement only. Sampling remains labelled as directional
+and unweighted until an approved probability design and weighting pipeline are
+configured.
 
 `analytics_research_geographic_v1` supplies latitude, longitude, party label,
 respondent count and aggregate party-strength to an Amazon Quick geospatial

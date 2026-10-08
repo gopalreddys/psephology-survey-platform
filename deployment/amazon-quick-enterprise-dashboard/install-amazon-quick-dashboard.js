@@ -24,6 +24,14 @@ await copyFile(
   path.join(runtimeRoot, "sql/026_telangana_administrative_boundaries.sql")
 );
 await copyFile(
+  path.join(packageRoot, "027_psephology_decision_reporting.sql"),
+  path.join(runtimeRoot, "sql/027_psephology_decision_reporting.sql")
+);
+await copyFile(
+  path.join(packageRoot, "028_research_design_comparability.sql"),
+  path.join(runtimeRoot, "sql/028_research_design_comparability.sql")
+);
+await copyFile(
   path.join(packageRoot, "migrate-amazon-quick-dashboard.js"),
   path.join(runtimeRoot, "src/db/migrate-amazon-quick-dashboard.js")
 );

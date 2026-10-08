@@ -2,6 +2,9 @@
   "name": "Psephology Enterprise Leadership Dashboard",
   "provider": "Amazon Quick Sight",
   "datasetView": "analytics_research_enterprise_v1",
+  "qualityDatasetView": "analytics_research_quality_v1",
+  "movementDatasetView": "analytics_iteration_movement_v1",
+  "comparabilityDatasetView": "analytics_iteration_comparability_v1",
   "refresh": "SPICE incremental refresh every 30 minutes during survey operations",
   "globalFilters": [
     "program_name",
@@ -47,10 +50,25 @@
     },
     {
       "name": "Iteration movement",
+      "datasetView": "analytics_iteration_movement_v1",
       "visuals": [
-        { "type": "LINE", "title": "Party-strength movement", "dimension": "iteration_number", "measure": "avg(direct_party_strength)" },
-        { "type": "STACKED_BAR", "title": "Candidate sentiment by Iteration", "dimension": "iteration_number", "color": "candidate_sentiment", "measure": "distinct_count(respondent_key)" },
-        { "type": "BAR", "title": "Issue movement", "dimension": "iteration_number", "group": "issue_priority", "measure": "distinct_count(respondent_key)" }
+        { "type": "LINE", "title": "Direct party-strength movement", "dimension": "iteration_number", "measure": "average_direct_party_strength" },
+        { "type": "COMBO", "title": "Positive sentiment movement", "dimension": "iteration_number", "measure": "positive_sentiment_pct", "secondaryMeasure": "positive_sentiment_change_pct" },
+        { "type": "COMBO", "title": "Candidate-positive movement", "dimension": "iteration_number", "measure": "candidate_positive_pct", "secondaryMeasure": "candidate_positive_change_pct" },
+        { "type": "TABLE", "title": "Wave comparability base", "dimensions": ["campaign_name", "iteration_number", "comparison_basis"], "measures": ["respondent_base", "direct_measure_base", "issue_response_base"] }
+      ]
+    },
+    {
+      "name": "Research quality",
+      "datasetView": "analytics_research_quality_v1",
+      "visuals": [
+        { "type": "KPI", "title": "Respondent evidence", "measure": "sum(respondent_base)" },
+        { "type": "KPI", "title": "Connection rate", "measure": "weighted(connection_rate_pct, call_attempts)" },
+        { "type": "KPI", "title": "Structured-output coverage", "measure": "weighted(response_coverage_pct, connected_calls)" },
+        { "type": "KPI", "title": "Demographic completeness", "measure": "weighted(demographic_completeness_pct, respondent_base)" },
+        { "type": "TABLE", "title": "Campaign evidence qualification", "dimensions": ["campaign_name", "evidence_quality_status", "sampling_design", "weighting_status"], "measures": ["respondent_base", "connection_rate_pct", "response_coverage_pct", "demographic_completeness_pct"] },
+        { "type": "TABLE", "title": "Iteration comparability gate", "datasetView": "analytics_iteration_comparability_v1", "dimensions": ["campaign_name", "iteration_number", "comparison_status", "sampling_method", "weighting_status"], "measures": [] },
+        { "type": "TEXT", "title": "Interpretation guard", "value": "Operational evidence quality only. No sampling margin of error and no constituency vote-share forecast until representative sampling and weighting are configured." }
       ]
     }
   ],
@@ -68,6 +86,8 @@
     "demoConstituency": "AC 52 · Serilingampally",
     "publicEmbedding": false,
     "rawPiiIncluded": false,
+    "qualityStatusMeaning": "Operational evidence quality; not statistical confidence",
+    "movementComparisonRule": "Keep the core questionnaire and sampling approach comparable before interpreting change",
     "forecastLabel": "Directional research evidence; not an election forecast"
   }
 }

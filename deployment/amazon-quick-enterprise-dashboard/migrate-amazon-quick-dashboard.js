@@ -9,7 +9,9 @@ const db = await getDb();
 for (const migration of [
   "024_amazon_quick_research_reporting.sql",
   "025_amazon_quick_geographic_heatmap.sql",
-  "026_telangana_administrative_boundaries.sql"
+  "026_telangana_administrative_boundaries.sql",
+  "027_psephology_decision_reporting.sql",
+  "028_research_design_comparability.sql"
 ]) {
   const sql = await readFile(path.resolve(here, "../../sql", migration), "utf8");
   await db.query(sql);
