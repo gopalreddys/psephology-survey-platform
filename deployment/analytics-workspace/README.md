@@ -41,9 +41,11 @@ Phase 1 strategic Campaign analysis adds:
 
 The strategic workspace supports an explicit Campaign → Iteration → Run hierarchy:
 
-- Campaign overview uses the latest completed Iteration for current distributions and keeps cross-Iteration movement separate.
-- Iteration analysis deduplicates respondents across Runs using the latest connected evidence per voter.
-- Run analysis isolates the selected execution cohort and labels Run 2/3 as retry cohorts, not independent opinion movement.
+- Campaign overview uses the latest completed Iteration for current distributions; an explicit Iteration selection is required when no completed wave exists.
+- Iteration analysis deduplicates respondents across Runs using the latest connected nonempty structured response per identified voter.
+- Run selection changes operational metrics only. Insights remain scoped to the entire selected Iteration across Runs, with the active gender, age and Mandal filters preserved.
+- Movement uses the selected Iteration and its actual consecutive completed predecessor, with identical cohort filters in both waves. It never bridges an unfinished or missing wave.
+- The canonical `analytics_iteration_comparability_v1` methods gate must approve comparison. Shared variable keys or questionnaire IDs alone cannot establish compatibility; a missing gate fails closed.
 - The selected scope reports attempts, connections, successful outcomes, duration, callback coverage, transcript coverage and structured-response coverage.
 - Institutional awareness, incumbent assessment, candidate criteria and association influence are retained beside the original issue, candidate and party signals.
 
@@ -54,7 +56,7 @@ The selected Iteration now includes a concise decision dashboard with:
 - unaided party-attention and aided issue-leadership signals;
 - priority issues, development priorities and desired changes;
 - aggregate filters for gender, non-overlapping age bands and Mandal;
-- suppression of filtered political results below a five-respondent base;
+- suppression of political results below a five-respondent cohort base and percentage movement below five answers in either wave;
 - an aggregate five-star party-strength index only when a direct neutral 1–5
   questionnaire response is available.
 
@@ -89,8 +91,17 @@ states that no sampling margin of error is available for the controlled demo
 cohort, and requires research oversight before findings are used externally.
 
 Selecting a Run changes operational metrics only. Directional-outlook, sentiment and
-party-strength judgments always use all deduplicated respondents in the selected
-Iteration.
+party-strength judgments use deduplicated respondents across all Runs in the selected
+Iteration, with the active cohort filters. Run selection requires an explicit Iteration.
+
+Behavior checks:
+
+```bash
+node deployment/campaign-comparative-analysis/test-campaign-analysis.js
+node deployment/analytics-workspace/test-analytics-workspace.js
+node deployment/analytics-workspace/test-analytics-behavior.js
+node deployment/analytics-workspace/test-analytics-ui.js
+```
 
 Install on the API host:
 

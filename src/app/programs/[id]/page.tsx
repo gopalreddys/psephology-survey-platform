@@ -59,6 +59,8 @@ type ProgramCampaign = {
   transcriptsCaptured: number;
   responsesCaptured: number;
   comparisonReady: boolean;
+  comparisonStatus?: string;
+  comparisonReasons?: string[];
   needsAttention: boolean;
   attentionReasons: string[];
 };
@@ -480,6 +482,9 @@ export default function ProgramDetailPage() {
                   <div className={styles.campaignFooter}>
                     <div className={styles.captureSummary}>
                       {campaign.callbacksReceived}/{campaign.callAttempts} callbacks · {campaign.transcriptsCaptured} transcripts · {campaign.responsesCaptured} response records
+                      {!campaign.comparisonReady && <div title={campaign.comparisonReasons?.join(" ")}>
+                        Comparison unavailable · {campaign.comparisonReasons?.[0] || "Consecutive comparable evidence is required."}
+                      </div>}
                     </div>
                     <div className={styles.campaignLinks}>
                       {campaign.comparisonReady && (

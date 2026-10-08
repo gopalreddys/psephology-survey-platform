@@ -95,9 +95,9 @@ function mapMovement(row) {
     averageDirectPartyStrength: row.average_direct_party_strength === null
       ? null : numeric(row.average_direct_party_strength),
     directMeasureBase: numeric(row.direct_measure_base),
-    positiveSentimentPct: numeric(row.positive_sentiment_pct),
-    negativeSentimentPct: numeric(row.negative_sentiment_pct),
-    candidatePositivePct: numeric(row.candidate_positive_pct),
+    positiveSentimentPct: row.positive_sentiment_pct === null ? null : numeric(row.positive_sentiment_pct),
+    negativeSentimentPct: row.negative_sentiment_pct === null ? null : numeric(row.negative_sentiment_pct),
+    candidatePositivePct: row.candidate_positive_pct === null ? null : numeric(row.candidate_positive_pct),
     issueResponseBase: numeric(row.issue_response_base),
     partyStrengthChange: row.party_strength_change === null
       ? null : numeric(row.party_strength_change),
@@ -322,6 +322,12 @@ router.get(
           ? "MIXED"
           : "DIRECTIONAL";
       return res.json({
+        scope: {
+          level: "PORTFOLIO",
+          label: "Whole portfolio and full Iterations; independent of embedded Amazon Quick filters",
+          runScope: "All Runs, latest connected structured response per respondent and Iteration",
+          movementScope: "Full consecutive Iterations within each Campaign; not filtered by age, gender or Mandal"
+        },
         portfolio: {
           campaignCount: campaigns.length,
           respondentBase: totals.respondentBase,
@@ -350,7 +356,7 @@ router.get(
               ? weightingStatuses[0].replaceAll("_", " ")
               : "Mixed declared statuses",
           statisticalPrecision: "No sampling margin of error",
-          comparisonRule: "Interpret movement only when the core questionnaire and sampling approach remain comparable",
+          comparisonRule: "Movement requires consecutive Iterations, frozen questionnaire identity, declared comparable research methods and at least five respondents in each wave",
           permittedUse: "Aggregate research planning and repeated-wave comparison",
           prohibitedUse: "Constituency vote-share forecast or individual political profiling"
         },

@@ -1,6 +1,8 @@
 import { getDb } from "../db/postgres.js";
 import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js";
-import { getCampaignAnalysis } from "./campaign-analysis.repository.js";
+import { getCampaignAnalysis, latestStructuredRespondents, buildResponseDistributions,
+  selectConsecutiveComparisonIterations, evaluateCompletedIterationComparison } from "./campaign-analysis.repository.js";
+import { loadIterationComparability } from "./research-comparability.repository.js";
 
 const ANALYTICS_ROLES = new Set([
   "SUPER_ADMIN",
@@ -892,15 +894,8 @@ function buildIterationDashboard(records, {
   };
 }
 
-function latestRespondents(records, iterationId, runId = null) {
-  const respondents = new Map();
-  for (const record of records) {
-    if (record.iteration_id !== iterationId) continue;
-    if (runId && record.run_id !== runId) continue;
-    const key = record.voter_id || record.call_id;
-    if (!respondents.has(key)) respondents.set(key, record);
-  }
-  return Array.from(respondents.values());
+function latestRespondents(records, iterationId) {
+  return latestStructuredRespondents(records, iterationId);
 }
 
 function questionnaireCatalog(records) {
@@ -1139,7 +1134,8 @@ async function loadStrategicEvidence(db, iterationIds) {
       call_record.voter_id, voter.is_demo_contact, voter.gender, voter.age,
       voter.mandal_name_source AS mandal_name,
       call_record.response_variables, call_record.interaction_transcript,
-      call_record.duration_seconds, call_record.updated_at
+      call_record.connectivity_status, call_record.duration_seconds,
+      call_record.updated_at, call_record.created_at
     FROM calls call_record
     JOIN program_iterations iteration ON iteration.id = call_record.iteration_id
     LEFT JOIN campaign_runs selected_run ON selected_run.id = call_record.run_id
@@ -1153,7 +1149,10 @@ async function loadStrategicEvidence(db, iterationIds) {
     ) execution ON TRUE
     WHERE call_record.iteration_id = ANY($1::uuid[])
       AND LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
-    ORDER BY call_record.updated_at DESC NULLS LAST
+      AND call_record.voter_id IS NOT NULL
+      AND jsonb_typeof(call_record.response_variables) = 'object'
+      AND call_record.response_variables <> '{}'::jsonb
+    ORDER BY call_record.updated_at DESC NULLS LAST, call_record.created_at DESC, call_record.id DESC
   `, [iterationIds]);
   return result.rows;
 }
@@ -1247,12 +1246,16 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const campaignAnalysis = await getCampaignAnalysis(campaignId, actor);
   const db = await getDb();
   const iterationIds = campaignAnalysis.iterations.map((iteration) => iteration.id);
-  const [records, runs] = await Promise.all([
+  const [records, runs, comparabilityMap] = await Promise.all([
     loadStrategicEvidence(db, iterationIds),
-    loadRunCatalog(db, iterationIds)
+    loadRunCatalog(db, iterationIds),
+    loadIterationComparability(db, iterationIds)
   ]);
   const completed = campaignAnalysis.iterations.filter((iteration) => iteration.completed);
-  const defaultIteration = completed.at(-1) || campaignAnalysis.iterations.at(-1) || null;
+  const defaultIteration = completed.at(-1) || null;
+  if (selection.runId && !selection.iterationId) {
+    throw errorWithStatus("Select the Run's Iteration explicitly; Run selection changes operations only", 400);
+  }
   const selectedIteration = selection.iterationId
     ? campaignAnalysis.iterations.find((iteration) => iteration.id === selection.iterationId)
     : defaultIteration;
@@ -1279,8 +1282,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const availableFilters = filterOptions(scopedRecords);
   const filteredRecords = filterRespondents(scopedRecords, demographicFilters);
   const hasDemographicFilter = Object.values(demographicFilters).some(Boolean);
-  const segmentSuppressed = hasDemographicFilter
-    && filteredRecords.length < MINIMUM_SEGMENT_BASE;
+  const segmentSuppressed = Boolean(selectedIteration) && filteredRecords.length < MINIMUM_SEGMENT_BASE;
   const selectedRecords = segmentSuppressed ? [] : filteredRecords;
   const campaignRatingRecords = completed.flatMap((iteration) =>
     latestRespondents(records, iteration.id)
@@ -1338,11 +1340,32 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     predictive: predictiveAnalysis,
     partyStrength: partyStrengthAnalysis
   });
-  const comparison = campaignAnalysis.comparison
+  const [previousIteration, comparisonIteration] = selectConsecutiveComparisonIterations(
+    campaignAnalysis.iterations, selectedIteration?.id || null
+  );
+  const comparability = evaluateCompletedIterationComparison(previousIteration, comparisonIteration, comparabilityMap);
+  const previousRecords = previousIteration
+    ? filterRespondents(latestRespondents(records, previousIteration.id), demographicFilters)
+    : [];
+  const comparisonReasons = [...comparability.reasons];
+  if (previousIteration && comparisonIteration &&
+      (previousRecords.length < MINIMUM_SEGMENT_BASE || filteredRecords.length < MINIMUM_SEGMENT_BASE)) {
+    comparisonReasons.push(`Both consecutive waves need at least ${MINIMUM_SEGMENT_BASE} respondents in the selected cohort.`);
+  }
+  const comparisonStatus = comparisonReasons.length ? "NOT_COMPARABLE" : comparability.status;
+  const comparisonQuestions = previousIteration && comparisonIteration
+    ? buildResponseDistributions([...previousRecords, ...filteredRecords],
+      [previousIteration.id, comparisonIteration.id], { ...comparability, status: comparisonStatus, reasons: comparisonReasons })
+    : [];
+  const comparison = selectedIteration
     ? {
-        previousIteration: campaignAnalysis.comparison.previousIteration,
-        latestIteration: campaignAnalysis.comparison.latestIteration,
-        movements: campaignAnalysis.comparison.questions
+        previousIteration,
+        latestIteration: comparisonIteration,
+        status: comparisonStatus,
+        reasons: [...new Set(comparisonReasons)],
+        filters: demographicFilters,
+        minimumBase: MINIMUM_SEGMENT_BASE,
+        movements: comparisonQuestions
           .filter((question) => question.comparable && question.largestShift)
           .slice(0, 12)
           .map((question) => ({
@@ -1357,20 +1380,29 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       }
     : null;
 
-  const warnings = [...campaignAnalysis.readiness.warnings];
+  const warnings = [...comparisonReasons,
+    "Weighting, design effects, confidence intervals and outcome calibration are not yet configured."];
+  if (previousIteration && comparisonIteration && Math.min(previousRecords.length, filteredRecords.length) < 30) {
+    warnings.push("The comparable respondent base is below 30; suppress statistical inference and predictive claims.");
+  }
+  const latestVoters = new Set(filteredRecords.map((record) => record.voter_id));
+  const overlappingRespondents = previousRecords.filter((record) => latestVoters.has(record.voter_id)).length;
+  if (overlappingRespondents > 0) {
+    warnings.push("Some respondents appear in both Iterations. Treat movement as recontact/panel evidence, not independent cross-sections.");
+  }
   if (!selection.iterationId && selectedIteration) {
-    warnings.unshift(`Campaign overview uses Iteration ${selectedIteration.number} for current signal distributions; movement is shown separately across compatible Iterations.`);
+    warnings.unshift(`Campaign overview uses completed Iteration ${selectedIteration.number}; movement uses its consecutive predecessor and the same selected cohort filters.`);
   }
   if (selectedRun) {
-    warnings.unshift(`Run ${selectedRun.number} changes operational metrics only. Directional outlook, sentiment and party-strength judgments continue to use all deduplicated respondents in Iteration ${selectedIteration.number}.`);
+    warnings.unshift(`Run ${selectedRun.number} changes operational metrics only. Research judgments use the full Iteration ${selectedIteration.number} across Runs, with the selected cohort filters.`);
   }
   if (selectedRecords.length && demoRespondents === selectedRecords.length) {
     warnings.unshift("The selected Iteration contains only controlled demo respondents; all findings are directional demonstrations.");
   }
   if (!selectedRecords.length) {
     warnings.unshift(segmentSuppressed
-      ? `This filtered segment is below the minimum reporting base of ${MINIMUM_SEGMENT_BASE}; political results are withheld.`
-      : "No connected respondent evidence is available for the selected scope.");
+      ? `This reporting cohort is below the minimum base of ${MINIMUM_SEGMENT_BASE}; political results are withheld.`
+      : "No completed Iteration with connected structured respondent evidence is available for the selected scope.");
   }
 
   const scopeOperations = selectedRun || (selectedIteration ? {
@@ -1395,11 +1427,22 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       iteration: selectedIteration,
       run: selectedRun,
       operations: scopeOperations,
+      insightScope: {
+        level: "ITERATION",
+        iterationId: selectedIteration?.id || null,
+        runRestriction: null,
+        filters: demographicFilters,
+        description: selectedIteration
+          ? `Iteration ${selectedIteration.number} across all Runs${hasDemographicFilter ? ", with the selected cohort filters" : ", all respondents"}.`
+          : "Select an Iteration to inspect its evidence; no completed Iteration is available."
+      },
       interpretation: selectedRun
-        ? "Run selection changes operational metrics; research judgments remain Iteration-wide."
+        ? "Run selection changes operational metrics; research judgments remain Iteration-wide with the selected cohort filters."
         : selection.iterationId
-          ? "Iteration results deduplicate respondents across Runs using their latest connected evidence."
-          : "Campaign view uses the latest completed Iteration for current signals and preserves Iteration movement separately."
+          ? "Iteration results use each respondent's latest connected nonempty structured response across all Runs, with the selected cohort filters."
+          : selectedIteration
+            ? "Campaign view uses the latest completed Iteration. Movement uses its consecutive predecessor with the same cohort filters."
+            : "No completed Iteration is available. Select an Iteration explicitly to inspect its evidence."
     },
     options: {
       iterations: campaignAnalysis.iterations.map((iteration) => ({
@@ -1416,6 +1459,20 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     },
     validity: {
       ...campaignAnalysis.readiness,
+      comparability: { ...comparability, status: comparisonStatus, reasons: comparisonReasons },
+      ready: comparisonStatus === "COMPARABLE" && comparisonQuestions.some((question) => question.comparable),
+      questionnaireCompatible: comparability.status === "COMPARABLE",
+      comparableQuestionCount: comparisonQuestions.filter((question) => question.comparable).length,
+      minimumRespondentBase: previousIteration ? Math.min(previousRecords.length, filteredRecords.length) : 0,
+      overlappingRespondents,
+      demoRespondents,
+      researchDesign: previousIteration && comparisonIteration && comparability.status === "COMPARABLE"
+        ? overlappingRespondents === 0
+          ? "REPEATED_CROSS_SECTION"
+          : overlappingRespondents >= Math.min(previousRecords.length, filteredRecords.length)
+            ? "PANEL_RECONTACT"
+            : "MIXED_RECONTACT"
+        : "NOT_ESTABLISHED",
       directionalOnly: true,
       latestRespondentBase: selectedRecords.length,
       latestDemoRespondents: demoRespondents,
@@ -1461,7 +1518,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
       uncertainty: selectedRecords.length >= 100
         ? "Report confidence intervals after sampling design and weights are configured"
         : "Directional sample; do not report constituency estimates",
-      benchmarkRule: "Keep core output variables unchanged across Iterations before interpreting movement"
+      benchmarkRule: "Movement requires completed consecutive Iterations approved by the declared research-methods comparability gate, with the same cohort filters in both waves."
     },
     transcriptAnalysis: {
       transcriptRespondents: selectedRecords.filter((record) =>

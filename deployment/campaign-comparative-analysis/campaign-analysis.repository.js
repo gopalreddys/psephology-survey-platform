@@ -1,5 +1,8 @@
 import { getDb } from "../db/postgres.js";
 import { canReviewCampaign } from "./campaign-visibility.repository.js";
+import { loadIterationComparability, evaluateIterationComparison } from "./research-comparability.repository.js";
+
+const MINIMUM_SEGMENT_BASE = 5;
 
 const ANALYSIS_ROLES = new Set([
   "SUPER_ADMIN",
@@ -296,72 +299,81 @@ async function loadIterations(db, campaignId) {
   });
 }
 
-async function loadResponseDistributions(db, iterationIds) {
-  if (iterationIds.length < 2) return [];
+// Both analysis endpoints use the same respondent unit. A later empty or
+// disconnected attempt must not erase the latest eligible structured response.
+export function latestStructuredRespondents(records, iterationId) {
+  const timestamp = (value) => value ? new Date(value).getTime() || 0 : 0;
+  const ordered = records.filter((record) =>
+    record.iteration_id === iterationId && record.voter_id &&
+    String(record.connectivity_status || "").toLowerCase() === "connected" &&
+    record.response_variables && typeof record.response_variables === "object" &&
+    !Array.isArray(record.response_variables) &&
+    Object.keys(record.response_variables).length > 0
+  ).sort((left, right) => timestamp(right.updated_at || right.created_at) - timestamp(left.updated_at || left.created_at) ||
+    timestamp(right.created_at) - timestamp(left.created_at) ||
+    String(right.call_id || right.id || "").localeCompare(String(left.call_id || left.id || "")));
+  const respondents = new Map();
+  for (const record of ordered) {
+    if (!respondents.has(record.voter_id)) respondents.set(record.voter_id, record);
+  }
+  return Array.from(respondents.values());
+}
 
-  const result = await db.query(
-    `
-      SELECT
-        call_record.iteration_id,
-        LOWER(TRIM(response.key)) AS response_key,
-        LOWER(TRIM(response.value)) AS response_value,
-        COUNT(DISTINCT call_record.voter_id)::int AS respondents
-      FROM calls call_record
-      CROSS JOIN LATERAL jsonb_each_text(
-        CASE
-          WHEN jsonb_typeof(call_record.response_variables) = 'object'
-            THEN call_record.response_variables
-          ELSE '{}'::jsonb
-        END
-      ) response
-      WHERE call_record.iteration_id = ANY($1::uuid[])
-        AND LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
-        AND LOWER(TRIM(response.key)) <> ALL($2::text[])
-        AND response.value IS NOT NULL
-        AND LENGTH(TRIM(response.value)) > 0
-      GROUP BY
-        call_record.iteration_id,
-        LOWER(TRIM(response.key)),
-        LOWER(TRIM(response.value))
-      ORDER BY response_key, call_record.iteration_id, respondents DESC
-    `,
-    [iterationIds, TECHNICAL_VARIABLES]
-  );
+export function selectConsecutiveComparisonIterations(iterations, latestIterationId = null) {
+  const latestIndex = latestIterationId
+    ? iterations.findIndex((iteration) => iteration.id === latestIterationId)
+    : iterations.findLastIndex((iteration) => iteration.completed);
+  return latestIndex < 0 ? [null, null] : [iterations[latestIndex - 1] || null, iterations[latestIndex]];
+}
 
+export function evaluateCompletedIterationComparison(previous, latest, comparabilityMap) {
+  const gate = evaluateIterationComparison(previous?.id || null, latest?.id || null, comparabilityMap);
+  const reasons = [...gate.reasons];
+  if (previous && latest && (!previous.completed || !latest.completed)) {
+    reasons.push("Both consecutive Iterations must be completed before interpreting movement.");
+  }
+  if (previous && latest && latest.number !== previous.number + 1) {
+    reasons.push("An intervening Iteration is missing; movement cannot bridge a wave gap.");
+  }
+  return { ...gate, status: reasons.length ? "NOT_COMPARABLE" : gate.status, reasons: [...new Set(reasons)] };
+}
+
+export function buildResponseDistributions(records, iterationIds, comparability) {
+  if (iterationIds.length !== 2) return [];
   const questions = new Map();
-
-  for (const row of result.rows) {
-    if (!questions.has(row.response_key)) {
-      questions.set(row.response_key, new Map());
+  for (const iterationId of iterationIds) {
+    for (const record of latestStructuredRespondents(records, iterationId)) {
+      for (const [rawKey, rawValue] of Object.entries(record.response_variables)) {
+        const key = rawKey.trim().toLowerCase();
+        if (!key || TECHNICAL_VARIABLES.includes(key) || rawValue === null || rawValue === undefined) continue;
+        const value = (typeof rawValue === "object" ? JSON.stringify(rawValue) : String(rawValue)).trim().toLowerCase();
+        if (!value) continue;
+        if (!questions.has(key)) questions.set(key, new Map());
+        const iterationMap = questions.get(key);
+        if (!iterationMap.has(iterationId)) iterationMap.set(iterationId, new Map());
+        const values = iterationMap.get(iterationId);
+        values.set(value, (values.get(value) || 0) + 1);
+      }
     }
-
-    const iterationMap = questions.get(row.response_key);
-    if (!iterationMap.has(row.iteration_id)) {
-      iterationMap.set(row.iteration_id, []);
-    }
-
-    iterationMap.get(row.iteration_id).push({
-      value: row.response_value,
-      respondents: number(row.respondents)
-    });
   }
 
   const [previousIterationId, latestIterationId] = iterationIds;
   const items = [];
 
   for (const [key, iterationMap] of questions.entries()) {
-    const rawValues = Array.from(iterationMap.values()).flat();
+    const rawValues = Array.from(iterationMap.values()).flatMap((values) => Array.from(values.keys()));
     const distinctValueCount = new Set(
-      rawValues.map((value) => value.value)
+      rawValues
     ).size;
     const longestValueLength = rawValues.reduce(
-      (maximum, value) => Math.max(maximum, String(value.value).length),
+      (maximum, value) => Math.max(maximum, value.length),
       0
     );
     const structuredCategory =
       distinctValueCount <= 20 && longestValueLength <= 80;
     const iterations = iterationIds.map((iterationId) => {
-      const values = iterationMap.get(iterationId) || [];
+      const values = Array.from(iterationMap.get(iterationId) || [], ([value, respondents]) => ({ value, respondents }))
+        .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value));
       const totalRespondents = values.reduce(
         (total, value) => total + value.respondents,
         0
@@ -370,7 +382,7 @@ async function loadResponseDistributions(db, iterationIds) {
       return {
         iterationId,
         totalRespondents,
-        values: values.slice(0, 12).map((value) => ({
+        values: values.map((value) => ({
           ...value,
           percentage: percentage(value.respondents, totalRespondents)
         }))
@@ -385,14 +397,15 @@ async function loadResponseDistributions(db, iterationIds) {
     );
     const comparable = Boolean(
       structuredCategory &&
-      previous?.totalRespondents &&
-      latest?.totalRespondents
+      comparability?.status === "COMPARABLE" &&
+      previous?.totalRespondents >= MINIMUM_SEGMENT_BASE &&
+      latest?.totalRespondents >= MINIMUM_SEGMENT_BASE
     );
     const values = new Set([
       ...(previous?.values || []).map((value) => value.value),
       ...(latest?.values || []).map((value) => value.value)
     ]);
-    const movements = Array.from(values).map((value) => {
+    const movements = comparable ? Array.from(values).map((value) => {
       const previousValue = previous?.values.find(
         (item) => item.value === value
       );
@@ -411,7 +424,7 @@ async function loadResponseDistributions(db, iterationIds) {
           ).toFixed(1)
         )
       };
-    });
+    }) : [];
     const largestShift = movements.sort(
       (left, right) =>
         Math.abs(right.shiftPercentagePoints) -
@@ -423,11 +436,20 @@ async function loadResponseDistributions(db, iterationIds) {
       label: labelFromKey(key),
       comparable,
       structuredCategory,
-      suppressionReason: structuredCategory
-        ? null
-        : "Free-text or high-cardinality values are not converted into percentage movement.",
+      suppressionReason: comparability?.status !== "COMPARABLE"
+        ? (comparability?.reasons || ["Research methods have not been established as comparable."]).join(" ")
+        : !structuredCategory
+          ? "Free-text or high-cardinality values are not converted into percentage movement."
+          : !comparable
+            ? `Each wave needs at least ${MINIMUM_SEGMENT_BASE} answers in the selected cohort.`
+            : null,
       distinctValueCount,
-      iterations,
+      iterations: iterations.map((iteration) => ({
+        ...iteration,
+        suppressed: iteration.totalRespondents < MINIMUM_SEGMENT_BASE,
+        values: iteration.totalRespondents < MINIMUM_SEGMENT_BASE ? [] : iteration.values.slice(0, 12)
+      })),
+      movements,
       largestShift,
       maximumRespondents: Math.max(
         ...iterations.map((iteration) => iteration.totalRespondents),
@@ -447,6 +469,23 @@ async function loadResponseDistributions(db, iterationIds) {
     .slice(0, 40);
 }
 
+async function loadResponseDistributions(db, iterationIds, comparability) {
+  if (iterationIds.length !== 2) return [];
+  const result = await db.query(`
+    SELECT call_record.id AS call_id, call_record.iteration_id, call_record.voter_id,
+      call_record.connectivity_status, call_record.response_variables,
+      call_record.updated_at, call_record.created_at
+    FROM calls call_record
+    WHERE call_record.iteration_id = ANY($1::uuid[])
+      AND call_record.voter_id IS NOT NULL
+      AND LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+      AND jsonb_typeof(call_record.response_variables) = 'object'
+      AND call_record.response_variables <> '{}'::jsonb
+    ORDER BY call_record.updated_at DESC NULLS LAST, call_record.created_at DESC, call_record.id DESC
+  `, [iterationIds]);
+  return buildResponseDistributions(result.rows, iterationIds, comparability);
+}
+
 async function loadRespondentOverlap(db, previousIterationId, latestIterationId) {
   if (!previousIterationId || !latestIterationId) return 0;
 
@@ -459,12 +498,16 @@ async function loadRespondentOverlap(db, previousIterationId, latestIterationId)
         WHERE iteration_id = $1
           AND voter_id IS NOT NULL
           AND LOWER(COALESCE(connectivity_status, '')) = 'connected'
+          AND jsonb_typeof(response_variables) = 'object'
+          AND response_variables <> '{}'::jsonb
         INTERSECT
         SELECT DISTINCT voter_id
         FROM calls
         WHERE iteration_id = $2
           AND voter_id IS NOT NULL
           AND LOWER(COALESCE(connectivity_status, '')) = 'connected'
+          AND jsonb_typeof(response_variables) = 'object'
+          AND response_variables <> '{}'::jsonb
       ) overlap
     `,
     [previousIterationId, latestIterationId]
@@ -473,19 +516,12 @@ async function loadRespondentOverlap(db, previousIterationId, latestIterationId)
   return number(result.rows[0]?.overlapping_respondents);
 }
 
-function buildReadiness(completed, questions, overlap) {
-  const comparison = completed.slice(-2);
+function buildReadiness(comparison, questions, overlap, comparability) {
   const [previous, latest] = comparison;
   const comparableQuestionCount = questions.filter(
     (question) => question.comparable
   ).length;
-  const questionnairesConfigured = Boolean(
-    previous?.questionnaireId && latest?.questionnaireId
-  );
-  const questionnaireCompatible = Boolean(
-    questionnairesConfigured &&
-    previous.questionnaireId === latest.questionnaireId
-  );
+  const questionnaireCompatible = comparability.status === "COMPARABLE";
   const minimumBase = Math.min(
     previous?.connectedRespondents || 0,
     latest?.connectedRespondents || 0
@@ -494,16 +530,11 @@ function buildReadiness(completed, questions, overlap) {
     previous?.demoRespondents || 0,
     latest?.demoRespondents || 0
   );
-  const ready = comparison.length === 2 && comparableQuestionCount > 0;
-  const warnings = [];
+  const ready = questionnaireCompatible && comparableQuestionCount > 0;
+  const warnings = [...comparability.reasons];
 
   if (comparison.length < 2) {
     warnings.push("At least two completed Iterations are required for comparison.");
-  }
-  if (!questionnairesConfigured && comparison.length === 2) {
-    warnings.push("One or both Iterations do not have a questionnaire identity snapshot.");
-  } else if (comparison.length === 2 && !questionnaireCompatible) {
-    warnings.push("The two Iterations use different questionnaires; compare only shared normalized response variables.");
   }
   if (comparison.length === 2 && comparableQuestionCount === 0) {
     warnings.push("No shared structured response variables were captured across both Iterations.");
@@ -520,7 +551,7 @@ function buildReadiness(completed, questions, overlap) {
   warnings.push("Weighting, design effects, confidence intervals and outcome calibration are not yet configured.");
 
   let researchDesign = "NOT_ESTABLISHED";
-  if (comparison.length === 2) {
+  if (comparison.length === 2 && comparability.status === "COMPARABLE") {
     const smallerBase = Math.min(
       previous.connectedRespondents,
       latest.connectedRespondents
@@ -541,6 +572,7 @@ function buildReadiness(completed, questions, overlap) {
         : "UNWEIGHTED_DIRECTIONAL",
     representative: false,
     predictiveReady: false,
+    comparability,
     questionnaireCompatible,
     comparableQuestionCount,
     minimumRespondentBase: minimumBase,
@@ -556,13 +588,16 @@ export async function getCampaignAnalysis(campaignId, actor) {
   const campaign = await loadCampaign(db, campaignId, actor);
   const iterations = await loadIterations(db, campaignId);
   const completed = iterations.filter((iteration) => iteration.completed);
-  const comparisonIterations = completed.slice(-2);
-  const comparisonIds = comparisonIterations.map((iteration) => iteration.id);
+  const [previous, latest] = selectConsecutiveComparisonIterations(iterations);
+  const comparisonIterations = [previous, latest].filter(Boolean);
+  const comparabilityMap = await loadIterationComparability(db, iterations.map((iteration) => iteration.id));
+  const comparability = evaluateCompletedIterationComparison(previous, latest, comparabilityMap);
+  const comparisonIds = previous && latest ? [previous.id, latest.id] : [];
   const [questions, overlap] = await Promise.all([
-    loadResponseDistributions(db, comparisonIds),
+    loadResponseDistributions(db, comparisonIds, comparability),
     loadRespondentOverlap(db, comparisonIds[0], comparisonIds[1])
   ]);
-  const readiness = buildReadiness(completed, questions, overlap);
+  const readiness = buildReadiness(comparisonIterations, questions, overlap, comparability);
   const sentimentSignals = questions.filter((question) =>
     /(sentiment|mood|approval|satisfaction|feeling|confidence|optimism|anger|trust)/i.test(
       question.key
@@ -598,6 +633,7 @@ export async function getCampaignAnalysis(campaignId, actor) {
       ? {
           previousIteration: comparisonIterations[0],
           latestIteration: comparisonIterations[1],
+          ...comparability,
           questions,
           sentimentSignals
         }

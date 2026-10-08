@@ -21,6 +21,7 @@ type EmbedResponse = {
 };
 
 type ResearchQualityResponse = {
+  scope?: { label: string; runScope: string; movementScope: string };
   portfolio: {
     campaignCount: number;
     respondentBase: number;
@@ -59,9 +60,9 @@ type ResearchQualityResponse = {
     respondentBase: number;
     averageDirectPartyStrength: number | null;
     partyStrengthChange: number | null;
-    positiveSentimentPct: number;
+    positiveSentimentPct: number | null;
     positiveSentimentChangePct: number | null;
-    candidatePositivePct: number;
+    candidatePositivePct: number | null;
     candidatePositiveChangePct: number | null;
     comparisonBasis: string;
     comparisonReasons: string[];
@@ -280,7 +281,7 @@ export default function EnterpriseDashboardPage() {
 
     {quality && <section className={styles.qualityPanel}>
       <div className={styles.qualityHead}>
-        <div><span>PSEPHOLOGY QUALITY GATE</span><h2>Evidence strength before interpretation</h2><p>Separates fieldwork and data quality from political findings. This is operational research confidence—not electoral probability.</p></div>
+        <div><span>PSEPHOLOGY QUALITY GATE</span><h2>Evidence strength before interpretation</h2><p>Separates fieldwork and data quality from political findings. This is operational research confidence—not electoral probability.</p><p>{quality.scope?.label || "Whole portfolio; independent of embedded Amazon Quick filters"}. {quality.scope?.runScope || "All Runs within each Iteration"}.</p></div>
         <strong data-status={quality.portfolio.evidenceQualityStatus}>{quality.portfolio.evidenceQualityStatus}</strong>
       </div>
       <div className={styles.qualityMetrics}>
@@ -299,12 +300,13 @@ export default function EnterpriseDashboardPage() {
         <p><strong>Permitted:</strong> {quality.methodology.permittedUse}. <strong>Do not use for:</strong> {quality.methodology.prohibitedUse}. {quality.methodology.comparisonRule}.</p>
       </div>
       {quality.movement.length > 0 && <div className={styles.movementPreview}>
+        <p>{quality.scope?.movementScope || "Full Iterations, not filtered by age, gender or Mandal"}. Use the native Dashboard or Analysis filters for segment-specific comparisons.</p>
         <div><span>ITERATION MOVEMENT</span><strong>Comparable wave signals</strong></div>
         <div className={styles.movementGrid}>{quality.movement.slice(-6).map((item) => <article key={item.iterationId}>
           <span>{item.campaignName}</span>
           <strong>Iteration {item.iterationNumber}</strong>
-          <small>n={item.respondentBase} · Positive sentiment {item.positiveSentimentPct}%</small>
-          <em>{item.comparisonBasis === "BASELINE" ? "Baseline" : item.comparisonBasis !== "COMPARABLE" ? `Movement suppressed · ${item.comparisonReasons.join(" · ")}` : `${item.positiveSentimentChangePct !== null && item.positiveSentimentChangePct >= 0 ? "+" : ""}${item.positiveSentimentChangePct ?? 0} pp vs previous`}</em>
+          <small>n={item.respondentBase} · Positive sentiment {item.positiveSentimentPct === null ? "withheld" : `${item.positiveSentimentPct}%`}</small>
+          <em>{item.comparisonBasis === "BASELINE" ? "Baseline" : item.comparisonBasis !== "COMPARABLE" ? `Movement suppressed · ${item.comparisonReasons.join(" · ")}` : item.positiveSentimentChangePct === null ? "Movement unavailable" : `${item.positiveSentimentChangePct >= 0 ? "+" : ""}${item.positiveSentimentChangePct} pp vs previous`}</em>
         </article>)}</div>
       </div>}
     </section>}

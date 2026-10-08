@@ -1,63 +1,7 @@
 BEGIN;
 
-CREATE TABLE IF NOT EXISTS analytics_research_design_registry (
-  iteration_id uuid PRIMARY KEY
-    REFERENCES program_iterations(id) ON DELETE CASCADE,
-  campaign_id uuid NOT NULL
-    REFERENCES campaigns(id) ON DELETE CASCADE,
-  target_population text NOT NULL DEFAULT 'Not declared',
-  sample_frame_name text,
-  sampling_method text NOT NULL DEFAULT 'DIRECTIONAL_NON_PROBABILITY'
-    CHECK (sampling_method IN (
-      'CENSUS', 'SIMPLE_RANDOM', 'STRATIFIED_RANDOM', 'CLUSTER',
-      'SYSTEMATIC', 'QUOTA', 'PURPOSIVE', 'CONVENIENCE',
-      'DIRECTIONAL_NON_PROBABILITY'
-    )),
-  selection_method text,
-  weighting_status text NOT NULL DEFAULT 'NOT_CONFIGURED'
-    CHECK (weighting_status IN ('NOT_CONFIGURED', 'NOT_REQUIRED', 'PLANNED', 'APPLIED')),
-  weighting_method text,
-  weighting_variables jsonb NOT NULL DEFAULT '[]'::jsonb
-    CHECK (jsonb_typeof(weighting_variables) = 'array'),
-  fieldwork_mode text NOT NULL DEFAULT 'AI_ASSISTED_OUTBOUND_VOICE',
-  methodology_notes text,
-  declared_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
-  declared_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (campaign_id, iteration_id)
-);
-
-COMMENT ON TABLE analytics_research_design_registry IS
-  'Declared Iteration-level sampling, frame and weighting methodology used to qualify repeated-wave comparisons.';
-
-INSERT INTO analytics_research_design_registry (
-  iteration_id,
-  campaign_id,
-  target_population,
-  sample_frame_name,
-  sampling_method,
-  selection_method,
-  weighting_status,
-  fieldwork_mode,
-  methodology_notes
-)
-SELECT
-  iteration.id,
-  link.campaign_id,
-  'Not declared',
-  NULL,
-  'DIRECTIONAL_NON_PROBABILITY',
-  COALESCE(NULLIF(TRIM(iteration.sample_design_type), ''), 'Repeated cross-section'),
-  'NOT_CONFIGURED',
-  'AI_ASSISTED_OUTBOUND_VOICE',
-  'Migration default. An Admin or Super Admin must review and declare the research design.'
-FROM campaign_iteration_links link
-JOIN program_iterations iteration ON iteration.id = link.iteration_id
-JOIN campaigns campaign ON campaign.id = link.campaign_id
-WHERE campaign.status <> 'ARCHIVED'
-ON CONFLICT (iteration_id) DO NOTHING;
-
+-- Preserve the existing view columns; the preceding Iteration ID is appended.
+-- This migration does not declare methodology or infer missing historical identity.
 CREATE OR REPLACE VIEW analytics_iteration_comparability_v1 AS
 WITH edges AS (
   SELECT iteration.id AS iteration_id,

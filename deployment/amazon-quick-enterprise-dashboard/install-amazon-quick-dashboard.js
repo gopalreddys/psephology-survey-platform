@@ -32,6 +32,10 @@ await copyFile(
   path.join(runtimeRoot, "sql/028_research_design_comparability.sql")
 );
 await copyFile(
+  path.join(packageRoot, "029_shared_comparison_gate.sql"),
+  path.join(runtimeRoot, "sql/029_shared_comparison_gate.sql")
+);
+await copyFile(
   path.join(packageRoot, "migrate-amazon-quick-dashboard.js"),
   path.join(runtimeRoot, "src/db/migrate-amazon-quick-dashboard.js")
 );

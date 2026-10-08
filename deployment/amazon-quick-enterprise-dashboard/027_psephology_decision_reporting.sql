@@ -142,7 +142,12 @@ FROM combined;
 COMMENT ON VIEW analytics_research_quality_v1 IS
   'Aggregate campaign fieldwork, evidence coverage and demographic completeness. Quality status does not represent sampling confidence or vote-share precision.';
 
-CREATE OR REPLACE VIEW analytics_iteration_movement_v1 AS
+-- Bootstrap only. Never overwrite the newer guarded view during migration replay.
+DO $bootstrap$
+BEGIN
+  IF to_regclass('analytics_iteration_movement_v1') IS NULL THEN
+    EXECUTE $movement_view$
+CREATE VIEW analytics_iteration_movement_v1 AS
 WITH iteration_signal AS (
   SELECT
     research.program_id,
@@ -203,6 +208,10 @@ SELECT
   'Comparable aggregate movement only; questionnaire and sample changes must be reviewed'::text
     AS interpretation_label
 FROM iteration_signal signal;
+$movement_view$;
+  END IF;
+END
+$bootstrap$;
 
 COMMENT ON VIEW analytics_iteration_movement_v1 IS
   'Aggregate Iteration signals and change from the previous Iteration; not a causal campaign-effect estimate.';

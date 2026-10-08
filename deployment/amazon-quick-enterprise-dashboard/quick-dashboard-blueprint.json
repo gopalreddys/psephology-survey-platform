@@ -51,16 +51,21 @@
     {
       "name": "Iteration movement",
       "datasetView": "analytics_iteration_movement_v1",
+      "scopeLabel": "Full consecutive Iterations; all Runs. Demographic filters do not apply to this aggregate dataset.",
+      "supportedFilters": ["program_name", "campaign_name", "iteration_number"],
+      "unsupportedFilters": ["mandal_name", "party_name", "gender", "age_band", "constituency_name"],
       "visuals": [
-        { "type": "LINE", "title": "Direct party-strength movement", "dimension": "iteration_number", "measure": "average_direct_party_strength" },
-        { "type": "COMBO", "title": "Positive sentiment movement", "dimension": "iteration_number", "measure": "positive_sentiment_pct", "secondaryMeasure": "positive_sentiment_change_pct" },
-        { "type": "COMBO", "title": "Candidate-positive movement", "dimension": "iteration_number", "measure": "candidate_positive_pct", "secondaryMeasure": "candidate_positive_change_pct" },
-        { "type": "TABLE", "title": "Wave comparability base", "dimensions": ["campaign_name", "iteration_number", "comparison_basis"], "measures": ["respondent_base", "direct_measure_base", "issue_response_base"] }
+        { "type": "BAR", "title": "Qualified direct party-strength change", "dimension": "iteration_number", "group": "campaign_name", "measure": "party_strength_change", "nullHandling": "Omit unavailable deltas; never connect waves" },
+        { "type": "BAR", "title": "Qualified positive-sentiment change (pp)", "dimension": "iteration_number", "group": "campaign_name", "measure": "positive_sentiment_change_pct", "nullHandling": "Omit unavailable deltas; never connect waves" },
+        { "type": "BAR", "title": "Qualified candidate-positive change (pp)", "dimension": "iteration_number", "group": "campaign_name", "measure": "candidate_positive_change_pct", "nullHandling": "Omit unavailable deltas; never connect waves" },
+        { "type": "TABLE", "title": "Standalone wave evidence and comparability", "dimensions": ["campaign_name", "iteration_number", "comparison_basis"], "measures": ["respondent_base", "direct_measure_base", "issue_response_base", "average_direct_party_strength", "positive_sentiment_pct", "candidate_positive_pct"] }
       ]
     },
     {
       "name": "Research quality",
       "datasetView": "analytics_research_quality_v1",
+      "scopeLabel": "Whole Campaign fieldwork; not filtered by age, gender, Mandal or Run.",
+      "supportedFilters": ["program_name", "campaign_name"],
       "visuals": [
         { "type": "KPI", "title": "Respondent evidence", "measure": "sum(respondent_base)" },
         { "type": "KPI", "title": "Connection rate", "measure": "weighted(connection_rate_pct, call_attempts)" },
@@ -87,7 +92,7 @@
     "publicEmbedding": false,
     "rawPiiIncluded": false,
     "qualityStatusMeaning": "Operational evidence quality; not statistical confidence",
-    "movementComparisonRule": "Keep the core questionnaire and sampling approach comparable before interpreting change",
+    "movementComparisonRule": "Use analytics_iteration_comparability_v1; consecutive declared comparable waves only, with at least five respondents per wave; never bridge missing evidence",
     "forecastLabel": "Directional research evidence; not an election forecast"
   }
 }

@@ -11,7 +11,8 @@ for (const migration of [
   "025_amazon_quick_geographic_heatmap.sql",
   "026_telangana_administrative_boundaries.sql",
   "027_psephology_decision_reporting.sql",
-  "028_research_design_comparability.sql"
+  "028_research_design_comparability.sql",
+  "029_shared_comparison_gate.sql"
 ]) {
   const sql = await readFile(path.resolve(here, "../../sql", migration), "utf8");
   await db.query(sql);

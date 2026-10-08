@@ -1,5 +1,9 @@
 import { getDb } from "../db/postgres.js";
 import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js";
+import {
+  loadIterationComparability,
+  evaluateIterationComparison
+} from "./research-comparability.repository.js";
 
 const ROLES = new Set(["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"]);
 const CLOSED_RUNS = new Set(["COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"]);
@@ -33,6 +37,22 @@ function iterationScope(actor) {
 
 function count(value) {
   return Number(value || 0);
+}
+
+function requestedScopeId(value, label) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value !== "string" || !value.trim()) {
+    const error = new Error(`Invalid ${label} selection`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return value.trim();
+}
+
+function scopeNotFound(label) {
+  const error = new Error(`${label} not found in the selected visible scope`);
+  error.statusCode = 404;
+  throw error;
 }
 
 function percentage(value, total) {
@@ -253,7 +273,7 @@ function researchInstrument(iteration) {
   };
 }
 
-function buildComparableTrend(availableIterations, evidenceRows, selectedCampaign, selectedIteration) {
+function buildComparableTrend(availableIterations, evidenceRows, selectedCampaign, selectedIteration, comparabilityById) {
   const trendCampaignId = selectedCampaign?.id || selectedIteration?.campaign_id || null;
   if (!trendCampaignId) {
     return {
@@ -262,13 +282,16 @@ function buildComparableTrend(availableIterations, evidenceRows, selectedCampaig
       points: [],
       includedIterations: 0,
       excludedIterations: availableIterations.length,
-      instrument: null
+      instrument: null,
+      reasons: ["Select one Campaign before comparing Iterations."],
+      comparisons: []
     };
   }
 
   const campaignIterations = availableIterations.filter((iteration) =>
-    iteration.campaign_id === trendCampaignId
-  );
+    iteration.campaign_id === trendCampaignId &&
+    (!selectedIteration || count(iteration.iteration_number) <= count(selectedIteration.iteration_number))
+  ).sort((left, right) => count(left.iteration_number) - count(right.iteration_number));
   const evidenceByIteration = new Map();
   for (const record of evidenceRows) {
     if (record.campaign_id !== trendCampaignId) continue;
@@ -278,61 +301,108 @@ function buildComparableTrend(availableIterations, evidenceRows, selectedCampaig
   }
   const referenceIteration = selectedIteration?.campaign_id === trendCampaignId
     ? selectedIteration
-    : [...campaignIterations].reverse().find((iteration) =>
-        evidenceByIteration.has(iteration.id) && researchInstrument(iteration)
-      ) || null;
+    : campaignIterations.at(-1) || null;
   const instrument = referenceIteration ? researchInstrument(referenceIteration) : null;
-
-  if (!instrument) {
-    return {
-      status: "NOT_COMPARABLE",
-      reason: "Trend unavailable—this research scope has no frozen questionnaire version and research-design identity.",
-      points: [],
-      includedIterations: 0,
-      excludedIterations: campaignIterations.length,
-      instrument: null
-    };
+  const emptyTrend = (status, reason, reasons) => ({
+    status,
+    reason,
+    reasons,
+    points: [],
+    includedIterations: 0,
+    excludedIterations: campaignIterations.length,
+    instrument,
+    comparisons: []
+  });
+  if (!referenceIteration) {
+    return emptyTrend("NO_HISTORY", "Trend unavailable—there are no Iterations in this Campaign scope.", ["No Iteration history is available."]);
   }
-
-  const comparableIterations = campaignIterations.filter((iteration) =>
-    researchInstrument(iteration)?.key === instrument.key
-  );
-  const points = comparableIterations.map((iteration) => {
-    const iterationRecords = evidenceByIteration.get(iteration.id) || [];
+  const wavePoints = campaignIterations.map((iteration) => {
+    const records = evidenceByIteration.get(iteration.id) || [];
     return {
       iterationId: iteration.id,
       iterationNumber: count(iteration.iteration_number),
       iterationName: iteration.iteration_name,
       campaignName: iteration.campaign_name,
-      base: iterationRecords.length,
-      value: iterationRating(iterationRecords)
+      base: records.length,
+      answeredBase: records.filter((record) => respondentSentiment(record) !== null).length,
+      value: iterationRating(records)
     };
-  }).filter((point) => point.value !== null);
-  const excludedIterations = campaignIterations.length - comparableIterations.length;
+  });
+  const latestPoint = wavePoints.at(-1);
+  if (!latestPoint || latestPoint.value === null) {
+    return emptyTrend("NO_HISTORY", "Trend unavailable—this Iteration has no rated responses for the selected scope.", ["No rated responses are available for the selected scope."]);
+  }
+  if (latestPoint.answeredBase < MINIMUM_REPORTING_BASE) {
+    return emptyTrend("SUPPRESSED", `Trend withheld—this Iteration has fewer than ${MINIMUM_REPORTING_BASE} rated respondents for the selected scope.`, [`Fewer than ${MINIMUM_REPORTING_BASE} rated respondents are available for the selected scope.`]);
+  }
+
+  const points = [latestPoint];
+  const comparisons = [];
+  let stopped = null;
+  for (let index = wavePoints.length - 1; index > 0; index -= 1) {
+    const previous = wavePoints[index - 1];
+    const latest = wavePoints[index];
+    const comparison = evaluateIterationComparison(previous.iterationId, latest.iterationId, comparabilityById);
+    comparisons.unshift(comparison);
+    if (comparison.status !== "COMPARABLE") {
+      stopped = { status: "NOT_COMPARABLE", reasons: comparison.reasons };
+      break;
+    }
+    if (previous.value === null) {
+      stopped = { status: "NO_HISTORY", reasons: ["No rated responses are available for the selected scope."] };
+      break;
+    }
+    if (previous.answeredBase < MINIMUM_REPORTING_BASE) {
+      stopped = { status: "SUPPRESSED", reasons: [`Fewer than ${MINIMUM_REPORTING_BASE} rated respondents are available for the selected scope.`] };
+      break;
+    }
+    points.unshift(previous);
+  }
+  const excludedIterations = campaignIterations.length - points.length;
 
   if (points.length < 2) {
     return {
-      status: "INSUFFICIENT_COMPARABLE_HISTORY",
-      reason: "Trend unavailable—at least two Iterations with the same frozen questionnaire version, research phase and sample design are required.",
+      status: stopped?.status === "NOT_COMPARABLE" ? "NOT_COMPARABLE" : "INSUFFICIENT_COMPARABLE_HISTORY",
+      reason: stopped?.status === "NOT_COMPARABLE"
+        ? `Trend unavailable—the consecutive Iteration comparison failed: ${stopped.reasons.join(", ")}.`
+        : stopped?.status === "SUPPRESSED"
+          ? `Trend unavailable—the preceding Iteration has fewer than ${MINIMUM_REPORTING_BASE} rated respondents for the selected scope.`
+          : "Trend unavailable—at least two consecutive comparable Iterations with reportable responses are required.",
       points,
-      includedIterations: comparableIterations.length,
+      includedIterations: points.length,
       excludedIterations,
-      instrument
+      instrument,
+      reasons: stopped?.reasons || ["At least two consecutive comparable Iterations with reportable responses are required."],
+      comparisons
     };
   }
 
   return {
     status: "DIRECTIONAL",
-    reason: `${points.length} instrument-compatible Iterations are included; ${excludedIterations} incompatible Iteration${excludedIterations === 1 ? " is" : "s are"} excluded.`,
+    reason: `${points.length} consecutive comparable Iterations are included; ${excludedIterations} earlier Iteration${excludedIterations === 1 ? " is" : "s are"} excluded.${stopped ? ` History stops at ${stopped.reasons.join(", ")}.` : ""}`,
     points,
-    includedIterations: comparableIterations.length,
+    includedIterations: points.length,
     excludedIterations,
-    instrument
+    instrument,
+    reasons: stopped?.reasons || [],
+    comparisons
   };
 }
 
-function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRows, selection) {
+export function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRows, selection, comparabilityById = new Map()) {
   if (actor.role_code === "CAMPAIGNER") return null;
+  const requestedProgramId = requestedScopeId(selection.programId, "Program");
+  const requestedCampaignId = requestedScopeId(selection.campaignId, "Campaign");
+  const requestedIterationId = requestedScopeId(selection.iterationId, "Iteration");
+  const requestedCampaign = requestedCampaignId
+    ? campaigns.find((campaign) => campaign.id === requestedCampaignId) : null;
+  if (requestedCampaignId && !requestedCampaign) scopeNotFound("Campaign");
+  const requestedIteration = requestedIterationId
+    ? iterationRows.find((iteration) => iteration.id === requestedIterationId &&
+        (!requestedCampaign || iteration.campaign_id === requestedCampaign.id)) : null;
+  if (requestedIterationId && !requestedIteration) scopeNotFound("Iteration");
+  const impliedCampaign = requestedCampaign || (requestedIteration
+    ? campaigns.find((campaign) => campaign.id === requestedIteration.campaign_id) : null);
   const programs = Array.from(new Map(campaigns.map((campaign) => [
     campaign.programId || "unlinked",
     {
@@ -341,21 +411,25 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       code: campaign.programCode || "UNLINKED"
     }
   ])).values()).sort((left, right) => left.name.localeCompare(right.name));
-  const selectedProgram = programs.find((program) => program.id === selection.programId)
+  const selectedProgram = programs.find((program) => program.id === requestedProgramId)
+    || (!requestedProgramId && impliedCampaign
+      ? programs.find((program) => program.id === (impliedCampaign.programId || "unlinked")) : null)
     || programs.find((program) => campaigns.some((campaign) =>
       (campaign.programId || "unlinked") === program.id &&
       evidenceRows.some((record) => record.campaign_id === campaign.id)
     ))
     || programs[0]
     || null;
+  if (requestedProgramId && selectedProgram?.id !== requestedProgramId) scopeNotFound("Program");
   if (!selectedProgram) return null;
 
   const programCampaigns = campaigns.filter((campaign) =>
     (campaign.programId || "unlinked") === selectedProgram.id
   );
   const selectedCampaign = programCampaigns.find((campaign) =>
-    campaign.id === selection.campaignId
+    campaign.id === requestedCampaignId
   ) || null;
+  if (requestedCampaignId && !selectedCampaign) scopeNotFound("Campaign");
   const campaignScopeIds = new Set(
     (selectedCampaign ? [selectedCampaign] : programCampaigns).map((campaign) => campaign.id)
   );
@@ -366,26 +440,51 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       return campaignCompare || count(left.iteration_number) - count(right.iteration_number);
     });
   const selectedIteration = availableIterations.find((iteration) =>
-    iteration.id === selection.iterationId
+    iteration.id === requestedIterationId
   ) || null;
+  if (requestedIterationId && !selectedIteration) scopeNotFound("Iteration");
   const scopeRecords = evidenceRows.filter((record) =>
     campaignScopeIds.has(record.campaign_id) &&
     (!selectedIteration || record.iteration_id === selectedIteration.id)
   );
-  const mandals = Array.from(new Set(scopeRecords.map((record) => normalizeMandal(record.mandal_name)))).sort();
-  const genders = Array.from(new Set(scopeRecords.map((record) => normalizeGender(record.gender)))).sort();
+  const selectedMandal = requestedScopeId(selection.mandal, "Mandal");
+  const selectedGender = requestedScopeId(selection.gender, "Gender");
+  if (selectedGender && !["Female", "Male", "Other / self-described", "Unknown"].includes(selectedGender)) {
+    const error = new Error("Unsupported Gender filter");
+    error.statusCode = 400;
+    throw error;
+  }
+  const mandals = Array.from(new Set([
+    ...scopeRecords.map((record) => normalizeMandal(record.mandal_name)),
+    ...(selectedMandal ? [selectedMandal] : [])
+  ])).sort();
+  const genders = Array.from(new Set([
+    ...scopeRecords.map((record) => normalizeGender(record.gender)),
+    ...(selectedGender ? [selectedGender] : [])
+  ])).sort();
   const ageBands = ["18–29", "30–39", "40–49", "50+"];
-  const selectedMandal = mandals.includes(selection.mandal) ? selection.mandal : "";
-  const selectedGender = genders.includes(selection.gender) ? selection.gender : "";
-  const selectedAgeBand = ageBands.includes(selection.ageBand) ? selection.ageBand : "";
-  const records = scopeRecords.filter((record) => {
+  const selectedAgeBand = requestedScopeId(selection.ageBand, "Age band");
+  if (selectedAgeBand && !ageBands.includes(selectedAgeBand)) {
+    const error = new Error("Unsupported Age band filter");
+    error.statusCode = 400;
+    throw error;
+  }
+  const matchesSegment = (record) => {
     if (selectedMandal && normalizeMandal(record.mandal_name) !== selectedMandal) return false;
     if (selectedGender && normalizeGender(record.gender) !== selectedGender) return false;
     if (selectedAgeBand && ageBand(record.age) !== selectedAgeBand) return false;
     return true;
-  });
+  };
+  const records = scopeRecords.filter(matchesSegment);
   const hasSegmentFilter = Boolean(selectedMandal || selectedGender || selectedAgeBand);
-  const suppressed = hasSegmentFilter && records.length < MINIMUM_REPORTING_BASE;
+  const scopeLabel = hasSegmentFilter
+    ? `Selected segment: ${[
+        selectedMandal ? `Mandal ${selectedMandal}` : "all Mandals",
+        selectedGender || "all genders",
+        selectedAgeBand ? `age ${selectedAgeBand}` : "all age bands"
+      ].join(" · ")}`
+    : selectedIteration ? "Full Iteration: all Mandals, genders and age bands" : "Full selected research scope: all Mandals, genders and age bands";
+  const suppressed = records.length < MINIMUM_REPORTING_BASE;
   const reportable = suppressed ? [] : records;
   const sentiment = distribution(reportable, respondentSentiment);
   const issues = distribution(reportable, (record) => {
@@ -397,9 +496,10 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
   }).slice(0, 6);
   const trendScope = buildComparableTrend(
     availableIterations,
-    evidenceRows,
+    evidenceRows.filter(matchesSegment),
     selectedCampaign,
-    selectedIteration
+    selectedIteration,
+    comparabilityById
   );
   const trend = trendScope.points;
   const rating = iterationRating(reportable);
@@ -450,6 +550,7 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
       selectedAgeBand
     },
     minimumBase: MINIMUM_REPORTING_BASE,
+    scopeLabel,
     respondentBase: suppressed ? null : reportable.length,
     suppressed,
     rating: {
@@ -469,15 +570,16 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
     },
     age: segmentedSentiment(reportable, (record) => ageBand(record.age), ["18–29", "30–39", "40–49", "50+", "Unknown"]),
     gender: segmentedSentiment(reportable, (record) => normalizeGender(record.gender), ["Female", "Male", "Other / self-described", "Unknown"]),
-    mandalHeatmap: segmentedSentiment(scopeRecords.filter((record) => {
-      if (selectedGender && normalizeGender(record.gender) !== selectedGender) return false;
-      if (selectedAgeBand && ageBand(record.age) !== selectedAgeBand) return false;
-      return true;
-    }), (record) => normalizeMandal(record.mandal_name)),
+    mandalHeatmap: segmentedSentiment(records, (record) => normalizeMandal(record.mandal_name)),
     predictive: {
       status: trendScope.status,
+      scopeLabel: hasSegmentFilter ? `${scopeLabel} in each Iteration` : "Full Iteration in each wave: all Mandals, genders and age bands",
       direction: trendScope.status === "NOT_COMPARABLE"
         ? "Trend unavailable"
+        : trendScope.status === "SUPPRESSED"
+          ? "Trend withheld"
+          : trendScope.status === "NO_HISTORY"
+            ? "No rated history"
         : trendScope.status === "INSUFFICIENT_COMPARABLE_HISTORY"
           ? "Insufficient comparable history"
           : trendDirection(trend),
@@ -490,6 +592,9 @@ function buildDashboardIntelligence(actor, campaigns, iterationRows, evidenceRow
         ? `${trendScope.reason} The result is directional, not an election forecast or participant-level prediction.`
         : trendScope.reason,
       comparability: {
+        source: "analytics_iteration_comparability_v1",
+        reasons: trendScope.reasons,
+        comparisons: trendScope.comparisons,
         includedIterations: trendScope.includedIterations,
         excludedIterations: trendScope.excludedIterations,
         questionnaireCode: trendScope.instrument?.code || null,
@@ -517,7 +622,7 @@ function sortActions(items) {
   ).slice(0, 12);
 }
 
-function buildDashboard(actor, campaignRows, iterationRows, runRows, evidenceRows, selection) {
+function buildDashboard(actor, campaignRows, iterationRows, runRows, evidenceRows, selection, comparabilityById) {
   const campaigns = campaignRows.map((row) => ({
     id: row.id,
     name: row.campaign_name,
@@ -794,7 +899,8 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows, evidenceRow
       campaigns,
       iterationRows,
       evidenceRows,
-      selection
+      selection,
+      comparabilityById
     ),
     generatedAt: new Date().toISOString()
   };
@@ -938,12 +1044,16 @@ export async function getRoleDashboard(actor, selection = {}) {
     runsPromise,
     evidencePromise
   ]);
+  const comparabilityById = actor.role_code === "CAMPAIGNER"
+    ? new Map()
+    : await loadIterationComparability(db, iterations.rows.map((iteration) => iteration.id));
   return buildDashboard(
     actor,
     campaigns.rows,
     iterations.rows,
     runs.rows,
     evidence.rows,
-    selection
+    selection,
+    comparabilityById
   );
 }

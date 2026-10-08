@@ -1,6 +1,11 @@
 import { getDb } from "../db/postgres.js";
 import { canReviewCampaign } from "./campaign-visibility.repository.js";
 import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
+import { loadIterationComparability } from "./research-comparability.repository.js";
+import {
+  selectConsecutiveComparisonIterations, evaluateCompletedIterationComparison,
+  buildResponseDistributions, latestStructuredRespondents
+} from "./campaign-analysis.repository.js";
 
 const ADMIN_ROLES = new Set(["SUPER_ADMIN", "ADMIN"]);
 const SUCCESS_STATUSES = [
@@ -335,13 +340,69 @@ async function loadCampaigns(db, programId) {
       demoResponses: number(row.demo_responses),
       transcriptsCaptured: number(row.transcripts_captured),
       responsesCaptured: number(row.responses_captured),
-      comparisonReady:
-        number(row.completed_iteration_count) >= 2 &&
-        number(row.responses_captured) > 0,
+      comparisonReady: false,
       attentionReasons: reasons,
       needsAttention: reasons.length > 0
     };
   });
+}
+
+export function buildProgramComparisonReadiness(iterations, records, comparabilityMap) {
+  const [previous, latest] = selectConsecutiveComparisonIterations(iterations);
+  const gate = evaluateCompletedIterationComparison(previous, latest, comparabilityMap);
+  const questions = previous && latest
+    ? buildResponseDistributions(records, [previous.id, latest.id], gate) : [];
+  const ready = gate.status === "COMPARABLE" && questions.some((question) => question.comparable);
+  const reasons = [...gate.reasons];
+  if (gate.status === "COMPARABLE" && !ready) {
+    reasons.push("No shared structured output has at least five answered respondents in each consecutive Iteration.");
+  }
+  return {
+    comparisonReady: ready,
+    comparisonStatus: ready ? "COMPARABLE" : "NOT_COMPARABLE",
+    comparisonReasons: reasons,
+    comparisonPreviousIterationId: previous?.id || null,
+    comparisonLatestIterationId: latest?.id || null,
+    comparisonPreviousBase: previous ? latestStructuredRespondents(records, previous.id).length : 0,
+    comparisonLatestBase: latest ? latestStructuredRespondents(records, latest.id).length : 0
+  };
+}
+
+async function qualifyVisibleCampaignComparisons(db, campaigns) {
+  if (!campaigns.length) return;
+  // Load only already-authorized Campaigns, then use exactly the same pair,
+  // respondent unit and shared gate as the Campaign Analysis endpoint.
+  const { rows } = await db.query(`
+    SELECT link.campaign_id, iteration.id, iteration.iteration_number,
+      UPPER(COALESCE(link.status, iteration.status)) AS effective_status
+    FROM campaign_iteration_links link
+    JOIN program_iterations iteration ON iteration.id = link.iteration_id
+    WHERE link.campaign_id = ANY($1::uuid[])
+    ORDER BY iteration.iteration_number, iteration.created_at, iteration.id
+  `, [campaigns.map((campaign) => campaign.id)]);
+  const byCampaign = new Map(campaigns.map((campaign) => [campaign.id, []]));
+  for (const row of rows) byCampaign.get(row.campaign_id)?.push({
+    id: row.id, number: number(row.iteration_number),
+    completed: CLOSED_ITERATION_STATUSES.includes(row.effective_status)
+  });
+  const pairIds = [...new Set(Array.from(byCampaign.values()).flatMap((iterations) =>
+    selectConsecutiveComparisonIterations(iterations).filter(Boolean).map((iteration) => iteration.id)
+  ))];
+  const [comparabilityMap, evidence] = await Promise.all([
+    loadIterationComparability(db, pairIds),
+    pairIds.length ? db.query(`
+      SELECT id AS call_id, iteration_id, voter_id, connectivity_status,
+        response_variables, updated_at, created_at
+      FROM calls
+      WHERE iteration_id = ANY($1::uuid[])
+        AND voter_id IS NOT NULL
+        AND LOWER(COALESCE(connectivity_status, '')) = 'connected'
+        AND jsonb_typeof(response_variables) = 'object'
+        AND response_variables <> '{}'::jsonb
+    `, [pairIds]) : { rows: [] }
+  ]);
+  for (const campaign of campaigns) Object.assign(campaign,
+    buildProgramComparisonReadiness(byCampaign.get(campaign.id), evidence.rows, comparabilityMap));
 }
 
 function buildWarnings(campaigns) {
@@ -499,6 +560,7 @@ export async function getProgramDashboard(programId, actor) {
   const campaigns = allCampaigns.filter((campaign) =>
     canReviewCampaign(campaign, actor)
   );
+  await qualifyVisibleCampaignComparisons(db, campaigns);
   const lifecycleHistory = await loadProgramLifecycleHistory(
     db,
     programId,
