@@ -91,6 +91,13 @@ assert.match(migrationRunner, /"031_audited_research_methodology\.sql",\s*"032_s
 assert.match(routes, /sentimentValidation: getSentimentValidation\(\)/);
 assert.match(routes, /Incumbent performance assessment only: incumbent_assessment/);
 assert.match(enterpriseUi, /Human review pending/);
+assert.match(enterpriseUi, /DEMO · TEST SURVEY EVIDENCE/);
+assert.match(enterpriseUi, /Reporting capability preview, not population findings/);
+for (const state of ["Not recorded", "Withheld", "Not comparable", "Technical error"]) {
+  assert.ok(enterpriseUi.includes(`<dt>${state}</dt>`), `Demo preview explains ${state} separately`);
+}
+assert.match(enterpriseUi, /A chart design alone does not confirm that collection contract/);
+assert.doesNotMatch(enterpriseUi, /Age histogram/);
 assert.match(enterpriseUi, /quality\.sentimentValidation\.ruleHash/);
 assert.doesNotMatch(enterpriseUi, /This is operational research confidence/);
 assert.match(routes, /campaignReviewVisibilitySql/);
@@ -106,8 +113,16 @@ assert.equal(blueprint.movementDatasetView, "analytics_iteration_movement_v2");
 assert.equal(blueprint.comparabilityDatasetView, "analytics_iteration_comparability_v1");
 assert.ok(blueprint.globalFilters.includes("constituency_name"));
 assert.ok(blueprint.sheets.flatMap((sheet) => sheet.visuals).some((visual) => visual.type === "HEAT_TABLE"));
-assert.ok(blueprint.sheets.flatMap((sheet) => sheet.visuals).some((visual) => visual.type === "HISTOGRAM"));
-assert.ok(blueprint.sheets.flatMap((sheet) => sheet.visuals).some((visual) => visual.type === "GEOSPATIAL_HEATMAP"));
+const ageBandVisual = blueprint.sheets.find((sheet) => sheet.name === "Demographic pulse").visuals.find((visual) => visual.type === "BAR" && visual.dimension === "age_band");
+assert.ok(ageBandVisual, "Discrete age bands use a categorical bar, not a continuous-age histogram");
+const partyMap = blueprint.sheets.find((sheet) => sheet.name === "Geographic intelligence").visuals.find((visual) => visual.type === "POINT_MAP");
+assert.ok(partyMap, "Saved geographic template is a categorical point map");
+assert.equal(partyMap.color, "party_name");
+assert.equal(partyMap.size, "sum(respondent_count)");
+assert.equal(partyMap.colorConvention, "partyColors");
+assert.equal(partyMap.numericPartyStrengthDisplayed, false);
+assert.deepEqual(blueprint.partyColors, { BRS: "#E91E8F", BJP: "#FF9933", Congress: "#138808" });
+assert.doesNotMatch(JSON.stringify(blueprint.sheets), /HISTOGRAM|GEOSPATIAL_HEATMAP|party_pulse_score|party_strength_change|average_direct_party_strength|direct_party_strength/, "No ambiguous numeric party-strength claim in published visual definitions");
 assert.equal(blueprint.governance.minimumCellSize, 5);
 assert.ok(blueprint.sheets.find((sheet) => sheet.name === 'Iteration movement').unsupportedFilters.includes('gender'));
 assert.equal(blueprint.governance.mapAggregationLevel, "MANDAL");
@@ -158,7 +173,8 @@ for (const visual of blueprint.sheets.flatMap((sheet) => sheet.visuals)) {
   }
 }
 assert.match(blueprint.governance.missingValueRule, /No response is distinct from Can't say/);
-assert.match(blueprint.governance.nativeAssetPublication, /not automatically republished/);
+assert.match(blueprint.governance.nativeAssetPublication, /platform migrations do not refresh or publish Quick assets/);
+assert.match(blueprint.governance.nativeAssetPublication, /separately publish the exact verified version/);
 for (const sheet of blueprint.sheets.filter((entry) => ["Leadership overview", "Demographic pulse"].includes(entry.name))) {
   for (const visual of sheet.visuals.filter((entry) => ["party_salience", "party_leadership", "candidate_sentiment", "respondent_sentiment"].includes(entry.dimension || entry.color))) {
     assert.ok(visual.answerBase, `${visual.title} must declare the filtered answer denominator`);

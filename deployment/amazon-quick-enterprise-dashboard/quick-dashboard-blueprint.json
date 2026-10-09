@@ -1,11 +1,22 @@
 {
   "name": "Psephology Enterprise Leadership Dashboard",
   "provider": "Amazon Quick Sight",
+  "definitionGenerator": "quick-publication-definition.mjs",
   "datasetView": "analytics_research_enterprise_v2",
   "qualityDatasetView": "analytics_research_quality_v1",
   "movementDatasetView": "analytics_iteration_movement_v2",
   "comparabilityDatasetView": "analytics_iteration_comparability_v1",
-  "refresh": "SPICE incremental refresh every 30 minutes during survey operations",
+  "refresh": "Manual FULL SPICE refresh; no incremental schedule is verified",
+  "partyColors": { "BRS": "#E91E8F", "BJP": "#FF9933", "Congress": "#138808" },
+  "sentimentColors": { "Positive": "#2F7D55", "Neutral": "#64748B", "Negative": "#C74B50", "Mixed": "#805AD5", "Can't say": "#B7791F", "Declined to answer": "#94A3B8", "Uncoded response": "#475569" },
+  "publication": {
+    "preservePublishedVersionDuringStaging": 3,
+    "useSeparateGovernedDatasets": true,
+    "mutatePublishedSourceDatasetsDuringStaging": false,
+    "preserveDashboardIdentityAndAuthenticatedEmbed": true,
+    "requiredChecks": ["Recoverable definitions saved", "Candidate governance and API validation", "FULL SPICE ingestions complete with zero skipped rows", "Live filters and minimum-person safeguards", "Exact unpublished version inspected", "Separately publish and verify authenticated embed"]
+  },
+  "filterCatalogMeaning": "Available controls, not universal scope. Each sheet declares supported filters; common party and Iteration labels are mapped explicitly between datasets.",
   "globalFilters": [
     "program_name",
     "campaign_name",
@@ -19,33 +30,44 @@
   "sheets": [
     {
       "name": "Leadership overview",
+      "scopeLabel": "Filtered respondent–Iteration observations; a separate KPI deduplicates people across selected waves",
+      "supportedFilters": ["program_name", "campaign_name", "iteration_number", "constituency_name", "mandal_name", "gender", "age_band", "party_salience"],
       "visuals": [
-        { "type": "KPI", "title": "Respondent base", "measure": "distinct_count(respondent_key)" },
-        { "type": "KPI", "title": "Average direct party-strength", "measure": "avg(direct_party_strength)", "answerBase": "distinct_count(respondent_key where direct_party_strength is not null)", "minimumAnswerBase": 5 },
-        { "type": "DONUT", "title": "Incumbent performance assessment · human review pending", "dimension": "respondent_sentiment", "measure": "distinct_count(respondent_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "distinct_count(respondent_key where respondent_sentiment_status <> 'MISSING')", "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
-        { "type": "BAR", "title": "Recorded party salience", "dimension": "party_salience", "measure": "distinct_count(respondent_key)", "answerStatus": "party_salience_status", "answerBase": "distinct_count(respondent_key where party_salience_status <> 'MISSING')", "showMissingSeparately": true },
-        { "type": "BAR", "title": "Candidate impression · human review pending", "dimension": "candidate_sentiment", "measure": "distinct_count(respondent_key)", "answerStatus": "candidate_sentiment_status", "answerBase": "distinct_count(respondent_key where candidate_sentiment_status <> 'MISSING')", "showMissingSeparately": true, "sourceKeys": ["candidate_impression", "candidate_sentiment", "veeresh_impression"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
-        { "type": "BAR", "title": "Recorded issue leadership", "dimension": "party_leadership", "measure": "distinct_count(respondent_key)", "answerStatus": "party_leadership_status", "answerBase": "distinct_count(respondent_key where party_leadership_status <> 'MISSING')", "showMissingSeparately": true }
+        { "type": "KPI", "title": "Unique respondents across selected waves", "measure": "distinct_count(respondent_key)" },
+        { "type": "KPI", "title": "Respondent–Iteration observations", "measure": "distinct_count(evidence_key)", "privacyGuard": "distinct_count(respondent_key) >= 5" },
+        { "type": "KPI", "title": "Incumbent assessment · answered base", "measure": "distinct_count(quick_incumbent_answer_key)", "privacyGuard": "distinct_count(quick_incumbent_respondent_key) >= 5" },
+        { "type": "KPI", "title": "Candidate impression · answered base", "measure": "distinct_count(quick_candidate_answer_key)", "privacyGuard": "distinct_count(quick_candidate_respondent_key) >= 5" },
+        { "type": "DONUT", "title": "Incumbent performance assessment · human review pending", "dimension": "respondent_sentiment", "measure": "distinct_count(quick_incumbent_answer_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "quick_incumbent_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "labels": "COUNTS_ONLY", "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "BAR", "title": "Recorded party salience", "dimension": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" },
+        { "type": "BAR", "title": "Candidate impression · human review pending", "dimension": "candidate_sentiment", "measure": "distinct_count(quick_candidate_answer_key)", "answerStatus": "candidate_sentiment_status", "answerBase": "quick_candidate_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "sourceKeys": ["candidate_impression", "candidate_sentiment", "veeresh_impression"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "BAR", "title": "Recorded issue leadership", "dimension": "party_leadership", "measure": "distinct_count(quick_leadership_answer_key)", "answerStatus": "party_leadership_status", "answerBase": "quick_leadership_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" },
+        { "type": "BAR", "title": "Recorded issue priorities", "dimension": "issue_priority", "measure": "distinct_count(quick_issue_answer_key)", "answerStatus": "issue_priority_status", "answerBase": "quick_issue_base", "excludeMissingFromMix": true },
+        { "type": "KPI", "title": "Incumbent assessment · no response", "measure": "distinct_count(quick_incumbent_missing_key)", "privacyGuard": "distinct_count(quick_incumbent_missing_respondent_key) >= 5" },
+        { "type": "KPI", "title": "Candidate impression · no response", "measure": "distinct_count(quick_candidate_missing_key)", "privacyGuard": "distinct_count(quick_candidate_missing_respondent_key) >= 5" }
       ]
     },
     {
       "name": "Demographic pulse",
+      "supportedFilters": ["program_name", "campaign_name", "iteration_number", "constituency_name", "mandal_name", "gender", "age_band", "party_salience"],
       "visuals": [
-        { "type": "HISTOGRAM", "title": "Respondent age distribution", "measure": "age" },
-        { "type": "STACKED_BAR", "title": "Incumbent performance assessment by age", "dimension": "age_band", "color": "respondent_sentiment", "measure": "distinct_count(respondent_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "distinct_count(respondent_key where respondent_sentiment_status <> 'MISSING') by age_band", "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
-        { "type": "DONUT", "title": "Gender composition", "dimension": "gender", "measure": "distinct_count(respondent_key)" },
-        { "type": "STACKED_BAR", "title": "Party salience by gender", "dimension": "gender", "color": "party_salience", "measure": "distinct_count(respondent_key)", "answerStatus": "party_salience_status", "answerBase": "distinct_count(respondent_key where party_salience_status <> 'MISSING') by gender", "showMissingSeparately": true }
+        { "type": "BAR", "title": "Age bands · 18–29 / 30–39 / 40–49 / 50+", "dimension": "age_band", "measure": "distinct_count(evidence_key)", "privacyGuard": "distinct_count(respondent_key) >= 5 by age_band", "unknownAgeSeparate": true },
+        { "type": "STACKED_BAR", "title": "Incumbent performance assessment by age", "dimension": "age_band", "color": "respondent_sentiment", "measure": "distinct_count(quick_incumbent_answer_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "quick_incumbent_age_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "DONUT", "title": "Gender composition", "dimension": "gender", "measure": "distinct_count(evidence_key)", "labels": "COUNTS_ONLY", "privacyGuard": "distinct_count(respondent_key) >= 5 by gender" },
+        { "type": "STACKED_BAR", "title": "Recorded party salience by gender", "dimension": "gender", "color": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_gender_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" }
       ]
     },
     {
       "name": "Geographic intelligence",
       "datasetView": "analytics_research_geographic_v2",
+      "scopeLabel": "Mandal party-salience counts; demographic filters do not apply to geographic rollups",
+      "supportedFilters": ["program_name", "campaign_name", "iteration_number", "constituency_name", "mandal_name", "party_name"],
+      "unsupportedFilters": ["gender", "age_band"],
       "visuals": [
-        { "type": "GEOSPATIAL_HEATMAP", "title": "Party pulse by Mandal", "latitude": "latitude", "longitude": "longitude", "weight": "heat_weight", "filter": "party_name" },
-        { "type": "POINT_MAP", "title": "Party-strength by Mandal", "latitude": "latitude", "longitude": "longitude", "size": "respondent_count", "color": "party_pulse_score" },
-        { "type": "HEAT_TABLE", "title": "Constituency × incumbent performance assessment", "datasetView": "analytics_research_enterprise_v2", "rows": "constituency_name", "columns": "respondent_sentiment", "measure": "distinct_count(respondent_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "distinct_count(respondent_key where respondent_sentiment_status <> 'MISSING') by constituency_name", "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
-        { "type": "HEAT_TABLE", "title": "Mandal × party salience", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "party_salience", "measure": "distinct_count(respondent_key)", "answerStatus": "party_salience_status", "answerBase": "distinct_count(respondent_key where party_salience_status <> 'MISSING') by mandal_name", "showMissingSeparately": true },
-        { "type": "BAR", "title": "Issue priorities by constituency", "datasetView": "analytics_research_enterprise_v2", "dimension": "constituency_name", "group": "issue_priority", "measure": "distinct_count(respondent_key)", "answerStatus": "issue_priority_status", "answerBase": "distinct_count(respondent_key where issue_priority_status <> 'MISSING') by constituency_name", "showMissingSeparately": true }
+        { "type": "STACKED_BAR", "title": "Mandal × recorded party salience", "datasetView": "analytics_research_enterprise_v2", "dimension": "mandal_name", "color": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_mandal_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" },
+        { "type": "HEAT_TABLE", "title": "Mandal × recorded party salience · count intensity", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_mandal_base", "excludeMissingFromMix": true, "showMissingSeparately": true },
+        { "type": "HEAT_TABLE", "title": "Constituency × incumbent assessment · count intensity", "datasetView": "analytics_research_enterprise_v2", "rows": "constituency_name", "columns": "respondent_sentiment", "measure": "distinct_count(quick_incumbent_answer_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "quick_incumbent_constituency_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "POINT_MAP", "title": "Mandal party-salience observations · demo centroids", "latitude": "latitude", "longitude": "longitude", "size": "sum(respondent_count)", "color": "party_name", "colorConvention": "partyColors", "filter": "party_name", "numericPartyStrengthDisplayed": false, "reuseVerifiedGeographicRoleTags": true },
+        { "type": "TABLE", "title": "Mandal map evidence · already-qualified rows", "dimensions": ["campaign_name", "iteration_number", "mandal_name", "party_name", "interpretation_label"], "measures": ["respondent_count"], "minimumQualifiedCell": 5 }
       ]
     },
     {
@@ -55,31 +77,36 @@
       "supportedFilters": ["program_name", "campaign_name", "iteration_number"],
       "unsupportedFilters": ["mandal_name", "party_name", "gender", "age_band", "constituency_name"],
       "visuals": [
-        { "type": "BAR", "title": "Qualified direct party-strength change", "dimension": "iteration_number", "group": "campaign_name", "measure": "party_strength_change", "nullHandling": "Omit unavailable deltas; never connect waves" },
         { "type": "BAR", "title": "Descriptive positive incumbent-assessment change (pp)", "dimension": "iteration_number", "group": "campaign_name", "measure": "positive_sentiment_change_pct", "answerBase": "sentiment_answer_base", "previousAnswerBase": "previous_sentiment_answer_base", "nullHandling": "Omit unavailable deltas; never connect waves", "sourceKeys": ["incumbent_assessment"] },
         { "type": "BAR", "title": "Descriptive positive candidate-impression change (pp)", "dimension": "iteration_number", "group": "campaign_name", "measure": "candidate_positive_change_pct", "answerBase": "candidate_answer_base", "previousAnswerBase": "previous_candidate_answer_base", "nullHandling": "Omit unavailable deltas; never connect waves", "sourceKeys": ["candidate_impression", "candidate_sentiment", "veeresh_impression"] },
-        { "type": "TABLE", "title": "Standalone wave evidence and answer coverage", "dimensions": ["campaign_name", "iteration_number", "comparison_basis", "percentage_basis"], "measures": ["respondent_base", "direct_measure_base", "issue_response_base", "sentiment_answer_base", "sentiment_missing_count", "sentiment_uncoded_count", "sentiment_cant_say_count", "sentiment_refused_count", "candidate_answer_base", "candidate_missing_count", "candidate_uncoded_count", "candidate_cant_say_count", "candidate_refused_count", "average_direct_party_strength", "positive_sentiment_pct", "candidate_positive_pct"] }
+        { "type": "TABLE", "title": "Standalone wave evidence and answered coverage", "dimensions": ["campaign_name", "iteration_number", "comparison_basis", "sentiment_construct", "candidate_construct", "interpretation_label", "percentage_basis"], "measures": ["respondent_base", "quick_reportable_sentiment_answer_base", "quick_reportable_candidate_answer_base"], "minimumRespondentBase": 5 },
+        { "type": "TABLE", "title": "Why movement is unavailable", "dimensions": ["campaign_name", "iteration_number", "comparison_basis", "comparison_reasons"], "measures": ["respondent_base"], "minimumRespondentBase": 5 }
       ]
     },
     {
       "name": "Research quality",
       "datasetView": "analytics_research_quality_v1",
-      "scopeLabel": "Whole Campaign fieldwork; not filtered by age, gender, Mandal or Run.",
+      "scopeLabel": "Whole-Campaign fieldwork; not filtered by age, gender, Mandal, Iteration or Run. Program control does not filter the registry table without a verified mapping.",
       "supportedFilters": ["program_name", "campaign_name"],
+      "registrySupportedFilters": ["campaign_name"],
+      "registryProgramFilterLimitation": "analytics_iteration_comparability_v1 has no Program column; scope registry by Campaign only until an explicitly verified mapping is added",
       "visuals": [
-        { "type": "KPI", "title": "Respondent evidence", "measure": "sum(respondent_base)" },
-        { "type": "KPI", "title": "Connection rate", "measure": "weighted(connection_rate_pct, call_attempts)" },
-        { "type": "KPI", "title": "Structured-output coverage", "measure": "weighted(response_coverage_pct, connected_calls)" },
-        { "type": "KPI", "title": "Demographic completeness", "measure": "weighted(demographic_completeness_pct, respondent_base)" },
-        { "type": "TABLE", "title": "Campaign evidence qualification", "dimensions": ["campaign_name", "evidence_quality_status", "sampling_design", "weighting_status"], "measures": ["respondent_base", "connection_rate_pct", "response_coverage_pct", "demographic_completeness_pct"] },
-        { "type": "TABLE", "title": "Iteration comparability gate", "datasetView": "analytics_iteration_comparability_v1", "dimensions": ["campaign_name", "iteration_number", "comparison_status", "sampling_method", "weighting_status"], "measures": [] },
-        { "type": "TEXT", "title": "Interpretation guard", "value": "Operational evidence quality only. No sampling margin of error and no constituency vote-share forecast until representative sampling and weighting are configured." }
+        { "type": "KPI", "title": "Connection rate · % of call attempts", "measure": "100 * sum(connected_calls) / nullif(sum(call_attempts), 0)" },
+        { "type": "KPI", "title": "Structured-output coverage · % connected", "measure": "100 * sum(responses_captured) / nullif(sum(connected_calls), 0)" },
+        { "type": "KPI", "title": "Transcript coverage · % connected", "measure": "100 * sum(transcripts_captured) / nullif(sum(connected_calls), 0)" },
+        { "type": "KPI", "title": "Callback coverage · % call attempts", "measure": "100 * sum(callbacks_received) / nullif(sum(call_attempts), 0)" },
+        { "type": "KPI", "title": "Demographic completeness · % required fields", "measure": "100 * (sum(known_gender_respondents) + sum(known_age_respondents) + sum(known_mandal_respondents)) / nullif(3 * sum(respondent_base), 0)" },
+        { "type": "TABLE", "title": "Campaign fieldwork and evidence qualification", "dimensions": ["campaign_name", "evidence_quality_status", "interpretation_label"], "measures": ["call_attempts", "connected_calls", "callbacks_received", "transcripts_captured", "responses_captured", "respondent_base"] },
+        { "type": "TABLE", "title": "Recorded methodology and comparison gate", "datasetView": "analytics_iteration_comparability_v1", "dimensions": ["campaign_name", "iteration_number", "iteration_name", "sampling_method", "weighting_status", "fieldwork_mode", "quick_declaration_status", "comparison_status", "comparison_reasons"], "measures": [], "actualDeclarationsOnly": true }
       ]
     }
   ],
   "governance": {
     "minimumCellSize": 5,
     "minimumAnswerBase": 5,
+    "minimumCellUnit": "Distinct people within each displayed category after filters; never repeated respondent–Iteration observations",
+    "observationIdentity": "evidence_key = MD5(campaign_id || ':' || iteration_id || ':' || respondent_key)",
+    "pooledMeasureMeaning": "Respondent–Iteration observations, not independent people, voter population or vote share; unique respondent KPI is separate",
     "normalizationRule": "Approved deterministic aliases only; raw values remain in privileged call records, not public BI views. Uncoded answers never create free-text chart categories or inferred political preference.",
     "sentimentConstruct": "Incumbent performance assessment only: incumbent_assessment. Issue, development and change sentiment do not supply missing incumbent answers.",
     "candidateConstruct": "Candidate impression only: candidate_impression, candidate_sentiment, veeresh_impression. Criterion fit is a separate suitability construct, never candidate sentiment.",
@@ -89,11 +116,15 @@
     "sentimentRulesHashSource": "getSentimentValidation().ruleHash from the authorized research-quality API",
     "sentimentValidationMeaning": "Descriptive explicit-label coding only; not a validated NLP model, election forecast or individual political inference. Synthetic regression tests are not human validation.",
     "mixedValueRule": "Mixed is a separate coded category, not Neutral. Neither Mixed, Can't say, None, refusals nor uncoded answers are numerical polarity scores.",
-    "percentageBasis": "All non-missing recorded answers, including Can't say, declined and uncoded; missing answers shown separately. Always display the filtered answer base.",
-    "missingValueRule": "No response is distinct from Can't say, declined, None and Uncoded response.",
-    "nativeAssetPublication": "Blueprint only; existing Amazon Quick assets are not automatically republished by the platform migration. Refresh datasets and review construct labels, Mixed categories and pending-validation disclosures before presenting an embedded dashboard.",
+    "percentageBasis": "All non-missing recorded answers, including Can't say, declined and uncoded; missing answers shown separately. Always display the filtered answer base; never rebase to visible/surviving cells.",
+    "defaultChartLabels": "Counts only; no automatic pie percentage or inferred confidence",
+    "missingValueRule": "No response is distinct from Can't say, declined, None and Uncoded response. Exclude MISSING from construct mixes and show separate coverage cards; missing cells below five unique people are withheld.",
+    "directPartyStrengthPublication": "Omitted: the legacy combined direct-rating field does not qualify the target party. Party mentions are not direct strength ratings.",
+    "partyColorRule": "Bind partyColors to canonical named-party values, not palette position; sentiment has an independent color convention",
+    "nativeAssetPublication": "Blueprint only; platform migrations do not refresh or publish Quick assets. Stage governed datasets while retaining published version 3, validate FULL imports and live filters, then separately publish the exact verified version.",
     "mapAggregationLevel": "MANDAL",
     "mapCentroidSource": "analytics_geo_reference",
+    "mapInterpretation": "Approximate Serilingampally demo centroids and recorded salience observation counts; not verified respondent locations, vote choice or numeric party strength",
     "administrativeBoundarySource": "Telangana Remote Sensing Applications Centre (TGRAC)",
     "administrativeBoundaryLayers": [
       "STATE",
@@ -104,8 +135,10 @@
     "demoConstituency": "AC 52 · Serilingampally",
     "publicEmbedding": false,
     "rawPiiIncluded": false,
+    "underlyingDetailExports": false,
     "qualityStatusMeaning": "Operational evidence quality; not statistical confidence",
-    "movementComparisonRule": "Use analytics_iteration_comparability_v1; consecutive declared comparable waves only, with at least five respondents per wave; never bridge missing evidence",
+    "methodologyDeclarationRule": "Actual registry values only. Legacy quality-view constants are not verified methods; declarations do not apply statistical weights or reconstruct missing questions.",
+    "movementComparisonRule": "Use analytics_iteration_comparability_v1; consecutive declared comparable waves only, with at least five distinct respondents and measure-specific answer bases in each wave; never bridge missing evidence",
     "forecastLabel": "Directional research evidence; not an election forecast"
   }
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle, ArrowLeft, BarChart3, CheckCircle2, LoaderCircle,
+  AlertTriangle, ArrowLeft, BarChart3, LoaderCircle,
   RefreshCw, ShieldCheck
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -166,8 +166,8 @@ function formFromDesign(design: ResearchQualityResponse["researchDesigns"][numbe
 }
 
 const PREVIEW_SECTIONS = [
-  ["Leadership overview", "Party, candidate, leadership and sentiment distributions"],
-  ["Demographic pulse", "Age histogram, age bands and gender comparisons"],
+  ["Leadership overview", "Recorded party salience, candidate impression, issue leadership and priorities"],
+  ["Demographic pulse", "Age bands 18–29, 30–39, 40–49 and 50+; gender comparisons"],
   ["Geographic intelligence", "Constituency and Mandal heat tables"],
   ["Iteration movement", "Comparable research movement across survey waves"],
   ["Research quality", "Fieldwork coverage, completeness and interpretation limits"]
@@ -416,6 +416,18 @@ export default function EnterpriseDashboardPage() {
       <div><strong>Governed leadership view · human review pending</strong><span>Aggregate output variables only. No names, phone numbers, EPIC IDs, transcripts or raw JSON enter the BI dataset. Sentiment uses explicit labels, not a validated NLP model. Existing Amazon Quick assets require a separate dataset refresh and label review before presentation.</span></div>
     </section>
 
+    <section className={styles.demoNotice} aria-labelledby="demo-reporting-title">
+      <div><span>DEMO · TEST SURVEY EVIDENCE</span><h2 id="demo-reporting-title">Reporting capability preview, not population findings</h2></div>
+      <p>This preview demonstrates the reporting structure using a small test cohort. Empty charts are acceptable: we do not invent responses, replace unavailable values with zero, or lower minimum-person safeguards to populate a visual.</p>
+      <dl>
+        <div><dt>Not recorded</dt><dd>The required answer or demographic field was not captured.</dd></div>
+        <div><dt>Withheld</dt><dd>Fewer than five distinct people qualify for the displayed cell after filters.</dd></div>
+        <div><dt>Not comparable</dt><dd>Survey waves do not pass the recorded-method and questionnaire checks.</dd></div>
+        <div><dt>Technical error</dt><dd>A dataset, visual or session cannot load. This still needs a fix; it is not a missing survey value.</dd></div>
+      </dl>
+      <p>Before an actual survey, each report needs a matching question, committed agent extraction field, captured callback output and tested reporting mapping. A chart design alone does not confirm that collection contract.</p>
+    </section>
+
     {quality && <section className={styles.qualityPanel}>
       <div className={styles.qualityHead}>
         <div><span>PSEPHOLOGY QUALITY GATE</span><h2>Evidence strength before interpretation</h2><p>Separates fieldwork and data quality from findings. Operational coverage is not model validation, statistical confidence or electoral probability.</p><p>{quality.scope?.label || "Whole portfolio; independent of embedded Amazon Quick filters"}. {quality.scope?.runScope || "All Runs within each Iteration"}.</p></div>
@@ -470,8 +482,8 @@ export default function EnterpriseDashboardPage() {
     {!loading && error && <>
       <FeedbackMessage tone="error" message={error} />
       <section className={styles.setup}>
-        <div className={styles.setupHead}><AlertTriangle size={22} /><div><span>ENTERPRISE PREVIEW SETUP</span><h2>The dashboard design is ready; AWS publishing is still required</h2><p>The platform will embed the published Amazon Quick Sight dashboard here after its dashboard ID, Reader ARN and allowed domain are configured.</p></div></div>
-        <div className={styles.previewGrid}>{PREVIEW_SECTIONS.map(([title, detail]) => <article key={title}><CheckCircle2 size={17} /><div><strong>{title}</strong><span>{detail}</span></div></article>)}</div>
+        <div className={styles.setupHead}><AlertTriangle size={22} /><div><span>ENTERPRISE PREVIEW SETUP</span><h2>Dashboard session unavailable</h2><p>The reporting concept is listed below. This session error is separate from sparse survey answers; check the published dashboard, authorized Reader and allowed domain before presentation.</p></div></div>
+        <div className={styles.previewGrid}>{PREVIEW_SECTIONS.map(([title, detail]) => <article key={title}><BarChart3 size={17} /><div><strong>{title}</strong><span>{detail}</span></div></article>)}</div>
         <Link href="/">View the native program dashboard preview <BarChart3 size={16} /></Link>
       </section>
     </>}

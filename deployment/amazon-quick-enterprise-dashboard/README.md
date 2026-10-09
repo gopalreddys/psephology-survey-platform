@@ -7,15 +7,24 @@ the enterprise dashboard is authored and published in AWS.
 
 ## What leadership will see
 
-- leadership overview: respondent base, aggregate party-strength, party,
-  candidate, leadership and sentiment distributions;
-- demographic pulse: age histogram, age-band sentiment, gender composition and
+For this demo, sparse test responses and unavailable values are acceptable;
+technical dataset/session failures are not. The report-to-source coverage and
+remaining collection contracts are documented in
+[`docs/demo-dashboard-readiness.md`](../../docs/demo-dashboard-readiness.md).
+This is a reporting capability preview, not a representative survey or evidence
+that every desired report has an implemented extraction field.
+
+- leadership overview: separate unique-participant and respondent–Iteration
+  observation bases, recorded party salience, candidate impression, issue
+  leadership, issue priorities and incumbent performance assessment;
+- demographic pulse: the age bands 18–29, 30–39, 40–49 and 50+, age-band
+  incumbent assessment, gender composition and
   party salience by gender;
-- geographic intelligence: constituency and Mandal heat tables plus issue
-  priorities by constituency, with a party-filtered Mandal map over Amazon
+- geographic intelligence: constituency and Mandal count-intensity heat tables,
+  with a party-filtered Mandal observation map over Amazon
   Quick's native base-map layer;
-- Iteration movement: comparable party-strength, candidate sentiment and issue
-  movement across Iterations, including explicit change from the previous wave;
+- Iteration movement: qualified descriptive positive incumbent-assessment and
+  candidate-impression changes, standalone wave bases and withheld-change reasons;
 - research quality: connection, transcript and structured-output coverage,
   demographic completeness, fieldwork dates and a qualified evidence status.
 
@@ -29,9 +38,11 @@ trend.
 The research quality status describes operational evidence completeness. It is
 not a statistical confidence level, margin of error or election forecast. The
 deterministic authoring specification is in
-`quick-dashboard-blueprint.json`. Do not display any cell below the governed
-minimum base (currently `n=5` in the application). Do not describe an
-unweighted demo result as an election forecast.
+`quick-dashboard-blueprint.json`. After filters, a displayed research cell must
+contain at least **five distinct people**, not merely five repeated-wave
+observations. Pooled charts count respondent–Iteration observations; only the
+separate unique-participant KPI deduplicates people across waves. Do not
+describe an unweighted demo result as an election forecast.
 
 ## Standardized output labels and answer bases (Step 2)
 
@@ -50,19 +61,35 @@ answers**, including explicit uncertainty, declined and uncoded answers; missing
 answers are counted separately. Always show the filtered answer base next to
 percentages. Sentiment and candidate shares, and their adjacent-wave changes,
 are unavailable below five answered values for that measure in each required
-wave. No party mention is converted into an inferred rating. The movement
-view's sentiment construct is explicitly the first non-missing civic/incumbent
-assessment in this order: issue, development, expected change, then incumbent.
-Candidate assessment is a separate construct: the first non-missing candidate
-impression/sentiment, then criterion fit. They are not averaged together or
-represented as equivalent to the native Analysis page's separate sentiment
-questions.
+wave. No party mention is converted into an inferred rating. With migration
+032 applied, the sentiment construct is **incumbent performance assessment
+only**, from `incumbent_assessment`. Candidate impression uses only
+`candidate_impression`, `candidate_sentiment` and `veeresh_impression`; criterion
+fit remains separate and never supplies a missing impression. Mixed remains
+distinct from Neutral. No response is excluded from the construct mix and
+reported in separate missing-answer cards.
+
+The governed authoring generator uses count-only charts, not auto-renormalized
+pie percentages: suppressing a small category must not silently change a valid
+denominator. Its conditional answer keys count non-missing observations, while
+the corresponding respondent keys enforce the five-distinct-person minimum.
+Repeated participation in three Iterations does not turn two people into a
+reportable cell of six people.
+
+The legacy direct-rating field combines generic and BRS-specific aliases but
+does not identify the measurement's target party. The leadership publication
+therefore omits average direct-rating, party-strength movement and numeric
+party-strength maps. Party salience is recorded mention/attention, not vote
+choice or inferred alignment.
 
 The platform's native enterprise evidence panel uses the v2 movement view.
 The authoring blueprint targets v2 datasets, but installing/migrating the API
 **does not republish existing Amazon Quick datasets or dashboards**. Existing
 v1 assets remain intact until an explicitly approved authoring/publication
-step replaces their data sources and refreshes SPICE.
+step is verified. The current transition stages separate governed v2 datasets
+and retains the existing published dashboard version **3** until its replacement
+passes ingestion, API and live visual/filter checks. Do not mutate the old
+published version's source datasets as a shortcut.
 
 Local regressions:
 
@@ -102,8 +129,12 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/rea
    `analytics_research_geographic_v2`, `analytics_research_quality_v1` and
    `analytics_iteration_movement_v2`. Add
    `analytics_iteration_comparability_v1` to the Research quality sheet.
-4. Author the five sheets in `quick-dashboard-blueprint.json` and publish the
-   dashboard.
+4. Save recoverable dataset, analysis and published-dashboard definitions.
+   Stage the governed datasets, run a **FULL SPICE refresh**, and author the
+   five sheets using `quick-publication-definition.mjs`. Preserve the existing
+   dashboard identity and embedding integration. Inspect the candidate version
+   before a separate verified publication operation; an API update is not a
+   publication or live QA sign-off.
 5. Create a Quick Sight Reader for the leadership preview and share the
    dashboard with that Reader.
 6. Allow-list the Amplify/custom application domain for embedding.
@@ -120,6 +151,68 @@ QUICKSIGHT_ALLOWED_DOMAINS=https://your-platform.example.com
 For an authenticated internal-only preview, a one-click embed can be used
 instead by setting `QUICKSIGHT_ONE_CLICK_EMBED_URL`. Do not use public
 embedding.
+
+## Governed authoring and publication
+
+`quick-publication-plan.mjs` supplies offline request and guard helpers;
+`quick-publication-definition.mjs` builds the five-sheet candidate. They are
+authoring specifications, not evidence that a cloud change is complete. Keep
+the verified import-only Data Prep graphs and their column IDs, and retain the
+map dataset's latitude/longitude geographic tags. Complex transforms require
+explicit review rather than silent replacement.
+
+Bind party colors to the named category, never the position in a palette:
+
+| Recorded party | Color |
+| --- | --- |
+| BRS | Pink `#E91E8F` |
+| BJP | Saffron `#FF9933` |
+| Congress | Green `#138808` |
+
+These are party-category colors; sentiment colors remain a separate convention.
+An absent party is not populated with a dummy respondent or synthetic zero.
+Sparse results must remain empty/withheld with an explanation.
+
+Enterprise suppression targets numeric `distinctCountOver` calculated fields at
+`PRE_AGG`, partitioned by each visual's exact category/color or heat-map cells.
+The source is the conditional unique-person key, not the observation key.
+Normal controls apply before these windows; the numeric range filter then
+withholds cells below five people. Do not point a numeric range directly at a
+STRING key even with a `DISTINCT_COUNT` aggregation: AWS rejects that form.
+
+Current demo ingestion is **manual FULL SPICE refresh**. There is no verified
+incremental refresh schedule. Aggregate movement, methodology and quality
+sources can change without a new response timestamp, so do not configure an
+incremental lookback without checking its correctness. Record the successful
+import time and zero-skipped-row result before presentation.
+
+Require saved recovery definitions, exact candidate validation, completed
+SPICE ingestions, successful AWS visual validation and live filter/small-base
+checks before the separate published-version update. Preserve published
+version 3 during staging. Disable underlying/detail exports, retain the
+Admin/Super Admin application restriction, and verify the existing authenticated
+embed after publication. No IAM, sharing or public-embedding change is implied.
+
+Filter scope is deliberately sheet-specific:
+
+- Leadership and demographic sheets use the respondent-level evidence dataset
+  with Program, Campaign, Iteration, Constituency, Mandal, Gender, Age band and
+  recorded party-salience controls.
+- Geographic rollups have no Age/Gender fields. Their controls cover Program,
+  Campaign, Iteration, Constituency, Mandal and party; matched common labels
+  also control the respondent-level heat tables.
+- Movement is full-Iteration/all-Run evidence and supports Program, Campaign
+  and Iteration only. Null deltas are unavailable, never zero.
+- Quality totals are whole-Campaign and support Program/Campaign. The separate
+  comparability registry source has no Program column: its table is controlled
+  by Campaign only until an explicitly verified Program mapping is added.
+
+The quality view's legacy `sampling_design` and `weighting_status` constants
+must not be presented as actual declarations. The registry provides actual
+recorded methods and an Undeclared state. Quality ratios are sums of numerators
+divided by sums of denominators, not averages of rounded percentages. Summed
+Campaign respondent bases are participant–Campaign incidences, not distinct
+Program participants.
 
 ## Geographic map layer
 
@@ -150,12 +243,14 @@ coverage and Iteration movement only. Sampling remains labelled as directional
 and unweighted until an approved probability design and weighting pipeline are
 configured.
 
-`analytics_research_geographic_v2` supplies latitude, longitude, canonical party label,
-respondent count and aggregate party-strength to an Amazon Quick geospatial
-visual. Configure the visual as **Points on map**, place `latitude` and
-`longitude` in the geospatial field well, use `heat_weight` as the weight, and
-switch the point style to **Heatmap**. Add `party_name` as a sheet filter so
-leadership can compare the aggregate pulse party by party.
+`analytics_research_geographic_v2` supplies latitude, longitude, canonical party
+label and qualified respondent counts. The governed publication uses **Points
+on map**: `latitude`/`longitude` in the geospatial field well,
+`sum(respondent_count)` as size and `party_name` as categorical color. Pooled
+sizes are respondent–Iteration observations, not unique people. Add the party
+control so leadership can inspect recorded salience party by party. The heat
+tables show count intensity. No ambiguous numeric party-strength score is
+colored or displayed, and the map does not infer vote choice.
 
 The SQL enforces a minimum base of five distinct respondents before a
 geography/party cell can enter the BI dataset. It does not expose voter
@@ -233,3 +328,24 @@ PGLITE_MODULE_PATH=/path/to/pglite/dist/index.js node deployment/amazon-quick-en
 The first test includes installer idempotence and an installed migration-runner
 mock. The second executes the full SQL sequence in isolated PostgreSQL; neither
 test connects to the live database or publishes cloud assets.
+
+## Publication verification gate
+
+`quick-publication-plan.mjs` requires a durable metadata backup, successful
+ingestions, live filter checks and an independent definition readback for the
+exact returned dashboard version before publication. Build success alone is
+insufficient: readback errors, stale dataset identifier/ARN bindings or changes
+to sheets, calculations, filters or options stop the release even when a
+verification callback reports success. The returned definition is independently
+revalidated against its safeguards; matching IDs cannot hide altered formulas
+or disabled suppression. Service-normalized differences need explicit review.
+The executor rejects updates to datasets referenced by the published dashboard
+and updates outside the reviewed candidate/account before any mutation. Never
+relax validation or publish merely to clear a readback error.
+
+On 2026-10-09 the reviewed Steps 1–4 analysis and all six staged SPICE ingestions
+passed. The existing dashboard remains on published version 3: unpublished
+versions 4 and 5 reported successful builds, but their definition exports
+retained old dataset declarations and column errors. The explicit-template
+publication route did not resolve that mismatch. Keep the reviewed draft and
+metadata receipts for diagnosis; publication and Step 5 are not complete.

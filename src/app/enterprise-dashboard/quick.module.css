@@ -11,6 +11,14 @@
 .governance div { display: grid; gap: 2px; }
 .governance strong { font-size: 12px; }
 .governance span { color: #5f7b75; font-size: 10px; }
+.demoNotice { margin: 16px 0; padding: 20px; border: 1px solid #d6e9e5; border-radius: 18px; background: #fff; }
+.demoNotice > div > span { color: #158777; font-size: 10px; font-weight: 850; letter-spacing: .12em; }
+.demoNotice h2 { margin: 6px 0 10px; font-size: 19px; }
+.demoNotice p { margin: 8px 0; color: #6c5d62; font-size: 12px; line-height: 1.55; }
+.demoNotice dl { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,200px),1fr)); gap: 10px; margin: 14px 0; }
+.demoNotice dl > div { padding: 12px; border: 1px solid #e0ebe8; border-radius: 10px; background: #f8fbfa; }
+.demoNotice dt { color: #315c53; font-size: 12px; font-weight: 800; }
+.demoNotice dd { margin: 5px 0 0; color: #6c5d62; font-size: 11px; line-height: 1.5; }
 .qualityPanel { margin: 16px 0; padding: 22px; border: 1px solid #cfe5e0; border-radius: 22px; background: linear-gradient(125deg,#f2faf8,#fff 58%,#fff7f8); box-shadow: 0 15px 40px rgba(40,91,81,.06); }
 .qualityHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .qualityHead > div { display: grid; gap: 4px; }
