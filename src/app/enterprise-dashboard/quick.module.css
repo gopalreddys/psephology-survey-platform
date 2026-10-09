@@ -63,6 +63,19 @@
 .designActions span { margin-right: auto; color: #7f6b71; font-size: 10px; }
 .designActions button { padding: 10px 13px; border: 0; border-radius: 9px; background: #a8495c; color: #fff; font-size: 10px; font-weight: 850; }
 .designActions button:disabled { opacity: .55; }
+.designFields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.methodologyNotice { margin-top: 12px; padding: 12px 14px; border: 1px solid #e3e9e7; border-radius: 10px; background: #f7faf9; color: #5c716c; font-size: 11px; line-height: 1.55; }
+.methodologyNotice p { margin: 4px 0; overflow-wrap: anywhere; }
+.attestation { display: flex; align-items: flex-start; gap: 8px; margin-top: 15px; color: #615056; font-size: 12px; line-height: 1.5; }
+.attestation input { margin-top: 3px; accent-color: #a8495c; }
+.declarationHistory { margin-top: 16px; border-top: 1px solid #eadfe3; padding-top: 14px; font-size: 11px; color: #67575d; }
+.declarationHistory button { min-height: 36px; padding: 8px 12px; border: 1px solid #e2cfd5; border-radius: 8px; color: #9b4155; background: #fff; font-weight: 700; }
+.declarationHistory details { margin-top: 10px; padding: 10px 12px; border: 1px solid #ece4e7; border-radius: 9px; }
+.declarationHistory summary { cursor: pointer; overflow-wrap: anywhere; line-height: 1.5; font-weight: 700; }
+.declarationHistory dl { display: grid; grid-template-columns: minmax(90px,140px) minmax(0,1fr); gap: 8px; }
+.declarationHistory dt { font-weight: 700; }
+.declarationHistory dd { margin: 0; overflow-wrap: anywhere; }
 .boundaryPanel { margin: 16px 0; overflow: hidden; border: 1px solid #cfe5e0; border-radius: 22px; background: #fff; box-shadow: 0 15px 40px rgba(40,91,81,.06); }
 .boundaryHeader { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; border-bottom: 1px solid #e2eeeb; background: linear-gradient(110deg,#f1faf8,#fff 58%); }
 .boundaryTitle { display: flex; align-items: flex-start; gap: 11px; }

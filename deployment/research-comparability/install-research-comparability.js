@@ -25,6 +25,13 @@ for (const installer of installers) {
   if (!existsSync(path.join(deployment, installer))) throw new Error(`Missing installer ${installer}`);
 }
 const backups = [
+  'src/repositories/output-normalization.repository.js',
+  'src/repositories/normalization-rules.json',
+  'sql/030_normalized_output_reporting.sql',
+  'sql/031_audited_research_methodology.sql',
+  'src/repositories/research-methodology.repository.js',
+  'src/repositories/research-methodology-validation.js',
+  'src/repositories/campaign-visibility.repository.js',
   'src/server.js', 'src/repositories/research-comparability.repository.js',
   'src/repositories/campaign-analysis.repository.js',
   'src/repositories/analytics-workspace.repository.js',

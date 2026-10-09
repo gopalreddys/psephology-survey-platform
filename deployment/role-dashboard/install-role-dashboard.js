@@ -1,9 +1,11 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installOutputNormalization } from "../output-variable-standardization/install-shared-normalization.js";
 
 const runtimeRoot = path.resolve(process.argv[2] || "/opt/sarvam-voice-analytics");
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
+await installOutputNormalization(runtimeRoot);
 const serverPath = path.join(runtimeRoot, "src/server.js");
 const marker = "ROLE_DASHBOARD_V1";
 

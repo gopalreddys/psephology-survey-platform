@@ -2,6 +2,7 @@ import { getDb } from "../db/postgres.js";
 import { getVoiceAgentForSelection, voiceAgentSnapshot } from "./voice-agents.repository.js";
 import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js";
 import { assertIterationAgentVersionChange } from "./iteration-agent-version.policy.js";
+import { freezeQuestionnaireContent } from "./questionnaire-snapshot.repository.js";
 
 const STAGES = new Set(["BASE", "CAMPAIGN", "TURNOUT"]);
 const STATUSES = new Set(["PLANNED", "ACTIVE", "PAUSED", "COMPLETED", "LOCKED"]);
@@ -177,6 +178,7 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
     if (["ARCHIVED", "RETIRED", "INACTIVE"].includes(String(questionnaire.status || "").toUpperCase())) {
       throw errorWithStatus("Selected questionnaire is not available for new iterations", 400);
     }
+    const questionnaireSnapshot = await freezeQuestionnaireContent(client, questionnaire);
 
     const numberResult = await client.query(`
       SELECT COALESCE(MAX(iteration_number), 0) + 1 AS next_number
@@ -212,9 +214,7 @@ export async function createCampaignIteration({ campaignId, iterationName, resea
       plannedStartDate || null,
       plannedEndDate || null,
       questionnaire.id,
-      JSON.stringify({ id: questionnaire.id, code: questionnaire.questionnaire_code,
-        name: questionnaire.questionnaire_name, version: questionnaire.version_number,
-        status_at_selection: questionnaire.status }),
+      JSON.stringify(questionnaireSnapshot),
       createdBy,
       voiceAgent.id,
       JSON.stringify(voiceAgentSnapshot(voiceAgent)),

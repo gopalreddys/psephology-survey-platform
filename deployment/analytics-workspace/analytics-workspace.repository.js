@@ -3,6 +3,7 @@ import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js
 import { getCampaignAnalysis, latestStructuredRespondents, buildResponseDistributions,
   selectConsecutiveComparisonIterations, evaluateCompletedIterationComparison } from "./campaign-analysis.repository.js";
 import { loadIterationComparability } from "./research-comparability.repository.js";
+import { normalizeOutputValue, normalizedLabel, summarizeOutput, summarizeLabels, NORMALIZATION_VERSION, OUTPUT_KEYS, SENTIMENT_CONSTRUCTS, getSentimentValidation } from "./output-normalization.repository.js";
 
 const ANALYTICS_ROLES = new Set([
   "SUPER_ADMIN",
@@ -32,6 +33,8 @@ const MINIMUM_SEGMENT_BASE = 5;
 const AGE_BANDS = ["18–29", "30–39", "40–49", "50+", "Unknown"];
 
 const TECHNICAL_VARIABLES = new Set([
+  "voter_name", "full_name", "name", "phone", "phone_number", "mobile_number",
+  "email", "email_address", "epic", "epic_id", "epic_number", "address",
   "agent_code", "agent_style_context", "analytics_excluded", "attempt_cycle_id",
   "demo_call_id", "iteration_id", "iteration_number", "knowledge_context",
   "knowledge_packs", "max_probes", "preferred_language", "probe_context",
@@ -405,63 +408,25 @@ function scalarText(value) {
 }
 
 function validAnswer(value) {
-  const text = scalarText(value);
-  return Boolean(text && !/^(null|undefined|n\/a)$/i.test(text));
+  return normalizeOutputValue("", value).status !== "MISSING";
 }
 
 function distribution(records, key, classifier = null) {
-  const values = new Map();
-  for (const record of records) {
-    const raw = scalarText(record.response_variables?.[key]);
-    if (!raw) continue;
-    const display = classifier ? classifier(raw) : raw;
-    if (!display) continue;
-    const normalized = display.toLowerCase();
-    const current = values.get(normalized) || { value: display, respondents: 0 };
-    current.respondents += 1;
-    values.set(normalized, current);
-  }
-  const answered = Array.from(values.values()).reduce(
-    (total, item) => total + item.respondents,
-    0
-  );
-  return Array.from(values.values())
-    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value))
-    .slice(0, 12)
-    .map((item) => ({
-      ...item,
-      percentage: percentage(item.respondents, answered)
-    }));
+  void classifier; // The audited output-key taxonomy replaces screen-specific rules.
+  const aliases = { party_salience_unaided: OUTPUT_KEYS.party, perceived_issue_leader_aided: OUTPUT_KEYS.leadership, graduate_issue_priority: OUTPUT_KEYS.issue };
+  const result = summarizeOutput(records, aliases[key] || key);
+  return result.suppressed ? [] : result.values;
 }
 
 function derivedDistribution(records, derive) {
-  const values = new Map();
-  for (const record of records) {
-    const display = derive(record);
-    if (!display) continue;
-    const normalized = display.toLowerCase();
-    const current = values.get(normalized) || { value: display, respondents: 0 };
-    current.respondents += 1;
-    values.set(normalized, current);
-  }
-  const answered = Array.from(values.values()).reduce(
-    (total, item) => total + item.respondents,
-    0
-  );
-  return Array.from(values.values())
-    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value))
-    .map((item) => ({
-      ...item,
-      percentage: percentage(item.respondents, answered)
-    }));
+  const result = summarizeLabels(records.map(derive), records.length);
+  return result.suppressed ? [] : result.values;
 }
 
 function firstAvailableDistribution(records, keys, classifier = null) {
-  for (const key of keys) {
-    const result = distribution(records, key, classifier);
-    if (result.length) return result;
-  }
-  return [];
+  void classifier;
+  const result = summarizeOutput(records, keys);
+  return result.suppressed ? [] : result.values;
 }
 
 function directFivePointIndex(records) {
@@ -470,15 +435,16 @@ function directFivePointIndex(records) {
   for (const record of records) {
     const variables = record.response_variables || {};
     for (const key of keys) {
-      const value = Number(variables[key]);
-      if (Number.isFinite(value) && value >= 1 && value <= 5) {
+      const raw = variables[key];
+      const value = typeof raw === "number" || (typeof raw === "string" && /^[1-5]$/.test(raw.trim())) ? Number(raw) : NaN;
+      if (Number.isInteger(value) && value >= 1 && value <= 5) {
         ratings.push(value);
         break;
       }
     }
   }
   return {
-    value: ratings.length
+    value: ratings.length >= MINIMUM_SEGMENT_BASE
       ? Number((ratings.reduce((total, value) => total + value, 0) / ratings.length).toFixed(1))
       : null,
     answered: ratings.length,
@@ -488,142 +454,63 @@ function directFivePointIndex(records) {
 }
 
 function classifySentiment(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/not enough|don.?t know|do not know|can.?t say|cannot say|no opinion|not aware|not heard|unaware|prefer not|unclear|unknown/.test(text)) {
-    return "Can't say";
-  }
-  if (/very poor|poor|negative|bad|dissatisf|disappoint|not good|unfavour|unfavor|weak/.test(text)) {
-    return "Negative";
-  }
-  if (/neither|neutral|mixed|average|no difference|okay|moderate/.test(text)) {
-    return "Neutral";
-  }
-  if (/very good|good|positive|favour|favor|satisf|impress|excellent|strong/.test(text)) {
-    return "Positive";
-  }
-  return "Can't say";
-}
-
-function classifyFit(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/very closely|somewhat closely|strong fit|good fit/.test(text)) return "Positive";
-  if (/not very closely|not at all|poor fit/.test(text)) return "Negative";
-  if (/neutral|mixed|average/.test(text)) return "Neutral";
-  return "Can't say";
+  return normalizedLabel("candidate_sentiment", value);
 }
 
 function candidateSentiment(record) {
-  const variables = record.response_variables || {};
-  if (validAnswer(variables.veeresh_impression)) {
-    return classifySentiment(variables.veeresh_impression);
-  }
-  if (validAnswer(variables.veeresh_criterion_fit)) {
-    return classifyFit(variables.veeresh_criterion_fit);
-  }
-  if (validAnswer(variables.veeresh_awareness)) {
-    return "Can't say";
-  }
-  return null;
+  return summarizeOutput([record], OUTPUT_KEYS.candidate).values[0]?.value || null;
 }
 
-const SENTIMENT_OUTPUTS = [
-  { key: "veeresh_impression", label: "Candidate impression", classifier: classifySentiment },
-  { key: "veeresh_criterion_fit", label: "Candidate criterion fit", classifier: classifyFit },
-  { key: "incumbent_assessment", label: "Leadership assessment", classifier: classifySentiment },
-  { key: "issue_sentiment", label: "Issue sentiment", classifier: classifySentiment },
-  { key: "development_sentiment", label: "Development sentiment", classifier: classifySentiment },
-  { key: "change_sentiment", label: "Expected-change sentiment", classifier: classifySentiment }
-];
-
-function sentimentDistribution(values) {
-  const counts = new Map();
-  for (const value of values) {
-    if (!value) continue;
-    const label = value === "Can't say" ? "Uncertain" : value;
-    counts.set(label, number(counts.get(label)) + 1);
-  }
-  const answered = Array.from(counts.values()).reduce((total, value) => total + value, 0);
-  return Array.from(counts.entries())
-    .map(([value, respondents]) => ({
-      value,
-      respondents,
-      percentage: percentage(respondents, answered)
-    }))
-    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value));
-}
-
-function buildSentimentAnalysis(records) {
-  const observations = [];
-  const variables = SENTIMENT_OUTPUTS.map((output) => {
-    const values = records.map((record) => {
-      const raw = record.response_variables?.[output.key];
-      if (!validAnswer(raw)) return null;
-      return output.classifier(raw);
-    }).filter(Boolean);
-    observations.push(...values);
+function buildSentimentAnalysis(records, constructKey = "candidate_impression") {
+  const selected = SENTIMENT_CONSTRUCTS.find((item) => item.key === constructKey && item.type === "SENTIMENT");
+  if (!selected) throw Object.assign(new Error("Select a supported sentiment construct; candidate fit is a separate suitability measure."), { statusCode: 400 });
+  const variables = SENTIMENT_CONSTRUCTS.map((output) => {
+    const measure = summarizeOutput(records, output.outputKeys);
     return {
-      key: output.key,
-      label: output.label,
-      answered: values.length,
-      distribution: sentimentDistribution(values)
+      key: output.key, type: output.type, outputVariables: output.outputKeys,
+      label: output.label, answered: measure.answerBase, measure,
+      distribution: measure.suppressed ? [] : measure.values
     };
-  }).filter((output) => output.answered > 0);
-  const distribution = sentimentDistribution(observations);
-  const share = (label) => number(
-    distribution.find((item) => item.value === label)?.percentage
-  );
+  });
+  const measure = summarizeOutput(records, selected.outputKeys);
+  const assessedRespondents = measure.codedCount;
+  measure.suppressed ||= assessedRespondents < MINIMUM_SEGMENT_BASE;
+  if (measure.suppressed) {
+    measure.values = measure.values.map((item) => ({ ...item, suppressed: true, percentage: null }));
+  }
+  const values = measure.suppressed ? [] : measure.values;
+  const share = (label) => number(values.find((item) => item.value === label)?.percentage);
   const positive = share("Positive");
   const negative = share("Negative");
-  const uncertain = share("Uncertain");
-  const judgment = !observations.length
-    ? "No sentiment judgment is available"
+  const mixed = share("Mixed");
+  const uncertain = share("Can't say");
+  const judgment = measure.suppressed
+    ? `No reportable ${selected.label.toLowerCase()} judgment is available`
     : uncertain >= 45
-      ? "Uncertainty is the dominant sentiment signal"
-      : positive - negative >= 15
-        ? "Positive sentiment is directionally stronger"
-        : negative - positive >= 15
-          ? "Negative sentiment pressure requires investigation"
-          : "Sentiment is mixed and requires sharper diagnostic questions";
-  const coverage = records.length
-    ? percentage(observations.length, records.length * SENTIMENT_OUTPUTS.length)
-    : 0;
-  const confidence = records.length >= 100 && coverage >= 60
-    ? "High"
-    : records.length >= 30 && coverage >= 35
-      ? "Moderate"
-      : "Directional";
+      ? `Explicit uncertainty is prominent in recorded ${selected.label.toLowerCase()} answers`
+      : mixed >= 45
+        ? `Mixed assessments are prominent in recorded ${selected.label.toLowerCase()} answers`
+        : positive - negative >= 15
+          ? `Positive recorded ${selected.label.toLowerCase()} answers exceed negative answers`
+          : negative - positive >= 15
+            ? `Negative recorded ${selected.label.toLowerCase()} answers exceed positive answers`
+            : `No clear positive–negative balance in recorded ${selected.label.toLowerCase()} answers`;
   return {
-    judgment,
-    confidence,
-    respondentBase: records.length,
-    codedAnswers: observations.length,
-    outputCoveragePct: coverage,
-    distribution,
-    variables
+    construct: selected.key, label: selected.label, outputVariables: selected.outputKeys,
+    validation: getSentimentValidation(),
+    judgment, confidence: "Human review pending",
+    respondentBase: records.length, codedAnswers: measure.codedCount, assessedRespondents,
+    measure: { ...measure, unit: "One selected construct per respondent; other constructs are not pooled" },
+    outputCoveragePct: measure.coveragePct, distribution: values, variables
   };
 }
 
 function classifyParty(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/\bbrs\b|bharat rashtra|telangana rashtra/.test(text)) return "BRS";
-  if (/\bbjp\b|bharatiya janata/.test(text)) return "BJP";
-  if (/congress|\binc\b/.test(text)) return "Congress";
-  if (/communist|\bcpi\b|\bcpm\b|left part/.test(text)) return "Left parties";
-  if (/independent|graduate group/.test(text)) return "Independent or graduate group";
-  if (/none|not enough|don.?t know|do not know|no idea|prefer not/.test(text)) return "None / can't say";
-  return "Other";
+  return normalizedLabel("party_salience_unaided", value);
 }
 
 function classifyInfluence(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/not enough|don.?t know|do not know|not sure|prefer not|unclear/.test(text)) return "Can't say";
-  if (/\bno\b|none|not influenc|did not|hasn.?t|haven.?t/.test(text)) return "No influence stated";
-  if (/\byes\b|influenc|shaped|association|union|student|teacher|graduate group/.test(text)) return "Influence stated";
-  return "Can't say";
+  return normalizedLabel("association_influence", value);
 }
 
 function shareOf(items, label) {
@@ -657,14 +544,12 @@ function aggregateCampaignRating(records, iterationCount) {
     });
   }
 
-  const partyAttention = derivedDistribution(records, (record) =>
-    classifyParty(record.response_variables?.party_salience_unaided)
-  );
+  const partyAttention = distribution(records, "party_salience_unaided");
   const partyAttentionAnswered = partyAttention.reduce(
     (total, item) => total + item.respondents,
     0
   );
-  if (partyAttentionAnswered) {
+  if (partyAttentionAnswered >= MINIMUM_SEGMENT_BASE && summarizeOutput(records, OUTPUT_KEYS.party).codedCount >= MINIMUM_SEGMENT_BASE) {
     components.push({
       key: "PARTY_ATTENTION",
       label: "Unaided BRS attention",
@@ -675,14 +560,12 @@ function aggregateCampaignRating(records, iterationCount) {
     });
   }
 
-  const issueLeadership = derivedDistribution(records, (record) =>
-    classifyParty(record.response_variables?.perceived_issue_leader_aided)
-  );
+  const issueLeadership = distribution(records, "perceived_issue_leader_aided");
   const issueLeadershipAnswered = issueLeadership.reduce(
     (total, item) => total + item.respondents,
     0
   );
-  if (issueLeadershipAnswered) {
+  if (issueLeadershipAnswered >= MINIMUM_SEGMENT_BASE && summarizeOutput(records, OUTPUT_KEYS.leadership).codedCount >= MINIMUM_SEGMENT_BASE) {
     components.push({
       key: "ISSUE_LEADERSHIP",
       label: "BRS issue-leadership perception",
@@ -693,12 +576,12 @@ function aggregateCampaignRating(records, iterationCount) {
     });
   }
 
-  const candidatePerception = derivedDistribution(records, candidateSentiment);
+  const candidatePerception = derivedDistribution(records, candidateSentiment).filter((item) => ["Positive", "Neutral", "Negative"].includes(item.value));
   const candidateAnswered = candidatePerception.reduce(
     (total, item) => total + item.respondents,
     0
   );
-  if (candidateAnswered) {
+  if (candidateAnswered >= MINIMUM_SEGMENT_BASE) {
     const sentimentScore = candidatePerception.reduce((total, item) => {
       const score = item.value === "Positive" ? 5
         : item.value === "Negative" ? 1
@@ -708,7 +591,7 @@ function aggregateCampaignRating(records, iterationCount) {
     components.push({
       key: "CANDIDATE_PERCEPTION",
       label: "Candidate perception balance",
-      variables: ["veeresh_impression", "veeresh_criterion_fit", "veeresh_awareness"],
+      variables: OUTPUT_KEYS.candidate,
       value: Number(sentimentScore.toFixed(2)),
       weight: 2,
       answered: candidateAnswered
@@ -727,11 +610,7 @@ function aggregateCampaignRating(records, iterationCount) {
       ).toFixed(1))
     : null;
   const componentCoverage = Number(((components.length / 4) * 100).toFixed(1));
-  const confidence = records.length >= 100 && componentCoverage >= 75
-    ? "High"
-    : records.length >= 30 && componentCoverage >= 50
-      ? "Moderate"
-      : "Directional";
+  const confidence = "Descriptive only";
 
   return {
     value,
@@ -779,11 +658,7 @@ function buildPartyStrengthAnalysis(records) {
 
 function buildPredictiveAnalysis(records, partyStrength, sentiment) {
   const value = partyStrength.estimate.value;
-  const confidence = partyStrength.estimate.confidence === "High" && sentiment.confidence === "High"
-    ? "High"
-    : partyStrength.estimate.confidence === "Directional" || sentiment.confidence === "Directional"
-      ? "Directional"
-      : "Moderate";
+  const confidence = "Descriptive only; human review pending";
   const outlook = value === null
     ? "Insufficient evidence"
     : value < 2.6
@@ -810,6 +685,7 @@ function buildPredictiveAnalysis(records, partyStrength, sentiment) {
     limitations: [
       "The result is an aggregate directional estimate, not constituency vote share.",
       "No participant-level political score or category is produced.",
+      "Structured sentiment labels have not yet received multilingual human-review sign-off.",
       "Representative sampling, weighting and external outcome calibration are required for electoral forecasting."
     ]
   };
@@ -832,12 +708,12 @@ function buildIterationDashboard(records, {
   const associationInfluenceSignal = derivedDistribution(records, (record) =>
     classifyInfluence(record.response_variables?.association_influence)
   );
-  const fitSentiment = derivedDistribution(records, (record) =>
-    classifyFit(record.response_variables?.veeresh_criterion_fit)
-  );
-  const topIssue = issuePriority[0] || null;
-  const topParty = partySalience[0] || null;
-  const topIssueLeader = issueLeader[0] || null;
+  const fitSentimentMeasure = summarizeOutput(records, OUTPUT_KEYS.candidateFit);
+  const fitSentiment = fitSentimentMeasure.suppressed ? [] : fitSentimentMeasure.values;
+  const substantive = (items) => items.find((item) => !["Uncoded response", "Can't say", "Declined to answer", "None"].includes(item.value) && !item.value.startsWith("Multiple ")) || null;
+  const topIssue = substantive(issuePriority);
+  const topParty = substantive(partySalience);
+  const topIssueLeader = substantive(issueLeader);
   const respondentBase = records.length;
   const reasons = [];
 
@@ -860,17 +736,17 @@ function buildIterationDashboard(records, {
     headlineMetrics: [
       {
         label: "Candidate positive",
-        value: shareOf(candidateSentimentDistribution, "Positive"),
+        value: candidateSentimentDistribution.length ? shareOf(candidateSentimentDistribution, "Positive") : null,
         detail: "Positive share of classified candidate perception answers"
       },
       {
         label: "Candidate can't say",
-        value: shareOf(candidateSentimentDistribution, "Can't say"),
+        value: candidateSentimentDistribution.length ? shareOf(candidateSentimentDistribution, "Can't say") : null,
         detail: "Insufficient candidate knowledge or no classifiable view"
       },
       {
         label: "Association influence",
-        value: shareOf(associationInfluenceSignal, "Influence stated"),
+        value: associationInfluenceSignal.length ? shareOf(associationInfluenceSignal, "Influence stated") : null,
         detail: "Respondents explicitly reporting group influence"
       },
       {
@@ -1027,15 +903,15 @@ function transcriptThemes(records) {
 
 function strategicFindings(issuePriority, candidateAwareness, issueLeader, performance, respondentBase) {
   const findings = [];
-  const topIssue = issuePriority[0];
+  const topIssue = issuePriority.find((item) => !["Uncoded response", "Can't say", "Declined to answer", "None"].includes(item.value) && !item.value.startsWith("Multiple "));
   const awareness = candidateAwareness.find((item) => item.value === "Previously aware");
-  const topLeader = issueLeader[0];
+  const topLeader = issueLeader.find((item) => !["Uncoded response", "Can't say", "Declined to answer", "None"].includes(item.value) && !item.value.startsWith("Multiple "));
   const weakQuestion = [...performance].sort((left, right) => left.answeredPct - right.answeredPct)[0];
 
   if (topIssue) findings.push({
     type: "ISSUE",
     title: `${topIssue.value} leads the recorded issue priorities`,
-    evidence: `${topIssue.respondents} respondents · ${topIssue.percentage}% of coded issue answers`,
+    evidence: `${topIssue.respondents}/${topIssue.answerBase} recorded answers · ${topIssue.percentage}% · ${topIssue.missingCount} missing`,
     caution: "Open-text classification is directional and should be reviewed against transcript evidence.",
     variables: ["graduate_issue_priority", "development_priority", "desired_change"]
   });
@@ -1071,7 +947,7 @@ function buildNextIterationPlan({
   partyStrength
 }) {
   const plan = [];
-  const topIssue = issuePriority[0];
+  const topIssue = issuePriority.find((item) => !["Uncoded response", "Can't say", "Declined to answer", "None"].includes(item.value) && !item.value.startsWith("Multiple "));
   const weakest = [...performance]
     .filter((question) => question.required || question.answered > 0)
     .sort((left, right) => left.answeredPct - right.answeredPct)[0];
@@ -1084,13 +960,13 @@ function buildNextIterationPlan({
       variables: ["graduate_issue_priority", "development_priority", "desired_change"]
     });
   }
-  if (sentiment.judgment.includes("Uncertainty") || predictive.outlook.includes("Uncertain")) {
+  if (/uncertainty/i.test(sentiment.judgment) || predictive.outlook.includes("Uncertain")) {
     plan.push({
       priority: 2,
       title: "Reduce uncertainty before testing movement",
       objective: "Use comprehension, awareness and evidence-recall questions before asking evaluative follow-ups.",
-      rationale: `${sentiment.judgment}; directional-outlook confidence is ${predictive.confidence.toLowerCase()}.`,
-      variables: sentiment.variables.map((variable) => variable.key)
+      rationale: `${sentiment.judgment}; interpretation is ${predictive.confidence.toLowerCase()}.`,
+      variables: sentiment.outputVariables
     });
   } else {
     plan.push({
@@ -1100,7 +976,7 @@ function buildNextIterationPlan({
       rationale: `${sentiment.judgment}; the aggregate party-strength band is ${partyStrength.estimate.band.toLowerCase()}.`,
       variables: Array.from(new Set([
         ...predictive.variables,
-        ...sentiment.variables.map((variable) => variable.key)
+        ...sentiment.outputVariables
       ]))
     });
   }
@@ -1287,6 +1163,17 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const campaignRatingRecords = completed.flatMap((iteration) =>
     latestRespondents(records, iteration.id)
   );
+  const outputMeasures = Object.fromEntries([
+    "graduate_issue_priority", "veeresh_awareness", "veeresh_impression", "veeresh_criterion_fit",
+    "candidate_criterion", "mlc_role_awareness", "incumbent_awareness", "incumbent_assessment",
+    "party_salience_unaided", "perceived_issue_leader_aided", "association_influence", "association_named"
+  ].map((key) => [key, summarizeOutput(selectedRecords, key)]));
+  outputMeasures.development_priority = summarizeOutput(selectedRecords, ["development_priority", "priority_development"]);
+  outputMeasures.desired_change = summarizeOutput(selectedRecords, ["desired_change", "expected_change", "change_priority"]);
+  outputMeasures.candidate_assessment = summarizeOutput(selectedRecords, OUTPUT_KEYS.candidate);
+  outputMeasures.party_salience_unaided = summarizeOutput(selectedRecords, OUTPUT_KEYS.party);
+  outputMeasures.perceived_issue_leader_aided = summarizeOutput(selectedRecords, OUTPUT_KEYS.leadership);
+  outputMeasures.graduate_issue_priority = summarizeOutput(selectedRecords, OUTPUT_KEYS.issue);
   const campaignRating = aggregateCampaignRating(
     campaignRatingRecords,
     completed.length
@@ -1294,8 +1181,9 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const performance = questionPerformance(selectedRecords);
   const issuePriority = distribution(selectedRecords, "graduate_issue_priority", classifyIssue);
   const candidateAwareness = distribution(selectedRecords, "veeresh_awareness", classifyAwareness);
-  const candidateFit = distribution(selectedRecords, "veeresh_criterion_fit");
-  const candidateImpression = distribution(selectedRecords, "veeresh_impression");
+  const fitMeasure = summarizeOutput(selectedRecords, OUTPUT_KEYS.candidateFit);
+  const candidateFit = fitMeasure.suppressed ? [] : fitMeasure.values;
+  const candidateImpression = outputMeasures.candidate_assessment.suppressed ? [] : outputMeasures.candidate_assessment.values;
   const preferredCandidateCriterion = distribution(selectedRecords, "candidate_criterion");
   const roleAwareness = distribution(selectedRecords, "mlc_role_awareness");
   const incumbentAwareness = distribution(selectedRecords, "incumbent_awareness");
@@ -1311,7 +1199,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     "desired_change", "expected_change", "change_priority"
   ], classifyIssue);
   const partyLeanIndex = directFivePointIndex(selectedRecords);
-  const sentimentAnalysis = buildSentimentAnalysis(selectedRecords);
+  const sentimentAnalysis = buildSentimentAnalysis(selectedRecords, selection.sentimentConstruct || "candidate_impression");
   const partyStrengthAnalysis = buildPartyStrengthAnalysis(selectedRecords);
   const predictiveAnalysis = buildPredictiveAnalysis(
     selectedRecords,
@@ -1449,7 +1337,8 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
         ...iteration,
         runs: runs.filter((run) => run.iterationId === iteration.id)
       })),
-      filters: availableFilters
+      filters: availableFilters,
+      sentimentConstructs: SENTIMENT_CONSTRUCTS.filter((item) => item.type === "SENTIMENT")
     },
     segment: {
       filters: demographicFilters,
@@ -1481,6 +1370,9 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     },
     latestIteration: selectedIteration,
     comparison,
+    outputMeasures,
+    normalizationVersion: NORMALIZATION_VERSION,
+    sentimentValidation: getSentimentValidation(),
     questionPerformance: performance,
     issueAnalysis: {
       priorities: issuePriority,

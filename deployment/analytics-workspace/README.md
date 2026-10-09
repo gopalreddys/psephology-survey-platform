@@ -51,7 +51,7 @@ The strategic workspace supports an explicit Campaign → Iteration → Run hier
 
 The selected Iteration now includes a concise decision dashboard with:
 
-- candidate perception grouped as Positive, Neutral, Negative or Can't say;
+- candidate impression grouped as Positive, Neutral, Negative, Mixed or explicit Can't say; candidate fit is a separate suitability measure;
 - candidate criterion-fit and incumbent-assessment distributions;
 - unaided party-attention and aided issue-leadership signals;
 - priority issues, development priorities and desired changes;

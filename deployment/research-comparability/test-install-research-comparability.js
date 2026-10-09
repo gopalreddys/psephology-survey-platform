@@ -27,6 +27,14 @@ try {
   }
   assert.match(await readFile(path.join(root, 'sql/029_shared_comparison_gate.sql'), 'utf8'), /previous_iteration_id/);
   assert.match(await readFile(path.join(root, 'src/db/migrate-amazon-quick-dashboard.js'), 'utf8'), /029_shared_comparison_gate/);
+  assert.match(await readFile(path.join(root, 'sql/030_normalized_output_reporting.sql'), 'utf8'), /analytics_research_enterprise_v2/);
+  assert.match(await readFile(path.join(root, 'src/db/migrate-amazon-quick-dashboard.js'), 'utf8'), /buildNormalizationSqlFunction/);
+  assert.match(await readFile(path.join(root, 'sql/031_audited_research_methodology.sql'), 'utf8'), /analytics_research_design_audit/);
+  for (const file of ['research-methodology.repository.js', 'research-methodology-validation.js', 'campaign-visibility.repository.js']) {
+    execFileSync(process.execPath, ['--check', path.join(root, 'src/repositories', file)]);
+  }
+  assert.match(await readFile(path.join(root, 'src/repositories/normalization-rules.json'), 'utf8'), /OUTPUT_TAXONOMY_V2/);
+  assert.match(await readFile(path.join(root, 'src/repositories/output-normalization.repository.js'), 'utf8'), /summarizeOutput/);
   install();
   assert.equal(await readFile(path.join(root, 'src/server.js'), 'utf8'), installedServer, 'Installer is idempotent');
   const invalid = path.join(root, 'invalid');

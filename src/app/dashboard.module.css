@@ -151,7 +151,7 @@
 .heatmapCard { margin-top: 13px; overflow-x: auto; }
 .heatmap { display: grid; min-width: 680px; gap: 5px; margin-top: 13px; }
 .heatmapHeader,
-.heatmapRow { display: grid; grid-template-columns: minmax(190px, 1.3fr) repeat(4, 1fr); gap: 5px; align-items: stretch; }
+.heatmapRow { display: grid; grid-template-columns: minmax(190px, 1.3fr) repeat(5, 1fr); gap: 5px; align-items: stretch; }
 .heatmapHeader span,
 .heatmapHeader strong { padding: 7px; color: #78666c; font-size: 9px; text-align: center; }
 .heatmapHeader span { text-align: left; }

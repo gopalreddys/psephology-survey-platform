@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "DEMO_SENTIMENT_REVIEW_V1",
+  "datasetReference": "MANUAL_REVIEW_TEMPLATE_ONLY",
+  "title": "Template only: replace with permitted manually sanitized material",
+  "cases": [
+    {
+      "id": "REVIEW_SAMPLE_A",
+      "origin": "SANITIZED_CALL",
+      "language": "TE",
+      "construct": "issue_sentiment",
+      "outputKey": "issue_sentiment",
+      "evaluationType": "RECORDED_PROVIDER_OUTPUT",
+      "family": "MANUAL_REVIEW_PENDING",
+      "questionText": "Replace with the exact approved question with names removed",
+      "sourceExcerpt": null,
+      "providerOutput": null,
+      "authoredExpectation": null,
+      "sanitization": {
+        "manuallySanitized": false,
+        "confirmedNoPersonalIdentifiers": false
+      },
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer1": null,
+        "reviewer2": null,
+        "adjudication": null
+      }
+    }
+  ]
+}

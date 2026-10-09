@@ -41,8 +41,8 @@ assert.match(repository, /selectedProgram/);
 assert.match(repository, /selectedIteration/);
 assert.match(repository, /selectedAgeBand/);
 assert.match(repository, /selectedGender/);
-assert.match(repository, /party_salience_unaided/);
-assert.match(repository, /perceived_issue_leader_aided/);
+assert.match(repository, /OUTPUT_KEYS\.party/);
+assert.match(repository, /OUTPUT_KEYS\.leadership/);
 assert.match(repository, /UNWEIGHTED_DIRECTIONAL/);
 assert.match(repository, /mandalHeatmap/);
 assert.match(repository, /not an election forecast or participant-level prediction/);
@@ -54,12 +54,24 @@ assert.match(repository, /INSUFFICIENT_COMPARABLE_HISTORY/);
 assert.match(repository, /Select one Campaign before interpreting movement across Iterations/);
 assert.match(repository, /trendScope\.status === "DIRECTIONAL"/);
 assert.match(repository, /The result is directional, not an election forecast/);
+assert.match(repository, /summarizeOutput/);
+assert.doesNotMatch(repository, /function classifyParty|function classifyIssue|function classifySentiment/);
+assert.match(dashboardPage, /BaseCaption summary=\{data\.intelligence\.measures\.candidate\}/);
+assert.match(dashboardPage, /Missing \{summary\.missingCount\}/);
+assert.match(dashboardPage, /fewer than 5 answers/);
 assert.match(routes, /req\.query\.programId/);
 assert.match(routes, /req\.query\.campaignId/);
 assert.match(routes, /req\.query\.iterationId/);
 assert.match(routes, /req\.query\.mandal/);
 assert.match(routes, /req\.query\.ageBand/);
 assert.match(routes, /req\.query\.gender/);
+assert.match(routes, /req\.query\.sentimentConstruct/);
+assert.match(dashboardPage, /query\.set\("sentimentConstruct", sentimentConstruct\)/);
+assert.match(dashboardPage, /Sentiment measure/);
+assert.match(dashboardPage, /Human review pending/);
+assert.match(dashboardPage, /Mixed is separate from Neutral/);
+assert.doesNotMatch(dashboardPage, /First recorded assessment per respondent \(candidate, then incumbent, then issue\)/);
+assert.doesNotMatch(repository, /const SENTIMENT_KEYS|codedAssessmentBase >= 100|reportable\.length >= 100/);
 assert.doesNotMatch(repository, /phone_number|interaction_transcript\s+AS/);
 assert.match(installer, /ROLE_DASHBOARD_V1/);
 assert.match(installer, /\.bak-role-dashboard-/);
@@ -80,6 +92,8 @@ try {
   await copyFile(path.join(here, "dashboard.repository.js"), path.join(runtime, "src/repositories/dashboard.repository.js"));
   await copyFile(path.resolve(here, "../campaign-draft-privacy/campaign-visibility.repository.js"), path.join(runtime, "src/repositories/campaign-visibility.repository.js"));
   await copyFile(path.resolve(here, "../research-comparability/research-comparability.repository.js"), path.join(runtime, "src/repositories/research-comparability.repository.js"));
+  await copyFile(path.resolve(here, "../output-variable-standardization/output-normalization.repository.js"), path.join(runtime, "src/repositories/output-normalization.repository.js"));
+  await copyFile(path.resolve(here, "../output-variable-standardization/normalization-rules.json"), path.join(runtime, "src/repositories/normalization-rules.json"));
   const { buildDashboardIntelligence, getRoleDashboard } = await import(path.join(runtime, "src/repositories/dashboard.repository.js"));
   const actor = { id: "manager-1", role_code: "CAMPAIGN_MANAGER" };
   const campaigns = [{ id: "campaign-1", name: "Study campaign", code: "C1", programId: "program-1", programName: "Study", programCode: "P1" }];
@@ -118,6 +132,17 @@ try {
   assert.deepEqual(selected.mandalHeatmap.map((cell) => [cell.label, cell.base]), [["Mandal A", 5]], "heatmap honors selected Mandal as well as age and gender");
   assert.deepEqual(selected.predictive.points.map((point) => [point.iterationNumber, point.base, point.value]), [[1, 5, 5], [2, 5, 1]], "each wave uses the selected cohort and future waves are excluded");
   assert.equal(selected.predictive.direction, "Declining");
+  assert.equal(selected.sentimentConstruct.key, "candidate_impression", "default dashboards preserve candidate impressions without cross-construct fallback");
+  assert.deepEqual(selected.sentimentConstruct.outputKeys, ["candidate_impression", "candidate_sentiment", "veeresh_impression"]);
+  assert.equal(selected.filters.selectedSentimentConstruct, "candidate_impression");
+  assert.deepEqual(selected.filters.sentimentConstructs.map((item) => item.key), ["candidate_impression", "incumbent_assessment", "issue_sentiment", "development_sentiment", "change_sentiment"]);
+  assert.equal(selected.sentimentValidation.status, "HUMAN_REVIEW_PENDING");
+  assert.equal(selected.sentimentValidation.method, "EXPLICIT_LABEL_MAPPING");
+  assert.equal(selected.sentimentValidation.normalizationVersion, "OUTPUT_TAXONOMY_V2");
+  assert.match(selected.sentimentValidation.ruleHash, /^[a-f0-9]{64}$/);
+  assert.match(selected.sentimentValidation.message, /not a validated NLP model or electoral prediction/);
+  assert.equal(selected.rating.confidence, "Descriptive only");
+  assert.equal(selected.predictive.confidence, "Descriptive only");
   assert.equal(selected.predictive.comparability.source, "analytics_iteration_comparability_v1");
   assert.match(selected.predictive.scopeLabel, /Selected segment/);
   assert.match(build({ selection: { mandal: "", gender: "", ageBand: "" } }).predictive.scopeLabel, /Full Iteration/);
@@ -128,11 +153,14 @@ try {
     assert.throws(() => build({ selection: { [key]: ["unexpected-array"] } }), { statusCode: 400 });
     assert.throws(() => build({ selection: { [key]: "   " } }), { statusCode: 400 });
   }
-  for (const key of ["mandal", "gender", "ageBand"]) {
+  for (const key of ["mandal", "gender", "ageBand", "sentimentConstruct"]) {
     assert.throws(() => build({ selection: { [key]: ["unexpected-array"] } }), { statusCode: 400 });
   }
   assert.throws(() => build({ selection: { gender: "unsupported" } }), { statusCode: 400 });
   assert.throws(() => build({ selection: { ageBand: "18-100" } }), { statusCode: 400 });
+  for (const value of ["candidate_criterion_fit", "unsupported", "   "]) {
+    assert.throws(() => build({ selection: { sentimentConstruct: value } }), { statusCode: 400 }, "suitability and malformed selectors cannot be pooled as sentiment");
+  }
   const otherCampaign = { ...campaigns[0], id: "other-campaign", programId: "other-program", programName: "Other study" };
   const otherIteration = { ...iterations[0], id: "other-iteration", campaign_id: "other-campaign" };
   const scopedCampaigns = [...campaigns, otherCampaign];
@@ -149,6 +177,141 @@ try {
     assert.equal(fullCohort.rating.value, size < 5 ? null : 5);
     assert.equal(fullCohort.sentiment.length, size < 5 ? 0 : 1);
   }
+
+  const normalizedParties = ["BRS", "brs", "Bharat Rashtra Samithi", "TRS", " BRS ", "None", "Can't say", "BRS and BJP", "not BRS", null];
+  const partyRecords = cohort(1, 10, "good").map((record, index) => ({
+    ...record,
+    response_variables: { candidate_sentiment: "good", party_salience_unaided: normalizedParties[index] }
+  }));
+  const normalized = build({ iterations: [iterations[0]], records: partyRecords });
+  assert.equal(normalized.landscape.party.find((item) => item.value === "BRS").respondents, 5, "case, spacing and known aliases collapse to one party category");
+  assert.equal(normalized.landscape.party.find((item) => item.value === "BRS").percentage, 55.6, "denominator includes explicit uncertainty, none and uncoded records");
+  assert.equal(normalized.measures.party.answerBase, 9);
+  assert.equal(normalized.measures.party.respondentBase, 10);
+  assert.equal(normalized.measures.party.missingCount, 1);
+  assert.equal(normalized.measures.party.cantSayCount, 1);
+  assert.equal(normalized.measures.party.uncodedCount, 2, "multiple named parties and negated mentions never select the first matching party");
+  assert.ok(normalized.landscape.party.some((item) => item.value === "None"), "None is distinct from Can't say");
+
+  const mixedResponses = ["good", "good", "good", "good", "good", null, "", "Can't say", "It sounds good but I have no assessment", "prefer not to answer"];
+  const mixed = build({ iterations: [iterations[0]], records: cohort(1, 10, "").map((record, index) => ({
+    ...record, response_variables: { candidate_sentiment: mixedResponses[index] }
+  })) });
+  assert.equal(mixed.measures.sentiment.answerBase, 8);
+  assert.equal(mixed.measures.sentiment.missingCount, 2);
+  assert.equal(mixed.measures.sentiment.cantSayCount, 1);
+  assert.equal(mixed.measures.sentiment.refusedCount, 1);
+  assert.equal(mixed.measures.sentiment.uncodedCount, 1, "an unrecognized narrative isn't silently classified as uncertainty or positive sentiment");
+  assert.equal(mixed.sentiment.find((item) => item.value === "Positive").percentage, 62.5);
+  assert.equal(mixed.rating.value, 5, "only five explicitly coded assessment responses enter the descriptive rating");
+  assert.equal(mixed.rating.answeredBase, 5);
+  assert.equal(mixed.age[0].positivePct, 62.5, "segment percentages retain the same answered denominator as their full measure");
+  const uncertaintyHeavy = build({ iterations: [iterations[0]], records: cohort(1, 10, "").map((record, index) => ({
+    ...record, response_variables: { candidate_sentiment: index < 4 ? "good" : "Can't say" }
+  })) });
+  assert.equal(uncertaintyHeavy.measures.sentiment.suppressed, false, "ten recorded responses support a mix chart");
+  assert.equal(uncertaintyHeavy.rating.value, null, "explicit uncertainty cannot supply the fifth rated assessment");
+  assert.equal(uncertaintyHeavy.rating.answeredBase, 4);
+  const unrecognized = build({ iterations: [iterations[0]], records: cohort(1, 5, "a narrative with no explicit assessment") });
+  assert.deepEqual(unrecognized.sentiment.map((item) => [item.value, item.percentage]), [["Uncoded response", 100]]);
+  assert.equal(unrecognized.measures.sentiment.cantSayCount, 0);
+  assert.equal(unrecognized.rating.value, null);
+
+  const sparseRecords = cohort(1, 10, "").map((record, index) => ({
+    ...record, response_variables: {
+      veeresh_awareness: "yes", candidate_sentiment: index < 2 ? "good" : null,
+      party_salience_unaided: index === 0 ? "BRS" : null
+    }
+  }));
+  const sparse = build({ iterations: [iterations[0]], records: sparseRecords });
+  assert.equal(sparse.suppressed, false, "ten respondents may have a reportable cohort while particular measures remain sparse");
+  assert.equal(sparse.rating.value, null);
+  assert.equal(sparse.rating.answeredBase, 2);
+  assert.deepEqual(sparse.landscape.party, []);
+  assert.equal(sparse.measures.party.answerBase, 1);
+  assert.equal(sparse.measures.party.missingCount, 9, "sparse and empty chart metadata is retained for captions");
+  assert.deepEqual(sparse.landscape.candidate, []);
+  assert.equal(sparse.measures.candidate.answerBase, 2, "awareness-only responses are not assessment evidence");
+  assert.equal(sparse.age[0].suppressed, true, "segment suppression uses answered measure base, not respondent count");
+  assert.equal(sparse.mandalHeatmap[0].positivePct, null);
+  assert.deepEqual(sparse.mandalHeatmap[0].sentiment, []);
+  const incumbentOnly = build({ iterations: [iterations[0]], records: cohort(1, 10, "", { response_variables: { incumbent_assessment: "good" } }) });
+  assert.equal(incumbentOnly.measures.leadership.answerBase, 0, "incumbent assessment cannot substitute for a leadership response");
+  assert.deepEqual(incumbentOnly.landscape.leadership, []);
+  assert.equal(incumbentOnly.measures.candidate.answerBase, 0);
+  assert.equal(incumbentOnly.measures.sentiment.answerBase, 0, "missing candidate impressions never fall back to incumbent assessment");
+  assert.equal(incumbentOnly.rating.value, null);
+  assert.deepEqual(incumbentOnly.sentiment, []);
+  assert.equal(incumbentOnly.age[0].positivePct, null);
+  assert.equal(incumbentOnly.mandalHeatmap[0].positivePct, null);
+  const incumbentSelected = build({ iterations: [iterations[0]], records: cohort(1, 10, "", { response_variables: { incumbent_assessment: "good" } }), selection: { sentimentConstruct: "incumbent_assessment" } });
+  assert.equal(incumbentSelected.rating.value, 5, "incumbent evidence is available only through its own explicit construct");
+  assert.equal(incumbentSelected.sentimentConstruct.key, "incumbent_assessment");
+  assert.deepEqual(incumbentSelected.landscape.candidate, [], "the independent candidate chart remains impression-only");
+
+  const separateConstructRows = cohort(1, 10, "", { response_variables: {
+    candidate_impression: "positive", incumbent_assessment: "negative", issue_sentiment: "neutral",
+    development_sentiment: "mixed", change_sentiment: "Can't say", candidate_criterion_fit: "good"
+  } });
+  for (const [key, label, rating] of [
+    ["candidate_impression", "Positive", 5], ["incumbent_assessment", "Negative", 1],
+    ["issue_sentiment", "Neutral", 3], ["development_sentiment", "Mixed", null],
+    ["change_sentiment", "Can't say", null]
+  ]) {
+    const chosen = build({ iterations: [iterations[0]], records: separateConstructRows, selection: { sentimentConstruct: key } });
+    assert.deepEqual(chosen.sentiment.map((item) => [item.value, item.percentage]), [[label, 100]], `${key} uses only its own structured construct`);
+    assert.equal(chosen.rating.value, rating);
+    for (const segments of [chosen.age, chosen.gender, chosen.mandalHeatmap]) {
+      assert.deepEqual(segments[0].sentiment.map((item) => item.value), [label], "every demographic chart uses the same chosen construct");
+    }
+  }
+  const criterionOnly = build({ iterations: [iterations[0]], records: cohort(1, 5, "", { response_variables: { candidate_criterion_fit: "good", veeresh_criterion_fit: "good" } }) });
+  assert.equal(criterionOnly.measures.candidate.answerBase, 0, "candidate suitability is not candidate impression");
+  assert.equal(criterionOnly.measures.sentiment.answerBase, 0);
+  assert.equal(criterionOnly.rating.value, null);
+  const mixedOnly = build({ iterations: [iterations[0]], records: cohort(1, 5, "mixed") });
+  assert.deepEqual(mixedOnly.sentiment.map((item) => item.value), ["Mixed"]);
+  assert.equal(mixedOnly.rating.value, null, "Mixed is neither Neutral nor a numerical middle score");
+  assert.equal(mixedOnly.rating.answeredBase, 0);
+  const insufficientPolarity = build({ iterations: [iterations[0]], records: [
+    ...cohort(1, 4, "positive"), ...cohort(1, 1, "mixed"), ...cohort(1, 1, "Can't say"), ...cohort(1, 1, "None")
+  ] });
+  assert.equal(insufficientPolarity.rating.value, null, "mixed, explicit uncertainty and None cannot reach the five-coded rating threshold");
+  assert.equal(insufficientPolarity.rating.answeredBase, 4);
+  const fivePolarity = build({ iterations: [iterations[0]], records: [
+    ...cohort(1, 5, "positive"), ...cohort(1, 1, "mixed"), ...cohort(1, 1, "Can't say"), ...cohort(1, 1, "None")
+  ] });
+  assert.equal(fivePolarity.rating.value, 5, "excluded sentiment categories cannot dilute the descriptive average");
+  assert.equal(fivePolarity.rating.answeredBase, 5);
+  const largeDescriptive = build({ iterations: [iterations[0]], records: cohort(1, 150, "good") });
+  assert.equal(largeDescriptive.rating.confidence, "Descriptive only", "larger response volume does not claim model validity");
+
+  const fixedConstructRows = [...cohort(1, 5, ""), ...cohort(2, 5, ""), ...cohort(3, 5, "")].map((record) => ({
+    ...record, response_variables: { candidate_impression: "good", issue_sentiment: record.iteration_id === "iteration-2" ? "negative" : "neutral" }
+  }));
+  const fixedConstruct = build({ records: fixedConstructRows, selection: { sentimentConstruct: "issue_sentiment", iterationId: "iteration-2" } });
+  assert.deepEqual(fixedConstruct.predictive.points.map((point) => [point.iterationNumber, point.value]), [[1, 3], [2, 1]], "the selected construct is held fixed across comparable waves");
+  const missingSelectedWave = build({ records: fixedConstructRows.map((record) => record.iteration_id === "iteration-2" ? { ...record, response_variables: { candidate_impression: "good" } } : record), selection: { sentimentConstruct: "issue_sentiment", iterationId: "iteration-2" } });
+  assert.equal(missingSelectedWave.predictive.status, "NO_HISTORY", "a missing selected construct is not supplied by candidate evidence in the same wave");
+  assert.deepEqual(missingSelectedWave.predictive.points, []);
+  const aliasRecords = cohort(1, 5, "").map((record) => ({
+    ...record, response_variables: {
+      candidate_impression: "poor", veeresh_impression: "good",
+      party_salience: "TRS", party_leadership: "BRS", issue_priority: "jobs"
+    }
+  }));
+  const aliasScope = build({ iterations: [iterations[0]], records: aliasRecords });
+  assert.deepEqual(aliasScope.landscape.candidate.map((item) => [item.value, item.respondents]), [["Uncoded response", 5]], "contradictory aliases cannot silently select a preferred assessment");
+  assert.equal(aliasScope.rating.value, null);
+  assert.equal(aliasScope.landscape.party[0].value, "BRS", "party_salience joins the party aliases");
+  assert.equal(aliasScope.landscape.leadership[0].value, "BRS", "party_leadership joins the leadership aliases");
+  assert.equal(aliasScope.issues[0].value, "Employment and jobs", "issue_priority joins only the issue construct");
+  const developmentOnly = build({ iterations: [iterations[0]], records: cohort(1, 5, "good", { response_variables: {
+    candidate_sentiment: "good", development_priority: "jobs", desired_change: "education"
+  } }) });
+  assert.equal(developmentOnly.measures.issues.answerBase, 0, "development priorities and desired changes are not silently substituted for issue priorities");
+  assert.deepEqual(developmentOnly.issues, []);
+  assert.match(dashboardPage, /no substitution from other measures/);
 
   const rejectedComparisons = new Map(comparisons);
   rejectedComparisons.set("iteration-3", { ...comparisons.get("iteration-3"), status: "NOT_COMPARABLE", reasons: ["GEOGRAPHY_CHANGED"] });
@@ -249,6 +412,9 @@ try {
   assert.equal(loaded.intelligence.predictive.status, "DIRECTIONAL", "repository actually loads and uses the shared SQL comparison metadata");
   assert.deepEqual(loaded.intelligence.predictive.points.map((point) => point.iterationNumber), [1, 2]);
   assert.deepEqual(comparisonRequests, [[iterations.map((wave) => wave.id)]], "comparison loader receives only authorized Iteration IDs");
+  const chosenLoaded = await getRoleDashboard(actor, { ...selection, iterationId: "iteration-2", sentimentConstruct: "issue_sentiment" });
+  assert.equal(chosenLoaded.intelligence.sentimentConstruct.key, "issue_sentiment", "the repository loader preserves requested construct selection");
+  assert.equal(chosenLoaded.intelligence.rating.value, null, "loader never changes the construct when selected evidence is absent");
   schemaMissing = true;
   const oldSchema = await getRoleDashboard(actor, { ...selection, iterationId: "iteration-2" });
   assert.equal(oldSchema.intelligence.predictive.status, "NOT_COMPARABLE", "an uninstalled SQL gate fails closed through the dashboard loader");

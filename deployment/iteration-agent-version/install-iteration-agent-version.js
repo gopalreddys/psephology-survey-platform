@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installQuestionnaireSnapshot } from "../research-methodology/install-questionnaire-snapshot.js";
 
 const runtimeRoot = path.resolve(process.argv[2] || "/opt/sarvam-voice-analytics");
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +44,7 @@ for (const file of files) {
 }
 
 const suffix = new Date().toISOString().replaceAll(":", "-");
+await installQuestionnaireSnapshot(runtimeRoot);
 for (const file of checked) {
   if (file.currentHash === file.incomingHash) continue;
   await mkdir(path.dirname(file.target), { recursive: true });

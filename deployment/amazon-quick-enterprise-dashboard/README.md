@@ -33,6 +33,49 @@ deterministic authoring specification is in
 minimum base (currently `n=5` in the application). Do not describe an
 unweighted demo result as an election forecast.
 
+## Standardized output labels and answer bases (Step 2)
+
+Migration `030_normalized_output_reporting.sql` adds normalized **v2** research,
+geographic and movement views. Their party, candidate, issue and leadership
+labels use the same audited `normalization-rules.json` as native Analysis and
+Dashboard reporting. Raw source values remain in privileged call records;
+stored responses are never overwritten. Public BI views expose the selected
+source key and normalization version, but never raw free-text answers, which
+could incidentally contain personal information. Multiple, negated or unrecognized
+answers remain explicitly uncoded rather than becoming a guessed preference.
+
+“No response,” “Can't say,” “Declined to answer,” “None” and “Uncoded response”
+are distinct. A percentage denominator includes **all non-missing recorded
+answers**, including explicit uncertainty, declined and uncoded answers; missing
+answers are counted separately. Always show the filtered answer base next to
+percentages. Sentiment and candidate shares, and their adjacent-wave changes,
+are unavailable below five answered values for that measure in each required
+wave. No party mention is converted into an inferred rating. The movement
+view's sentiment construct is explicitly the first non-missing civic/incumbent
+assessment in this order: issue, development, expected change, then incumbent.
+Candidate assessment is a separate construct: the first non-missing candidate
+impression/sentiment, then criterion fit. They are not averaged together or
+represented as equivalent to the native Analysis page's separate sentiment
+questions.
+
+The platform's native enterprise evidence panel uses the v2 movement view.
+The authoring blueprint targets v2 datasets, but installing/migrating the API
+**does not republish existing Amazon Quick datasets or dashboards**. Existing
+v1 assets remain intact until an explicitly approved authoring/publication
+step replaces their data sources and refreshes SPICE.
+
+Local regressions:
+
+```bash
+node deployment/amazon-quick-enterprise-dashboard/test-amazon-quick-dashboard.js
+PGLITE_MODULE_PATH=/path/to/pglite/dist/index.js \
+  node deployment/amazon-quick-enterprise-dashboard/test-normalized-output-sql.js
+```
+
+The SQL test runs isolated PostgreSQL-compatible fixtures, shared JavaScript/SQL
+normalization parity, answer denominators, missing-wave/minimum-base safeguards
+and the complete migration replay. It never connects to live RDS.
+
 ## Install on the API host
 
 ```bash
@@ -55,9 +98,9 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/rea
 1. Enable Quick Sight Enterprise in `ap-south-1`.
 2. Add the RDS PostgreSQL data source through a VPC connection and grant the
    Quick Sight security group database access. Prefer a reporting/read replica.
-3. Create SPICE datasets from `analytics_research_enterprise_v1`,
-   `analytics_research_geographic_v1`, `analytics_research_quality_v1` and
-   `analytics_iteration_movement_v1`. Add
+3. Create SPICE datasets from `analytics_research_enterprise_v2`,
+   `analytics_research_geographic_v2`, `analytics_research_quality_v1` and
+   `analytics_iteration_movement_v2`. Add
    `analytics_iteration_comparability_v1` to the Research quality sheet.
 4. Author the five sheets in `quick-dashboard-blueprint.json` and publish the
    dashboard.
@@ -107,7 +150,7 @@ coverage and Iteration movement only. Sampling remains labelled as directional
 and unweighted until an approved probability design and weighting pipeline are
 configured.
 
-`analytics_research_geographic_v1` supplies latitude, longitude, party label,
+`analytics_research_geographic_v2` supplies latitude, longitude, canonical party label,
 respondent count and aggregate party-strength to an Amazon Quick geospatial
 visual. Configure the visual as **Points on map**, place `latitude` and
 `longitude` in the geospatial field well, use `heat_weight` as the weight, and
@@ -144,3 +187,49 @@ dataset contains a pseudonymous respondent key but excludes names, phone
 numbers, EPIC IDs, transcripts and raw output JSON. Before offering this across
 multiple organizations, replace the shared Reader with per-user provisioning or
 anonymous capacity embedding with session-tag row-level security.
+# Audited methodology (Step 3)
+
+Migration 031 tightens the shared comparison gate: complete actual-method
+declarations and retained frozen question content are required. The registry
+adds actor/reason/revision history and prevents stale overwrites. It does not
+apply statistical weights or reconstruct historical questionnaires. Use the
+coordinated [methodology installer](../research-methodology/README.md) to also
+install future questionnaire-content capture and prelaunch drift protection.
+Published Quick assets remain unchanged until the authoring/publication step.
+
+## Sentiment construct safeguards (Step 4)
+
+Migration 032 preserves the existing v1/v2 view signatures and original call
+answers. In the Quick v2 dataset, `respondent_sentiment` now means **incumbent
+performance assessment only**, from `incumbent_assessment`. It does not borrow
+issue, development or expected-change sentiment when that answer is missing.
+`candidate_sentiment` means **candidate impression only**, from the three
+impression aliases; candidate criterion fit remains a separate suitability
+measure. Contradictory assessment aliases are retained as Uncoded, not silently
+resolved by source-key order. Mixed is a separate category, never Neutral.
+
+The authorized research-quality API and native enterprise page expose the
+normalization version, rule hash and `HUMAN_REVIEW_PENDING` status. This is
+descriptive coding of explicit structured labels, not a validated NLP model or
+an electoral prediction. Regression fixtures, including multilingual examples,
+check software behavior; actual evidence review and recorded human sign-off are
+still required for any claim of validated accuracy. Sampling comparison gates,
+measure-specific answer bases and five-answer suppression still apply.
+
+The installer copies 032 and the migration runner applies it after 031.
+Installation does **not** refresh or publish Amazon Quick assets. Before a
+presentation, refresh the v2 datasets and review the authoring blueprint's
+explicit construct labels, Mixed categories, answer-base captions and
+pending-validation disclosure. Older published assets may otherwise retain
+their previous labels or SPICE data.
+
+Local-only verification:
+
+```bash
+node deployment/amazon-quick-enterprise-dashboard/test-amazon-quick-dashboard.js
+PGLITE_MODULE_PATH=/path/to/pglite/dist/index.js node deployment/amazon-quick-enterprise-dashboard/test-normalized-output-sql.js
+```
+
+The first test includes installer idempotence and an installed migration-runner
+mock. The second executes the full SQL sequence in isolated PostgreSQL; neither
+test connects to the live database or publishes cloud assets.

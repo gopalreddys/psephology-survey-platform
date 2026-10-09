@@ -17,7 +17,8 @@ router.get(
         iterationId: req.query.iterationId || "",
         mandal: req.query.mandal || "",
         ageBand: req.query.ageBand || "",
-        gender: req.query.gender || ""
+        gender: req.query.gender || "",
+        sentimentConstruct: req.query.sentimentConstruct || ""
       }));
     } catch (error) {
       console.error("Unable to load role Dashboard:", error);

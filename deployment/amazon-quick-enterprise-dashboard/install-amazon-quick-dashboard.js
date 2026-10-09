@@ -1,9 +1,13 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installOutputNormalization } from "../output-variable-standardization/install-shared-normalization.js";
+import { installResearchMethodologyDependencies } from "../research-methodology/install-research-methodology-dependencies.js";
 
 const runtimeRoot = path.resolve(process.argv[2] || "/opt/sarvam-voice-analytics");
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
+await installOutputNormalization(runtimeRoot);
+await installResearchMethodologyDependencies(runtimeRoot);
 const serverPath = path.join(runtimeRoot, "src/server.js");
 const marker = "AMAZON_QUICK_ENTERPRISE_DASHBOARD_V1";
 
@@ -34,6 +38,18 @@ await copyFile(
 await copyFile(
   path.join(packageRoot, "029_shared_comparison_gate.sql"),
   path.join(runtimeRoot, "sql/029_shared_comparison_gate.sql")
+);
+await copyFile(
+  path.join(packageRoot, "030_normalized_output_reporting.sql"),
+  path.join(runtimeRoot, "sql/030_normalized_output_reporting.sql")
+);
+await copyFile(
+  path.join(packageRoot, "031_audited_research_methodology.sql"),
+  path.join(runtimeRoot, "sql/031_audited_research_methodology.sql")
+);
+await copyFile(
+  path.join(packageRoot, "032_sentiment_construct_reporting.sql"),
+  path.join(runtimeRoot, "sql/032_sentiment_construct_reporting.sql")
 );
 await copyFile(
   path.join(packageRoot, "migrate-amazon-quick-dashboard.js"),

@@ -2,20 +2,16 @@ import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { requireRole } from "../middleware/role.middleware.js";
 import { getDb } from "../db/postgres.js";
+import { campaignReviewVisibilitySql } from "../repositories/campaign-visibility.repository.js";
+import { saveResearchDesign, researchDesignHistory, ResearchDesignError } from "../repositories/research-methodology.repository.js";
+import { getSentimentValidation } from "../repositories/output-normalization.repository.js";
 
 const router = express.Router();
 const permittedRoles = ["SUPER_ADMIN", "ADMIN"];
 const permittedBoundaryTypes = new Set([
   "STATE", "DISTRICT", "ASSEMBLY_CONSTITUENCY", "MANDAL"
 ]);
-const permittedSamplingMethods = new Set([
-  "CENSUS", "SIMPLE_RANDOM", "STRATIFIED_RANDOM", "CLUSTER",
-  "SYSTEMATIC", "QUOTA", "PURPOSIVE", "CONVENIENCE",
-  "DIRECTIONAL_NON_PROBABILITY"
-]);
-const permittedWeightingStatuses = new Set([
-  "NOT_CONFIGURED", "NOT_REQUIRED", "PLANNED", "APPLIED"
-]);
+
 
 function dashboardConfiguration() {
   const allowedDomains = String(process.env.QUICKSIGHT_ALLOWED_DOMAINS || "")
@@ -98,6 +94,23 @@ function mapMovement(row) {
     positiveSentimentPct: row.positive_sentiment_pct === null ? null : numeric(row.positive_sentiment_pct),
     negativeSentimentPct: row.negative_sentiment_pct === null ? null : numeric(row.negative_sentiment_pct),
     candidatePositivePct: row.candidate_positive_pct === null ? null : numeric(row.candidate_positive_pct),
+    sentimentAnswerBase: numeric(row.sentiment_answer_base),
+    sentimentMissingCount: numeric(row.sentiment_missing_count),
+    sentimentUncodedCount: numeric(row.sentiment_uncoded_count),
+    sentimentCantSayCount: numeric(row.sentiment_cant_say_count),
+    sentimentRefusedCount: numeric(row.sentiment_refused_count),
+    candidateAnswerBase: numeric(row.candidate_answer_base),
+    candidateMissingCount: numeric(row.candidate_missing_count),
+    candidateUncodedCount: numeric(row.candidate_uncoded_count),
+    candidateCantSayCount: numeric(row.candidate_cant_say_count),
+    candidateRefusedCount: numeric(row.candidate_refused_count),
+    previousSentimentAnswerBase: row.previous_sentiment_answer_base === null
+      ? null : numeric(row.previous_sentiment_answer_base),
+    previousCandidateAnswerBase: row.previous_candidate_answer_base === null
+      ? null : numeric(row.previous_candidate_answer_base),
+    percentageBasis: row.percentage_basis,
+    sentimentConstruct: row.sentiment_construct,
+    candidateConstruct: row.candidate_construct,
     issueResponseBase: numeric(row.issue_response_base),
     partyStrengthChange: row.party_strength_change === null
       ? null : numeric(row.party_strength_change),
@@ -130,14 +143,18 @@ function mapResearchDesign(row) {
     weightingVariables: row.weighting_variables || [],
     fieldworkMode: row.fieldwork_mode || "AI_ASSISTED_OUTBOUND_VOICE",
     methodologyNotes: row.methodology_notes || "",
+    cohortDesign: row.cohort_design || "NOT_DECLARED",
+    revision: numeric(row.revision),
+    declaredByUserId: row.declared_by_user_id,
     declaredAt: row.declared_at,
+    declarationComplete: row.design_declared === true,
+    questionContentRecorded: row.question_content_recorded === true,
+    frozenQuestionCount: numeric(row.frozen_question_count),
+    questionContentFingerprint: row.question_content_fingerprint || null,
+    reportingWeighting: "UNWEIGHTED",
     comparisonStatus: row.comparison_status,
     comparisonReasons: row.comparison_reasons || []
   };
-}
-
-function cleanText(value, maximum = 500) {
-  return String(value || "").trim().slice(0, maximum);
 }
 
 router.put(
@@ -146,115 +163,37 @@ router.put(
   requireRole(permittedRoles),
   async function (req, res) {
     try {
-      const iterationId = cleanText(req.params.iterationId, 40);
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(iterationId)) {
-        return res.status(400).json({
-          error: "A valid Iteration ID is required",
-          code: "INVALID_ITERATION_ID"
-        });
-      }
-      const targetPopulation = cleanText(req.body?.targetPopulation);
-      const samplingMethod = cleanText(req.body?.samplingMethod, 80).toUpperCase();
-      const weightingStatus = cleanText(req.body?.weightingStatus, 40).toUpperCase();
-      const weightingMethod = cleanText(req.body?.weightingMethod);
-      const weightingVariables = Array.from(new Set(
-        (Array.isArray(req.body?.weightingVariables) ? req.body.weightingVariables : [])
-          .map((value) => cleanText(value, 80))
-          .filter(Boolean)
-      )).slice(0, 20);
-      if (!targetPopulation) {
-        return res.status(400).json({
-          error: "Target population is required",
-          code: "TARGET_POPULATION_REQUIRED"
-        });
-      }
-      if (!permittedSamplingMethods.has(samplingMethod)) {
-        return res.status(400).json({
-          error: "Select a supported sampling method",
-          code: "INVALID_SAMPLING_METHOD"
-        });
-      }
-      if (!permittedWeightingStatuses.has(weightingStatus)) {
-        return res.status(400).json({
-          error: "Select a supported weighting status",
-          code: "INVALID_WEIGHTING_STATUS"
-        });
-      }
-      if (["PLANNED", "APPLIED"].includes(weightingStatus) && !weightingMethod) {
-        return res.status(400).json({
-          error: "Weighting method is required when weighting is planned or applied",
-          code: "WEIGHTING_METHOD_REQUIRED"
-        });
-      }
-
       const db = await getDb();
-      const saved = await db.query(`
-        WITH target AS (
-          SELECT iteration.id AS iteration_id, link.campaign_id
-          FROM program_iterations iteration
-          JOIN campaign_iteration_links link ON link.iteration_id = iteration.id
-          JOIN campaigns campaign ON campaign.id = link.campaign_id
-          WHERE iteration.id = $1::uuid
-            AND campaign.status <> 'ARCHIVED'
-          ORDER BY link.created_at
-          LIMIT 1
-        )
-        INSERT INTO analytics_research_design_registry (
-          iteration_id, campaign_id, target_population, sample_frame_name,
-          sampling_method, selection_method, weighting_status, weighting_method,
-          weighting_variables, fieldwork_mode, methodology_notes,
-          declared_by_user_id, declared_at, updated_at
-        )
-        SELECT
-          target.iteration_id, target.campaign_id, $2, NULLIF($3, ''),
-          $4, NULLIF($5, ''), $6, NULLIF($7, ''),
-          $8::jsonb, $9, NULLIF($10, ''), $11::uuid, now(), now()
-        FROM target
-        ON CONFLICT (iteration_id) DO UPDATE SET
-          campaign_id = EXCLUDED.campaign_id,
-          target_population = EXCLUDED.target_population,
-          sample_frame_name = EXCLUDED.sample_frame_name,
-          sampling_method = EXCLUDED.sampling_method,
-          selection_method = EXCLUDED.selection_method,
-          weighting_status = EXCLUDED.weighting_status,
-          weighting_method = EXCLUDED.weighting_method,
-          weighting_variables = EXCLUDED.weighting_variables,
-          fieldwork_mode = EXCLUDED.fieldwork_mode,
-          methodology_notes = EXCLUDED.methodology_notes,
-          declared_by_user_id = EXCLUDED.declared_by_user_id,
-          declared_at = EXCLUDED.declared_at,
-          updated_at = now()
-        RETURNING iteration_id
-      `, [
-        iterationId,
-        targetPopulation,
-        cleanText(req.body?.sampleFrameName),
-        samplingMethod,
-        cleanText(req.body?.selectionMethod),
-        weightingStatus,
-        weightingMethod,
-        JSON.stringify(weightingVariables),
-        cleanText(req.body?.fieldworkMode, 120) || "AI_ASSISTED_OUTBOUND_VOICE",
-        cleanText(req.body?.methodologyNotes, 2000),
-        req.platformUser.id
-      ]);
-      if (!saved.rowCount) {
-        return res.status(404).json({
-          error: "Iteration was not found",
-          code: "ITERATION_NOT_FOUND"
-        });
-      }
-      const result = await db.query(`
-        SELECT *
-        FROM analytics_iteration_comparability_v1
-        WHERE iteration_id = $1::uuid
-      `, [iterationId]);
-      return res.json(mapResearchDesign(result.rows[0]));
+      const row = await saveResearchDesign(db, req.platformUser, req.params.iterationId, req.body);
+      return res.json(mapResearchDesign(row));
     } catch (error) {
-      console.error("Unable to save research design:", error);
+      if (error instanceof ResearchDesignError) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
+      console.error("Unable to save research design:", { code: error.code || null });
       return res.status(503).json({
         error: "Unable to save research design",
         code: "RESEARCH_DESIGN_SAVE_FAILED"
+      });
+    }
+  }
+);
+
+router.get(
+  "/enterprise-dashboard/research-designs/:iterationId/history",
+  requireAuth,
+  requireRole(permittedRoles),
+  async function (req, res) {
+    try {
+      return res.json({ revisions: await researchDesignHistory(
+        await getDb(), req.platformUser, req.params.iterationId
+      ) });
+    } catch (error) {
+      if (error instanceof ResearchDesignError) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
+      return res.status(503).json({
+        error: "Unable to load declaration history", code: "RESEARCH_DESIGN_HISTORY_FAILED"
       });
     }
   }
@@ -267,22 +206,26 @@ router.get(
   async function (req, res) {
     try {
       const db = await getDb();
+      const visibility = campaignReviewVisibilitySql(req.platformUser, "campaign");
       const [qualityResult, movementResult, designResult] = await Promise.all([
         db.query(`
-          SELECT *
-          FROM analytics_research_quality_v1
+          SELECT report.* FROM analytics_research_quality_v1 report
+          JOIN campaigns campaign ON campaign.id = report.campaign_id
+          WHERE ${visibility.sql}
           ORDER BY fieldwork_ended_at DESC NULLS LAST, campaign_name
-        `),
+        `, visibility.values),
         db.query(`
-          SELECT *
-          FROM analytics_iteration_movement_v1
+          SELECT report.* FROM analytics_iteration_movement_v2 report
+          JOIN campaigns campaign ON campaign.id = report.campaign_id
+          WHERE ${visibility.sql}
           ORDER BY campaign_name, iteration_number
-        `),
+        `, visibility.values),
         db.query(`
-          SELECT *
-          FROM analytics_iteration_comparability_v1
+          SELECT report.* FROM analytics_research_design_registry_v2 report
+          JOIN campaigns campaign ON campaign.id = report.campaign_id
+          WHERE ${visibility.sql}
           ORDER BY campaign_name, iteration_number
-        `)
+        `, visibility.values)
       ]);
       const campaigns = qualityResult.rows.map(mapQuality);
       const totals = campaigns.reduce((summary, campaign) => ({
@@ -309,7 +252,7 @@ router.get(
         (campaign) => campaign.evidenceQualityStatus === "LIMITED"
       ).length;
       const researchDesigns = designResult.rows.map(mapResearchDesign);
-      const declaredDesigns = researchDesigns.filter((design) => design.declaredAt);
+      const declaredDesigns = researchDesigns.filter((design) => design.declarationComplete);
       const samplingMethods = Array.from(new Set(
         declaredDesigns.map((design) => design.samplingMethod)
       ));
@@ -322,9 +265,10 @@ router.get(
           ? "MIXED"
           : "DIRECTIONAL";
       return res.json({
+        sentimentValidation: getSentimentValidation(),
         scope: {
           level: "PORTFOLIO",
-          label: "Whole portfolio and full Iterations; independent of embedded Amazon Quick filters",
+          label: "Authorized Campaign portfolio and full Iterations; independent of embedded Amazon Quick filters",
           runScope: "All Runs, latest connected structured response per respondent and Iteration",
           movementScope: "Full consecutive Iterations within each Campaign; not filtered by age, gender or Mandal"
         },
@@ -333,6 +277,9 @@ router.get(
           respondentBase: totals.respondentBase,
           callAttempts: totals.callAttempts,
           connectedCalls: totals.connectedCalls,
+          transcriptsCaptured: totals.transcriptsCaptured,
+          responsesCaptured: totals.responsesCaptured,
+          demographicFieldBase: totals.respondentBase * 3,
           connectionRatePct: percentage(totals.connectedCalls, totals.callAttempts),
           transcriptCoveragePct: percentage(
             totals.transcriptsCaptured,
@@ -350,13 +297,15 @@ router.get(
             : samplingMethods.length === 1
               ? samplingMethods[0].replaceAll("_", " ")
               : "Mixed declared methods",
-          weightingStatus: !declaredDesigns.length
-            ? "Not declared"
-            : weightingStatuses.length === 1
-              ? weightingStatuses[0].replaceAll("_", " ")
-              : "Mixed declared statuses",
+          weightingStatus: "Current reports are unweighted; declarations do not apply weights",
+          declaredWeightingStatus: !declaredDesigns.length ? "Not declared"
+            : weightingStatuses.length === 1 ? weightingStatuses[0].replaceAll("_", " ") : "Mixed declared statuses",
           statisticalPrecision: "No sampling margin of error",
-          comparisonRule: "Movement requires consecutive Iterations, frozen questionnaire identity, declared comparable research methods and at least five respondents in each wave",
+          comparisonRule: "Movement requires consecutive Iterations, unchanged frozen question content, complete actual methodology including cohort design and at least five answered values for the measure in each wave. Different stage instruments are not a trend",
+          sentimentConstruct: "Incumbent performance assessment only: incumbent_assessment",
+          candidateConstruct: "Candidate impression only: candidate_impression, candidate_sentiment, veeresh_impression; criterion fit is suitability, not sentiment",
+          sentimentCoding: "Explicit structured labels only. Mixed is distinct from Neutral; no substitution across constructs. Human review pending",
+          assetPublication: "Existing Amazon Quick assets are not automatically republished. Refresh and review their construct labels and Mixed categories before presentation",
           permittedUse: "Aggregate research planning and repeated-wave comparison",
           prohibitedUse: "Constituency vote-share forecast or individual political profiling"
         },
@@ -461,6 +410,7 @@ router.get(
       mode: config.staticEmbedUrl ? "ONE_CLICK" : "REGISTERED_USER_API",
       region: config.region,
       dashboardId: config.dashboardId || null,
+      sentimentValidation: getSentimentValidation(),
       missing
     });
   }

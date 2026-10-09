@@ -19,7 +19,9 @@ try {
     ["program-dashboard.repository.js", "program-dashboard.repository.js"],
     ["../campaign-draft-privacy/campaign-visibility.repository.js", "campaign-visibility.repository.js"],
     ["../research-comparability/research-comparability.repository.js", "research-comparability.repository.js"],
-    ["../campaign-comparative-analysis/campaign-analysis.repository.js", "campaign-analysis.repository.js"]
+    ["../campaign-comparative-analysis/campaign-analysis.repository.js", "campaign-analysis.repository.js"],
+    ["../output-variable-standardization/output-normalization.repository.js", "output-normalization.repository.js"],
+    ["../output-variable-standardization/normalization-rules.json", "normalization-rules.json"]
   ]) await copyFile(path.resolve(here, source), path.join(runtime, "src/repositories", name));
 
   const { buildProgramComparisonReadiness, getProgramDashboard } = await import(path.join(runtime, "src/repositories/program-dashboard.repository.js"));

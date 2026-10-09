@@ -13,7 +13,8 @@ import styles from "./strategic.module.css";
 import scopeStyles from "./scope.module.css";
 import intelligenceStyles from "./intelligence.module.css";
 
-type Distribution = { value: string; respondents: number; percentage: number };
+type Measure = { answerBase: number; respondentBase: number; missingCount: number; cantSayCount: number; refusedCount: number; uncodedCount: number; suppressed: boolean; unit?: string };
+type Distribution = Measure & { value: string; respondents: number; percentage: number | null };
 type RunSummary = { id: string; iterationId: string; number: number; status: string; callAttempts: number; connectedCalls: number; transcriptCoveragePct: number; responseCoveragePct: number };
 type AnalysisIteration = { id: string; number: number; name: string; connectedRespondents: number; runs: RunSummary[] };
 type CampaignOption = { id: string; code: string; name: string };
@@ -35,11 +36,15 @@ type PartyStrengthAnalysis = {
   distinction: string;
 };
 type SentimentAnalysis = {
+  measure?: Measure;
+  construct?: string; label?: string; outputVariables?: string[];
+  validation?: { status: string; method: string; normalizationVersion: string; ruleHash: string; message: string };
   judgment: string; confidence: string; respondentBase: number; codedAnswers: number; outputCoveragePct: number;
   distribution: Distribution[];
-  variables: Array<{ key: string; label: string; answered: number; distribution: Distribution[] }>;
+  variables: Array<{ key: string; type?: string; label: string; answered: number; measure?: Measure; distribution: Distribution[] }>;
 };
 type StrategicResponse = {
+  outputMeasures: Record<string, Measure>;
   campaign: { id: string; code: string; name: string; targetName: string; surveyStage: string };
   scope: {
     level: "CAMPAIGN" | "ITERATION" | "RUN";
@@ -49,7 +54,7 @@ type StrategicResponse = {
     insightScope: { level: "ITERATION"; iterationId: string | null; runRestriction: null; filters: { gender: string | null; ageBand: string | null; mandal: string | null }; description: string };
     interpretation: string;
   };
-  options: { iterations: AnalysisIteration[]; filters: { genders: string[]; ageBands: string[]; mandals: string[] } };
+  options: { iterations: AnalysisIteration[]; filters: { genders: string[]; ageBands: string[]; mandals: string[] }; sentimentConstructs?: Array<{ key: string; label: string }> };
   segment: { filters: { gender: string | null; ageBand: string | null; mandal: string | null }; respondentBase: number | null; minimumBase: number; suppressed: boolean };
   validity: { latestRespondentBase: number; averageAnswerCoveragePct: number; warnings: string[] };
   latestIteration: AnalysisIteration | null;
@@ -73,28 +78,39 @@ type StrategicResponse = {
   generatedAt: string;
 };
 
-function pct(value: number) { return `${Number(value || 0).toFixed(1)}%`; }
+function pct(value: number | null) { return value === null ? "Withheld" : `${Number(value || 0).toFixed(1)}%`; }
+
+function AnswerBase({ measure }: { measure?: Measure }) {
+  if (!measure) return <small>Answer base unavailable; refresh after the reporting update.</small>;
+  return <p className={intelligenceStyles.methodNote}>{measure.answerBase}/{measure.respondentBase} recorded answers · Missing {measure.missingCount} · Can&apos;t say {measure.cantSayCount} · Declined {measure.refusedCount} · Uncoded {measure.uncodedCount}. {measure.suppressed ? "Percentages withheld below five answers or assessed respondents." : "Percentages include all non-missing answers."} {measure.unit}</p>;
+}
 
 const CHART_COLORS = ["#168b7d", "#d75b72", "#e0a34b", "#6b79b9", "#9b7ab8", "#879692"];
+function categoryColor(value: string, index: number) {
+  const sentimentColors: Record<string, string> = { Positive: "#168b7d", Negative: "#d75b72", Neutral: "#879692", Mixed: "#9b7ab8", "Can't say": "#e0a34b", "Declined to answer": "#6b79b9", "Uncoded response": "#8d9095" };
+  return sentimentColors[value] || CHART_COLORS[index % CHART_COLORS.length];
+}
 
-function DonutChart({ title, subtitle, items, empty }: { title: string; subtitle: string; items: Distribution[]; empty: string }) {
-  if (!items.length) return <article className={intelligenceStyles.chartCard}><span className={intelligenceStyles.cardEyebrow}>{subtitle}</span><h3>{title}</h3><div className={styles.noSignal}>{empty}</div></article>;
-  const stops = items.map(function (item, index) { const start = items.slice(0, index).reduce((total, previous) => total + previous.percentage, 0); return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${start + item.percentage}%`; });
+function DonutChart({ title, subtitle, items, empty, measure }: { title: string; subtitle: string; items: Distribution[]; empty: string; measure?: Measure }) {
+  if (!items.length) return <article className={intelligenceStyles.chartCard}><span className={intelligenceStyles.cardEyebrow}>{subtitle}</span><h3>{title}</h3><AnswerBase measure={measure} /><div className={styles.noSignal}>{empty}</div></article>;
+  const stops = items.map(function (item, index) { const start = items.slice(0, index).reduce((total, previous) => total + (previous.percentage || 0), 0); return `${categoryColor(item.value, index)} ${start}% ${start + (item.percentage || 0)}%`; });
   return (
     <article className={intelligenceStyles.chartCard}>
       <span className={intelligenceStyles.cardEyebrow}>{subtitle}</span><h3>{title}</h3>
       <div className={intelligenceStyles.donutLayout}>
         <div className={intelligenceStyles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}><div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div></div>
-        <div className={intelligenceStyles.legend}>{items.slice(0, 6).map(function (item, index) { return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div>; })}</div>
+        <div className={intelligenceStyles.legend}>{items.map(function (item, index) { return <div key={item.value}><i style={{ background: categoryColor(item.value, index) }} /><span>{item.value} ({item.respondents}/{item.answerBase})</span><strong>{pct(item.percentage)}</strong></div>; })}</div>
       </div>
+      <AnswerBase measure={measure || items[0]} />
     </article>
   );
 }
 
-function DistributionCard({ eyebrow, title, items, empty }: { eyebrow: string; title: string; items: Distribution[]; empty: string }) {
+function DistributionCard({ eyebrow, title, items, empty, measure }: { eyebrow: string; title: string; items: Distribution[]; empty: string; measure?: Measure }) {
   return (
     <article className={styles.signalCard}><span>{eyebrow}</span><h3>{title}</h3>
-      {!items.length ? <div className={styles.noSignal}>{empty}</div> : <div className={styles.distribution}>{items.slice(0, 6).map(function (item) { return <div key={item.value} className={styles.distributionRow}><div><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div><div className={styles.bar}><i style={{ width: `${Math.min(item.percentage, 100)}%` }} /></div><small>{item.respondents} answer{item.respondents === 1 ? "" : "s"}</small></div>; })}</div>}
+      <AnswerBase measure={measure || items[0]} />
+      {!items.length ? <div className={styles.noSignal}>{empty}</div> : <div className={styles.distribution}>{items.map(function (item) { return <div key={item.value} className={styles.distributionRow}><div><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div><div className={styles.bar}><i style={{ width: `${Math.min(item.percentage || 0, 100)}%` }} /></div><small>{item.respondents}/{item.answerBase} answers</small></div>; })}</div>}
     </article>
   );
 }
@@ -108,7 +124,8 @@ function IterationJudgments({ data }: { data: StrategicResponse }) {
   const sentiment = data.sentimentAnalysis;
   return (
     <section className={intelligenceStyles.judgmentSection}>
-      <div className={intelligenceStyles.judgmentIntro}><span>ITERATION-WIDE ANALYTICS</span><h2>Two judgments, one evidence base</h2><p>{data.scope.insightScope.description} Research insights apply the selected gender, age and Mandal filters to respondents across all Runs. Run selection affects operational metrics only.</p></div>
+      <div className={intelligenceStyles.judgmentIntro}><span>ITERATION-WIDE ANALYTICS</span><h2>Descriptive signals, separate measures</h2><p>{data.scope.insightScope.description} Research insights apply the selected gender, age and Mandal filters to respondents across all Runs. Run selection affects operational metrics only.</p></div>
+      <div className={intelligenceStyles.analysisGuard}><ShieldAlert size={16} /><span>{sentiment.validation?.message || "Human review pending. Explicit structured labels only—not a validated sentiment model."} {sentiment.validation && <small>Rules: {sentiment.validation.normalizationVersion} · {sentiment.validation.ruleHash.slice(0, 12)}</small>}</span></div>
       <div className={intelligenceStyles.judgmentGrid}>
         <article className={intelligenceStyles.predictiveCard}>
           <span>DIRECTIONAL RESEARCH OUTLOOK</span>
@@ -120,17 +137,19 @@ function IterationJudgments({ data }: { data: StrategicResponse }) {
               <strong>{estimate.value}/5</strong>
             </div>}
           <p>{data.predictiveAnalysis.judgment}</p>
-          <div className={intelligenceStyles.judgmentStats}><div><span>Band</span><strong>{estimate.band}</strong></div><div><span>Confidence</span><strong>{data.predictiveAnalysis.confidence}</strong></div><div><span>Base</span><strong>{data.predictiveAnalysis.respondentBase}</strong></div></div>
+          <div className={intelligenceStyles.judgmentStats}><div><span>Band</span><strong>{estimate.band}</strong></div><div><span>Interpretation</span><strong>{data.predictiveAnalysis.confidence}</strong></div><div><span>Base</span><strong>{data.predictiveAnalysis.respondentBase}</strong></div></div>
           <strong className={intelligenceStyles.variablesLabel}>Variables used</strong><VariableChips variables={data.predictiveAnalysis.variables} />
         </article>
         <article className={intelligenceStyles.sentimentCard}>
-          <span>SENTIMENT ANALYSIS</span>
+          <span>{sentiment.label || "SELECTED SENTIMENT CONSTRUCT"}</span>
           <h3>{sentiment.judgment}</h3>
-          <div className={intelligenceStyles.sentimentBars}>{sentiment.distribution.map((item, index) => <div key={item.value}><div><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{pct(item.percentage)}</strong></div><div><i style={{ width: `${item.percentage}%`, background: CHART_COLORS[index % CHART_COLORS.length] }} /></div></div>)}</div>
-          <div className={intelligenceStyles.judgmentStats}><div><span>Confidence</span><strong>{sentiment.confidence}</strong></div><div><span>Coded answers</span><strong>{sentiment.codedAnswers}</strong></div><div><span>Coverage</span><strong>{pct(sentiment.outputCoveragePct)}</strong></div></div>
-          <strong className={intelligenceStyles.variablesLabel}>Variables used</strong><VariableChips variables={sentiment.variables.map((variable) => variable.key)} />
+          <AnswerBase measure={sentiment.measure} />
+          <div className={intelligenceStyles.sentimentBars}>{sentiment.distribution.map((item, index) => <div key={item.value}><div><i style={{ background: categoryColor(item.value, index) }} /><span>{item.value} ({item.respondents}/{item.answerBase})</span><strong>{pct(item.percentage)}</strong></div><div><i style={{ width: `${item.percentage || 0}%`, background: categoryColor(item.value, index) }} /></div></div>)}</div>
+          <div className={intelligenceStyles.judgmentStats}><div><span>Review status</span><strong>{sentiment.confidence}</strong></div><div><span>Coded answers</span><strong>{sentiment.codedAnswers}</strong></div><div><span>Coverage</span><strong>{pct(sentiment.outputCoveragePct)}</strong></div></div>
+          <strong className={intelligenceStyles.variablesLabel}>Variables used · no cross-construct fallback</strong><VariableChips variables={sentiment.outputVariables || []} />
         </article>
       </div>
+      <details><summary>Other constructs · reported separately, never pooled</summary><div className={intelligenceStyles.decisionGrid}>{sentiment.variables.filter((variable) => variable.key !== sentiment.construct).map((variable) => <DistributionCard key={variable.key} eyebrow={variable.type === "SUITABILITY" ? "SUITABILITY · NOT SENTIMENT" : "SEPARATE ASSESSMENT"} title={variable.label} measure={variable.measure} items={variable.distribution} empty="No reportable answers for this construct." />)}</div></details>
       <article className={intelligenceStyles.partyStrengthCard}>
         <div><span>PARTY-STRENGTH MEASUREMENT</span><h3>Derived aggregate estimate and direct measure</h3><p>{data.partyStrengthAnalysis.distinction}</p></div>
         <div className={intelligenceStyles.strengthMeasures}><div><span>Derived from outputs</span><strong>{estimate.value === null ? "Not measured" : `${estimate.value}/5`}</strong><small>{estimate.judgment}</small></div><div><span>Direct neutral 1–5 question</span><strong>{data.partyStrengthAnalysis.directMeasure.value === null ? "Not asked" : `${data.partyStrengthAnalysis.directMeasure.value}/5`}</strong><small>{data.partyStrengthAnalysis.directMeasure.answered} direct answers</small></div></div>
@@ -153,10 +172,11 @@ export default function StrategicCampaignAnalyticsPage() {
   const [gender, setGender] = useState("");
   const [ageBand, setAgeBand] = useState("");
   const [mandal, setMandal] = useState("");
+  const [sentimentConstruct, setSentimentConstruct] = useState("candidate_impression");
   const [scopeInitialized, setScopeInitialized] = useState(false);
   const [loadedScopeKey, setLoadedScopeKey] = useState("");
   const requestGeneration = useRef(0);
-  const scopeKey = JSON.stringify([campaignId, iterationId, runId, gender, ageBand, mandal]);
+  const scopeKey = JSON.stringify([campaignId, iterationId, runId, gender, ageBand, mandal, sentimentConstruct]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +189,7 @@ export default function StrategicCampaignAnalyticsPage() {
       setGender(query.get("gender") || "");
       setAgeBand(query.get("ageBand") || "");
       setMandal(query.get("mandal") || "");
+      setSentimentConstruct(query.get("sentimentConstruct") || "candidate_impression");
       setScopeInitialized(true);
     }, 0);
     return function () { window.clearTimeout(timer); };
@@ -186,6 +207,7 @@ export default function StrategicCampaignAnalyticsPage() {
       if (gender) query.set("gender", gender);
       if (ageBand) query.set("ageBand", ageBand);
       if (mandal) query.set("mandal", mandal);
+      query.set("sentimentConstruct", sentimentConstruct);
       const response = await apiFetch(`/api/analytics/campaigns/${campaignId}${query.size ? `?${query.toString()}` : ""}`) as StrategicResponse;
       if (generation !== requestGeneration.current) return;
       response.options.filters ||= { genders: [], ageBands: [], mandals: [] };
@@ -257,7 +279,7 @@ export default function StrategicCampaignAnalyticsPage() {
       setLoadedScopeKey(scopeKey);
     } catch (reason) { if (generation === requestGeneration.current) setError(reason instanceof Error ? reason.message : "Unable to load Analysis"); }
     finally { if (generation === requestGeneration.current) { setLoading(false); setRefreshing(false); } }
-  }, [ageBand, campaignId, gender, iterationId, mandal, runId, scopeKey]);
+  }, [ageBand, campaignId, gender, iterationId, mandal, runId, scopeKey, sentimentConstruct]);
 
   useEffect(function () { if (!user || !campaignId || !scopeInitialized) return; const timer = window.setTimeout(function () { void loadStrategic(); }, 0); return function () { window.clearTimeout(timer); requestGeneration.current += 1; }; }, [campaignId, loadStrategic, scopeInitialized, user]);
   useEffect(function () { if (!user) return; void apiFetch("/api/analytics").then(function (workspace) { const result = workspace as { campaigns: CampaignOption[] }; setCampaigns(result.campaigns.map((campaign) => ({ id: campaign.id, code: campaign.code, name: campaign.name }))); }).catch(function () { setCampaigns([]); }); }, [user]);
@@ -283,6 +305,7 @@ export default function StrategicCampaignAnalyticsPage() {
           <label><span>Gender</span><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">All genders</option>{data.options.filters.genders.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Age</span><select value={ageBand} onChange={(event) => setAgeBand(event.target.value)}><option value="">All ages</option>{data.options.filters.ageBands.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Mandal</span><select value={mandal} onChange={(event) => setMandal(event.target.value)}><option value="">All mandals</option>{data.options.filters.mandals.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label><span>Sentiment construct</span><select value={sentimentConstruct} onChange={(event) => setSentimentConstruct(event.target.value)}>{(data.options.sentimentConstructs || [{ key: "candidate_impression", label: "Candidate impression" }]).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
           <button type="button" onClick={resetSegments} disabled={!gender && !ageBand && !mandal}>Clear</button>
         </section>
 
@@ -300,13 +323,13 @@ export default function StrategicCampaignAnalyticsPage() {
 
           <section className={intelligenceStyles.dashboardSection}><div className={styles.sectionHead}><div><span>EVIDENCE BEHIND THE JUDGMENT</span><h2>Decision signals from recorded outputs</h2></div><p>{data.latestIteration ? `Iteration ${data.latestIteration.number} · ${data.segment.respondentBase} deduplicated respondents` : "No Iteration evidence available"}</p></div>
             <div className={intelligenceStyles.decisionGrid}>
-              <DonutChart title="Party attention" subtitle="PARTY LEAN PROXY" items={data.iterationDashboard.partyAttention} empty="No unaided party signal was captured." />
-              <DonutChart title="Candidate perception" subtitle="CANDIDATE LEAN" items={data.iterationDashboard.candidateSentiment} empty="No classifiable candidate perception was captured." />
-              <DonutChart title="Perceived issue leadership" subtitle="LEADERSHIP LEAN" items={data.iterationDashboard.perceivedIssueLeadership} empty="No leadership signal was captured." />
-              <DonutChart title="Incumbent assessment" subtitle="LEADERSHIP PERFORMANCE" items={data.iterationDashboard.incumbentSentiment} empty="No incumbent assessment was captured." />
-              <DistributionCard eyebrow="ISSUES" title="Priority issues" items={data.issueAnalysis.priorities} empty="No issue priority was captured." />
-              <DistributionCard eyebrow="DEVELOPMENT" title="Development priorities" items={data.issueAnalysis.developmentPriorities} empty="No development priority was captured." />
-              <DistributionCard eyebrow="CHANGE" title="Changes voters want" items={data.issueAnalysis.desiredChanges} empty="No desired-change output was captured." />
+              <DonutChart title="Party attention" subtitle="UNAIDED RECALL, NOT VOTE CHOICE" items={data.iterationDashboard.partyAttention} measure={data.outputMeasures?.party_salience_unaided} empty="No reportable unaided party signal was captured." />
+              <DonutChart title="Candidate perception" subtitle="RECORDED ASSESSMENT" items={data.iterationDashboard.candidateSentiment} measure={data.outputMeasures?.candidate_assessment} empty="No reportable candidate perception was captured." />
+              <DonutChart title="Perceived issue leadership" subtitle="AIDED ISSUE LEADER" items={data.iterationDashboard.perceivedIssueLeadership} measure={data.outputMeasures?.perceived_issue_leader_aided} empty="No reportable leadership signal was captured." />
+              <DonutChart title="Incumbent assessment" subtitle="LEADERSHIP PERFORMANCE" items={data.iterationDashboard.incumbentSentiment} measure={data.outputMeasures?.incumbent_assessment} empty="No reportable incumbent assessment was captured." />
+              <DistributionCard eyebrow="ISSUES" title="Priority issues" items={data.issueAnalysis.priorities} measure={data.outputMeasures?.graduate_issue_priority} empty="No reportable issue priority was captured." />
+              <DistributionCard eyebrow="DEVELOPMENT" title="Development priorities" items={data.issueAnalysis.developmentPriorities} measure={data.outputMeasures?.development_priority} empty="No reportable development priority was captured." />
+              <DistributionCard eyebrow="CHANGE" title="Changes voters want" items={data.issueAnalysis.desiredChanges} measure={data.outputMeasures?.desired_change} empty="No reportable desired-change output was captured." />
             </div>
             <p className={intelligenceStyles.methodNote}><ShieldAlert size={15} />Party attention, candidate perception and leadership signals are aggregate evidence components. Their exact output variables are documented in the directional-outlook and sentiment sections above.</p>
           </section>

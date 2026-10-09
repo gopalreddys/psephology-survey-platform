@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installQuestionnaireSnapshot } from "../research-methodology/install-questionnaire-snapshot.js";
 
 const runtimeRoot = path.resolve(process.argv[2] || "/opt/sarvam-voice-analytics");
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,7 @@ for (const [name, expectedHash] of expectedRuntimeHashes) {
   }
 }
 
+await installQuestionnaireSnapshot(runtimeRoot);
 for (const [source, target] of [
   [path.join(packageRoot, "022_iteration_questionnaire_snapshot.sql"), path.join(runtimeRoot, "sql/022_iteration_questionnaire_snapshot.sql")],
   [path.join(packageRoot, "migrate-iteration-questionnaire-snapshot.js"), path.join(runtimeRoot, "src/db/migrate-iteration-questionnaire-snapshot.js")],

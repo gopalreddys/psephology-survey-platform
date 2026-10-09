@@ -1,6 +1,7 @@
 import { getDb } from "../db/postgres.js";
 import { canReviewCampaign } from "./campaign-visibility.repository.js";
 import { loadIterationComparability, evaluateIterationComparison } from "./research-comparability.repository.js";
+import { summarizeOutput } from "./output-normalization.repository.js";
 
 const MINIMUM_SEGMENT_BASE = 5;
 
@@ -22,6 +23,8 @@ const SUCCESS_STATUSES = [
 ];
 
 const TECHNICAL_VARIABLES = [
+  "voter_name", "full_name", "name", "phone", "phone_number", "mobile_number",
+  "email", "email_address", "epic", "epic_id", "epic_number", "address",
   "agent_code",
   "agent_style_context",
   "analytics_excluded",
@@ -340,19 +343,14 @@ export function evaluateCompletedIterationComparison(previous, latest, comparabi
 
 export function buildResponseDistributions(records, iterationIds, comparability) {
   if (iterationIds.length !== 2) return [];
-  const questions = new Map();
+  const questions = new Set();
+  const respondentsByIteration = new Map(iterationIds.map((id) => [id, latestStructuredRespondents(records, id)]));
   for (const iterationId of iterationIds) {
-    for (const record of latestStructuredRespondents(records, iterationId)) {
-      for (const [rawKey, rawValue] of Object.entries(record.response_variables)) {
+    for (const record of respondentsByIteration.get(iterationId)) {
+      for (const rawKey of Object.keys(record.response_variables)) {
         const key = rawKey.trim().toLowerCase();
-        if (!key || TECHNICAL_VARIABLES.includes(key) || rawValue === null || rawValue === undefined) continue;
-        const value = (typeof rawValue === "object" ? JSON.stringify(rawValue) : String(rawValue)).trim().toLowerCase();
-        if (!value) continue;
-        if (!questions.has(key)) questions.set(key, new Map());
-        const iterationMap = questions.get(key);
-        if (!iterationMap.has(iterationId)) iterationMap.set(iterationId, new Map());
-        const values = iterationMap.get(iterationId);
-        values.set(value, (values.get(value) || 0) + 1);
+        if (!key || TECHNICAL_VARIABLES.includes(key)) continue;
+        questions.add(key);
       }
     }
   }
@@ -360,8 +358,9 @@ export function buildResponseDistributions(records, iterationIds, comparability)
   const [previousIterationId, latestIterationId] = iterationIds;
   const items = [];
 
-  for (const [key, iterationMap] of questions.entries()) {
-    const rawValues = Array.from(iterationMap.values()).flatMap((values) => Array.from(values.keys()));
+  for (const key of questions) {
+    const measures = iterationIds.map((id) => summarizeOutput(respondentsByIteration.get(id), key));
+    const rawValues = measures.flatMap((measure) => measure.values.map((entry) => entry.value));
     const distinctValueCount = new Set(
       rawValues
     ).size;
@@ -372,20 +371,12 @@ export function buildResponseDistributions(records, iterationIds, comparability)
     const structuredCategory =
       distinctValueCount <= 20 && longestValueLength <= 80;
     const iterations = iterationIds.map((iterationId) => {
-      const values = Array.from(iterationMap.get(iterationId) || [], ([value, respondents]) => ({ value, respondents }))
-        .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value));
-      const totalRespondents = values.reduce(
-        (total, value) => total + value.respondents,
-        0
-      );
-
+      const measure = measures[iterationIds.indexOf(iterationId)];
       return {
         iterationId,
-        totalRespondents,
-        values: values.map((value) => ({
-          ...value,
-          percentage: percentage(value.respondents, totalRespondents)
-        }))
+        ...measure,
+        totalRespondents: measure.answerBase,
+        values: measure.values
       };
     });
 
@@ -399,13 +390,15 @@ export function buildResponseDistributions(records, iterationIds, comparability)
       structuredCategory &&
       comparability?.status === "COMPARABLE" &&
       previous?.totalRespondents >= MINIMUM_SEGMENT_BASE &&
-      latest?.totalRespondents >= MINIMUM_SEGMENT_BASE
+      latest?.totalRespondents >= MINIMUM_SEGMENT_BASE &&
+      previous.totalRespondents - previous.uncodedCount >= MINIMUM_SEGMENT_BASE &&
+      latest.totalRespondents - latest.uncodedCount >= MINIMUM_SEGMENT_BASE
     );
     const values = new Set([
       ...(previous?.values || []).map((value) => value.value),
       ...(latest?.values || []).map((value) => value.value)
     ]);
-    const movements = comparable ? Array.from(values).map((value) => {
+    const movements = comparable ? Array.from(values).filter((value) => value !== "Uncoded response" && !value.startsWith("Multiple ")).map((value) => {
       const previousValue = previous?.values.find(
         (item) => item.value === value
       );
@@ -441,13 +434,13 @@ export function buildResponseDistributions(records, iterationIds, comparability)
         : !structuredCategory
           ? "Free-text or high-cardinality values are not converted into percentage movement."
           : !comparable
-            ? `Each wave needs at least ${MINIMUM_SEGMENT_BASE} answers in the selected cohort.`
+            ? `Each wave needs at least ${MINIMUM_SEGMENT_BASE} interpretable answers in the selected cohort; uncoded responses cannot establish movement.`
             : null,
       distinctValueCount,
       iterations: iterations.map((iteration) => ({
         ...iteration,
         suppressed: iteration.totalRespondents < MINIMUM_SEGMENT_BASE,
-        values: iteration.totalRespondents < MINIMUM_SEGMENT_BASE ? [] : iteration.values.slice(0, 12)
+        values: iteration.totalRespondents < MINIMUM_SEGMENT_BASE ? [] : iteration.values
       })),
       movements,
       largestShift,

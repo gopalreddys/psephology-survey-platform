@@ -94,6 +94,7 @@ function walk(node, predicate) {
 }
 function text(node) {
   if (Array.isArray(node)) return node.map(text).join(" ");
+  if (node && typeof node === "object" && typeof node.type === "function") return text(node.type(node.props));
   if (node && typeof node === "object") return text(node.props?.children);
   return typeof node === "string" || typeof node === "number" ? String(node) : "";
 }
@@ -116,9 +117,11 @@ view = render(); view.commit(); flushTimers();
 assert.equal(requests.length, 1, "URL scope is initialized before the first insight request");
 assert.match(requests[0].url, /iterationId=i2/);
 assert.match(requests[0].url, /gender=Female/);
+assert.match(requests[0].url, /sentimentConstruct=candidate_impression/);
 requests[0].resolve(payload("Initial Female evidence", "Female"));
 await settle();
 view = render(); view.commit();
+assert.match(text(view.tree), /Human review pending/, "the visible Analysis result never claims synthetic tests establish human validation");
 const genderLabel = walk(view.tree, (node) => node.type === "label" && text(node).startsWith("Gender"));
 const changeGender = walk(genderLabel, (node) => node.type === "select").props.onChange;
 
@@ -163,4 +166,16 @@ await settle();
 view = render(); view.commit();
 assert.ok(walk(view.tree, (node) => node.props?.["aria-label"] === "Selected operational scope"), "operations remain visible when research insights are suppressed");
 assert.match(text(view.tree), /Segment results withheld/);
+const sentimentLabel = walk(view.tree, (node) => node.type === "label" && text(node).startsWith("Sentiment construct"));
+walk(sentimentLabel, (node) => node.type === "select").props.onChange({ target: { value: "incumbent_assessment" } });
+view = render();
+assert.doesNotMatch(text(view.tree), /Small cohort operations/, "previous-construct evidence hides immediately on selection");
+view.commit(); flushTimers();
+assert.match(requests[6].url, /sentimentConstruct=incumbent_assessment/);
+assert.match(requests[6].url, /gender=Female/, "sentiment selection preserves demographic scope");
+assert.match(requests[6].url, /runId=run-a/, "sentiment selection preserves operational scope");
+requests[6].resolve(payload("Selected incumbent construct", "Female"));
+await settle();
+view = render(); view.commit();
+assert.match(text(view.tree), /Selected incumbent construct/);
 console.log("Analytics UI request ordering, scope and suppression behavior tests passed.");

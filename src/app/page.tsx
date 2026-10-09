@@ -41,10 +41,23 @@ type Campaign = {
   evidenceExceptions: number; connectionRatePct: number; evidenceReadyPct: number;
   iterations: Iteration[];
 };
-type Distribution = { value: string; respondents: number; percentage: number };
+type Distribution = { value: string; respondents: number; percentage: number | null };
+type MeasureSummary = {
+  respondentBase: number; answerBase: number; missingCount: number; cantSayCount: number;
+  refusedCount: number; uncodedCount: number; coveragePct: number; suppressed: boolean;
+  normalizationVersion: string;
+};
 type Segment = {
   label: string; base: number; suppressed: boolean;
+  answerBase: number; respondentBase: number; missingCount: number; cantSayCount: number;
+  refusedCount: number; uncodedCount: number; coveragePct: number;
   sentiment: Distribution[]; positivePct: number | null;
+};
+type SentimentConstruct = {
+  key: string; label: string; outputKeys: string[]; type: "SENTIMENT";
+};
+type SentimentValidation = {
+  status: string; method: string; normalizationVersion: string; ruleHash: string; message: string;
 };
 type DashboardIntelligence = {
   programs: Array<{ id: string; name: string; code: string }>;
@@ -57,9 +70,13 @@ type DashboardIntelligence = {
     mandals: string[]; genders: string[]; ageBands: string[];
     selectedProgramId: string; selectedCampaignId: string; selectedIterationId: string;
     selectedMandal: string; selectedGender: string; selectedAgeBand: string;
+    sentimentConstructs: Array<{ key: string; label: string }>;
+    selectedSentimentConstruct: string;
   };
   minimumBase: number; respondentBase: number | null; suppressed: boolean; scopeLabel: string;
-  rating: { value: number | null; scale: number; confidence: string; basis: string };
+  sentimentConstruct: SentimentConstruct; sentimentValidation: SentimentValidation;
+  rating: { value: number | null; scale: number; confidence: string; basis: string; answeredBase: number };
+  measures: Record<"sentiment" | "issues" | "party" | "candidate" | "leadership", MeasureSummary>;
   sentiment: Distribution[];
   issues: Distribution[];
   landscape: { party: Distribution[]; candidate: Distribution[]; leadership: Distribution[] };
@@ -167,36 +184,48 @@ function actionLabel(kind: string) {
 }
 
 const CHART_COLORS = ["#168b7d", "#d75b72", "#e0a34b", "#6b79b9", "#9b7ab8"];
+function categoryColor(value: string, index: number) {
+  const sentimentColors: Record<string, string> = { Positive: "#168b7d", Negative: "#d75b72", Neutral: "#879692", Mixed: "#9b7ab8", "Can't say": "#e0a34b", "Declined to answer": "#6b79b9", "Uncoded response": "#8d9095" };
+  return sentimentColors[value] || CHART_COLORS[index % CHART_COLORS.length];
+}
+
+function BaseCaption({ summary }: { summary: MeasureSummary }) {
+  return <div className={styles.chartHead}><small>
+    {summary.answerBase} answered / {summary.respondentBase} respondents · {summary.coveragePct.toFixed(1)}% coverage
+    <br />Missing {summary.missingCount} · Can&apos;t say {summary.cantSayCount} · Refused {summary.refusedCount} · Uncoded {summary.uncodedCount}
+    <br />{summary.suppressed ? "Percentages withheld: fewer than 5 answers." : "Percentages use all answered responses, including Can't say, Refused and Uncoded."}
+  </small></div>;
+}
 
 function DashboardDonut({ items }: { items: Distribution[] }) {
-  if (!items.length) return <div className={styles.chartEmpty}>No classified sentiment is available.</div>;
+  if (!items.length) return <div className={styles.chartEmpty}>No reportable sentiment distribution is available.</div>;
   const stops = items.map(function (item, index) {
-    const start = items.slice(0, index).reduce((total, candidate) => total + candidate.percentage, 0);
-    const end = start + item.percentage;
-    return `${CHART_COLORS[index % CHART_COLORS.length]} ${start}% ${end}%`;
+    const start = items.slice(0, index).reduce((total, candidate) => total + (candidate.percentage ?? 0), 0);
+    const end = start + (item.percentage ?? 0);
+    return `${categoryColor(item.value, index)} ${start}% ${end}%`;
   });
   return <div className={styles.donutWrap}>
     <div className={styles.donut} style={{ background: `conic-gradient(${stops.join(", ")})` }}><div><strong>{items.reduce((total, item) => total + item.respondents, 0)}</strong><span>answers</span></div></div>
-    <div className={styles.legend}>{items.map(function (item, index) { return <div key={item.value}><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span>{item.value}</span><strong>{item.percentage.toFixed(1)}%</strong></div>; })}</div>
+    <div className={styles.legend}>{items.map(function (item, index) { return <div key={item.value}><i style={{ background: categoryColor(item.value, index) }} /><span>{item.value}</span><strong>{item.percentage === null ? "Withheld" : `${item.percentage.toFixed(1)}%`}</strong></div>; })}</div>
   </div>;
 }
 
 function LandscapeBars({ items, empty }: { items: Distribution[]; empty: string }) {
   if (!items.length) return <div className={styles.chartEmpty}>{empty}</div>;
-  return <div className={styles.issueBars}>{items.slice(0, 6).map((item) => <div key={item.value}><div><span>{item.value}</span><strong>{item.percentage.toFixed(1)}%</strong></div><div><i style={{ width: `${item.percentage}%` }} /></div></div>)}</div>;
+  return <div className={styles.issueBars}>{items.map((item) => <div key={item.value}><div><span>{item.value}</span><strong>{item.percentage === null ? "Withheld" : `${item.percentage.toFixed(1)}%`}</strong></div><div><i style={{ width: `${item.percentage ?? 0}%` }} /></div></div>)}</div>;
 }
 
 function SegmentBars({ items }: { items: Segment[] }) {
   if (!items.length) return <div className={styles.chartEmpty}>No demographic evidence is available.</div>;
-  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><small>{item.suppressed ? `Below n=${item.base}` : `${item.base} respondents`}</small><strong>{item.positivePct === null ? "Withheld" : `${item.positivePct.toFixed(1)}% positive`}</strong></div><div><i style={{ width: `${item.positivePct || 0}%` }} /></div></div>)}</div>;
+  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><small>{item.answerBase} answered / {item.respondentBase} respondents · {item.coveragePct.toFixed(1)}% coverage · missing {item.missingCount}; can&apos;t say {item.cantSayCount}; refused {item.refusedCount}; uncoded {item.uncodedCount}</small><strong>{item.positivePct === null ? "Withheld below 5 answers" : `${item.positivePct.toFixed(1)}% positive`}</strong></div><div><i style={{ width: `${item.positivePct || 0}%` }} /></div></div>)}</div>;
 }
 
 function MandalHeatmap({ items }: { items: Segment[] }) {
-  const labels = ["Positive", "Neutral", "Negative", "Uncertain"];
+  const labels = ["Positive", "Neutral", "Negative", "Mixed", "Can't say"];
   if (!items.length) return <div className={styles.chartEmpty}>No Mandal evidence is available.</div>;
   return <div className={styles.heatmap}>
     <div className={styles.heatmapHeader}><span>Mandal</span>{labels.map((label) => <strong key={label}>{label}</strong>)}</div>
-    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{item.base} responses</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage || 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
+    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{item.answerBase} answered / {item.respondentBase} respondents · missing {item.missingCount}; refused {item.refusedCount}; uncoded {item.uncodedCount}</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage || 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
   </div>;
 }
 
@@ -218,9 +247,10 @@ export default function Home() {
   const [mandal, setMandal] = useState("");
   const [ageBand, setAgeBand] = useState("");
   const [gender, setGender] = useState("");
+  const [sentimentConstruct, setSentimentConstruct] = useState("candidate_impression");
   const requestSequenceRef = useRef(0);
   const [loadedScopeKey, setLoadedScopeKey] = useState<string | null>(null);
-  const scopeKey = JSON.stringify([programId, campaignId, iterationId, mandal, ageBand, gender]);
+  const scopeKey = JSON.stringify([programId, campaignId, iterationId, mandal, ageBand, gender, sentimentConstruct]);
 
   const loadDashboard = useCallback(async function (refresh = false) {
     const requestSequence = ++requestSequenceRef.current;
@@ -238,6 +268,7 @@ export default function Home() {
       if (mandal) query.set("mandal", mandal);
       if (ageBand) query.set("ageBand", ageBand);
       if (gender) query.set("gender", gender);
+      query.set("sentimentConstruct", sentimentConstruct);
       const dashboard = await apiFetch(`/api/dashboard${query.size ? `?${query.toString()}` : ""}`) as Dashboard;
       if (requestSequence === requestSequenceRef.current) {
         setData(dashboard);
@@ -256,7 +287,7 @@ export default function Home() {
         setRefreshing(false);
       }
     }
-  }, [ageBand, campaignId, gender, iterationId, mandal, programId, scopeKey]);
+  }, [ageBand, campaignId, gender, iterationId, mandal, programId, scopeKey, sentimentConstruct]);
 
   useEffect(function () {
     if (!user) return;
@@ -304,24 +335,26 @@ export default function Home() {
           <label><span>Mandal</span><select value={mandal} onChange={(event) => setMandal(event.target.value)}><option value="">All Mandals</option>{data.intelligence.filters.mandals.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Age</span><select value={ageBand} onChange={(event) => setAgeBand(event.target.value)}><option value="">All age bands</option>{data.intelligence.filters.ageBands.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Gender</span><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">All genders</option>{data.intelligence.filters.genders.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label><span>Sentiment measure</span><select value={sentimentConstruct} onChange={(event) => setSentimentConstruct(event.target.value)}>{data.intelligence.filters.sentimentConstructs.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
         </div></div>
+        <div className={styles.scope} role="note"><AlertTriangle size={17} /><div><strong>Human review pending</strong><br />{data.intelligence.sentimentValidation.message}<br /><small>Rules: {data.intelligence.sentimentValidation.normalizationVersion} · <span title={data.intelligence.sentimentValidation.ruleHash}>hash {data.intelligence.sentimentValidation.ruleHash.slice(0, 12)}</span>. Source variables: {data.intelligence.sentimentConstruct.outputKeys.join(", ")}. The selected measure is held fixed across demographic views and Iteration history.</small></div></div>
         {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Research result withheld</strong><p>This selected scope has fewer than {data.intelligence.minimumBase} respondent observations. More responses or a broader research scope are required.</p></div></div> : <>
           <div className={styles.intelligenceSummary}>
-            <article className={styles.ratingSummary}><span>AGGREGATE PROGRAM PULSE</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} confidence · {data.intelligence.respondentBase || 0} respondent observations</small><small>{data.intelligence.scopeLabel}</small></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>SENTIMENT</span><h3>Recorded sentiment mix</h3></div><DashboardDonut items={data.intelligence.sentiment} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>DIRECTIONAL RESEARCH OUTLOOK</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? data.intelligence.predictive.status === "SUPPRESSED" ? `Wave withheld below n=${data.intelligence.minimumBase}` : "Two consecutive comparable, reportable Iterations required" : `Indicative next-Iteration pulse ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence} confidence</small><small>{data.intelligence.predictive.scopeLabel}</small></div><TrendChart intelligence={data.intelligence} /><p>{data.intelligence.predictive.statement}</p></article>
+            <article className={styles.ratingSummary}><span>DESCRIPTIVE {data.intelligence.sentimentConstruct.label.toUpperCase()}</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} · {data.intelligence.rating.answeredBase} polarity-coded assessments / {data.intelligence.respondentBase || 0} respondent observations</small><small>{data.intelligence.rating.basis}</small><small>{data.intelligence.scopeLabel}</small></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>SELECTED SENTIMENT MEASURE</span><h3>{data.intelligence.sentimentConstruct.label}</h3><small>Explicit structured labels only. Mixed is separate from Neutral; no substitution from other measures.</small></div><DashboardDonut items={data.intelligence.sentiment} /><BaseCaption summary={data.intelligence.measures.sentiment} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>DESCRIPTIVE ITERATION HISTORY</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? data.intelligence.predictive.status === "SUPPRESSED" ? `Wave withheld below n=${data.intelligence.minimumBase}` : "Two consecutive comparable, reportable Iterations required" : `Indicative next-Iteration ${data.intelligence.sentimentConstruct.label.toLowerCase()} ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence}</small><small>{data.intelligence.predictive.scopeLabel}</small></div><TrendChart intelligence={data.intelligence} /><p>{data.intelligence.predictive.statement}</p></article>
           </div>
           <div className={styles.landscapeGrid}>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>PARTY LANDSCAPE</span><h3>Unaided party salience</h3><small>Shown only from recorded party variables</small></div><LandscapeBars items={data.intelligence.landscape.party} empty="No party-salience output is recorded for this scope." /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>CANDIDATE LANDSCAPE</span><h3>Candidate perception</h3><small>Positive, neutral, negative and uncertain</small></div><DashboardDonut items={data.intelligence.landscape.candidate} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>LEADERSHIP LANDSCAPE</span><h3>Perceived issue leadership</h3><small>Recorded leaders or assessment responses</small></div><LandscapeBars items={data.intelligence.landscape.leadership} empty="No leadership output is recorded for this scope." /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>PARTY LANDSCAPE</span><h3>Unaided party salience</h3><small>Recorded party mentions only; not vote intention</small></div><LandscapeBars items={data.intelligence.landscape.party} empty="No reportable party-salience distribution is available." /><BaseCaption summary={data.intelligence.measures.party} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>CANDIDATE LANDSCAPE</span><h3>Candidate impression</h3><small>Explicit impressions only; awareness and criterion fit are separate constructs</small></div><DashboardDonut items={data.intelligence.landscape.candidate} /><BaseCaption summary={data.intelligence.measures.candidate} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>LEADERSHIP LANDSCAPE</span><h3>Perceived issue leadership</h3><small>Recorded leadership responses only; no incumbent-assessment proxy</small></div><LandscapeBars items={data.intelligence.landscape.leadership} empty="No reportable leadership distribution is available." /><BaseCaption summary={data.intelligence.measures.leadership} /></article>
           </div>
           <div className={styles.reportGrid}>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>Sentiment by age group</h3><small>Non-overlapping bands</small></div><SegmentBars items={data.intelligence.age} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>GENDER REPORT</span><h3>Sentiment by gender</h3></div><SegmentBars items={data.intelligence.gender} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><div className={styles.issueBars}>{data.intelligence.issues.length ? data.intelligence.issues.map((issue) => <div key={issue.value}><div><span>{issue.value}</span><strong>{issue.percentage.toFixed(1)}%</strong></div><div><i style={{ width: `${issue.percentage}%` }} /></div></div>) : <div className={styles.chartEmpty}>No issue priority is available.</div>}</div></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by age</h3><small>Non-overlapping bands · each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded</small></div><SegmentBars items={data.intelligence.age} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>GENDER REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by gender</h3><small>Each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded</small></div><SegmentBars items={data.intelligence.gender} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><LandscapeBars items={data.intelligence.issues} empty="No reportable issue-priority distribution is available." /><BaseCaption summary={data.intelligence.measures.issues} /></article>
           </div>
-          <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>Aggregate sentiment intensity by Mandal</h3><small>Cells are withheld below n={data.intelligence.minimumBase} · {data.intelligence.scopeLabel}</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /></article>
+          <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>{data.intelligence.sentimentConstruct.label} by Mandal</h3><small>Cells are withheld below {data.intelligence.minimumBase} answered responses · Mixed remains distinct from Neutral · denominator includes Can&apos;t say, Refused and Uncoded (the latter two are retained in row captions) · {data.intelligence.scopeLabel}</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /></article>
           <section className={styles.methodologyPanel}>
             <div className={styles.methodologyHead}><div><span>RESEARCH DISCLOSURE</span><h3>How to interpret this Dashboard</h3></div><ShieldCheck size={19} /></div>
             <div className={styles.methodologyGrid}>

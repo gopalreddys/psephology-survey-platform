@@ -1,6 +1,7 @@
 import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installQuestionnaireSnapshot } from "../research-methodology/install-questionnaire-snapshot.js";
 
 const runtimeRoot = path.resolve(
   process.argv[2] || "/opt/sarvam-voice-analytics"
@@ -23,6 +24,7 @@ const repositoryCopies = [
   [path.join(deploymentRoot, "program-executive-dashboard"), "program-dashboard.repository.js"]
 ];
 
+await installQuestionnaireSnapshot(runtimeRoot);
 for (const [sourceRoot, fileName] of repositoryCopies) {
   await copy(
     path.join(sourceRoot, fileName),

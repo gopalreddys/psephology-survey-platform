@@ -41,7 +41,8 @@ router.get(
             runId: String(req.query.runId || "").trim() || null,
             gender: String(req.query.gender || "").trim() || null,
             ageBand: String(req.query.ageBand || "").trim() || null,
-            mandal: String(req.query.mandal || "").trim() || null
+            mandal: String(req.query.mandal || "").trim() || null,
+            sentimentConstruct: String(req.query.sentimentConstruct || "").trim() || null
           }
         )
       );

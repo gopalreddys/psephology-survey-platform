@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { loadIterationComparability, evaluateIterationComparison } from "../../research-comparability/research-comparability.repository.js";
+import * as normalization from "../../output-variable-standardization/output-normalization.repository.js";
 
 let sequence = 0;
 async function loadSource(relativePath, bindings) {
@@ -21,7 +22,7 @@ export async function loadTestRepositories(db) {
   const campaign = await loadSource("../campaign-analysis.repository.js", {
     getDb: async () => db,
     canReviewCampaign: (record, actor) => actor.role_code === "SUPER_ADMIN" || actor.role_code === "ADMIN" || record.campaign_manager_user_id === actor.id,
-    loadIterationComparability, evaluateIterationComparison
+    loadIterationComparability, evaluateIterationComparison, ...normalization
   });
   const analytics = await loadSource("../../analytics-workspace/analytics-workspace.repository.js", {
     getDb: async () => db,
@@ -31,7 +32,7 @@ export async function loadTestRepositories(db) {
     buildResponseDistributions: campaign.buildResponseDistributions,
     selectConsecutiveComparisonIterations: campaign.selectConsecutiveComparisonIterations,
     evaluateCompletedIterationComparison: campaign.evaluateCompletedIterationComparison,
-    loadIterationComparability
+    loadIterationComparability, ...normalization
   });
   return { campaign, analytics };
 }

@@ -4,10 +4,19 @@ import {
   loadIterationComparability,
   evaluateIterationComparison
 } from "./research-comparability.repository.js";
+import {
+  summarizeOutput, OUTPUT_KEYS, SENTIMENT_CONSTRUCTS, getSentimentValidation
+} from "./output-normalization.repository.js";
 
 const ROLES = new Set(["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER", "CAMPAIGNER"]);
 const CLOSED_RUNS = new Set(["COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"]);
 const MINIMUM_REPORTING_BASE = 5;
+const CANDIDATE_KEYS = OUTPUT_KEYS.candidate;
+const DASHBOARD_SENTIMENT_CONSTRUCTS = SENTIMENT_CONSTRUCTS.filter((item) => item.type === "SENTIMENT");
+const PARTY_KEYS = OUTPUT_KEYS.party;
+const LEADERSHIP_KEYS = OUTPUT_KEYS.leadership;
+const ISSUE_KEYS = OUTPUT_KEYS.issue;
+const CODED_SENTIMENTS = new Set(["Positive", "Neutral", "Negative"]);
 
 function campaignScope(actor) {
   if (actor.role_code === "CAMPAIGNER") {
@@ -89,97 +98,19 @@ function normalizeMandal(value) {
   return scalarText(value) || "Unknown";
 }
 
-function classifySentiment(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/not enough|don.?t know|do not know|can.?t say|cannot say|no opinion|not aware|not heard|unaware|prefer not|unclear|unknown/.test(text)) return "Uncertain";
-  if (/very poor|poor|negative|bad|dissatisf|disappoint|not good|unfavour|unfavor|weak|not very closely|not at all|poor fit/.test(text)) return "Negative";
-  if (/neither|neutral|mixed|average|no difference|okay|moderate/.test(text)) return "Neutral";
-  if (/very good|good|positive|favour|favor|satisf|impress|excellent|strong|very closely|somewhat closely|strong fit|good fit/.test(text)) return "Positive";
-  return "Uncertain";
+function chartValues(summary) {
+  return summary.suppressed ? [] : summary.values;
 }
 
-function respondentSentiment(record) {
-  const variables = record.response_variables || {};
-  for (const key of [
-    "veeresh_impression", "veeresh_criterion_fit", "candidate_sentiment",
-    "incumbent_assessment", "issue_sentiment"
-  ]) {
-    const sentiment = classifySentiment(variables[key]);
-    if (sentiment) return sentiment;
-  }
-  return null;
+function ratedSentiment(summary) {
+  return summary.values.filter((item) => CODED_SENTIMENTS.has(item.value));
 }
 
-function classifyIssue(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/job|employment|unemploy|recruit|career|ఉద్యోగ/.test(text)) return "Employment and jobs";
-  if (/education|college|university|student|teacher|fee|scholarship|విద్య/.test(text)) return "Education and universities";
-  if (/skill|training|internship/.test(text)) return "Skills and professional development";
-  if (/represent|voice|access|available|leadership/.test(text)) return "Representation and accessibility";
-  if (/road|water|transport|traffic|infrastructure/.test(text)) return "Civic services and infrastructure";
-  return "Other recorded priorities";
+function ratedBase(summary) {
+  return ratedSentiment(summary).reduce((total, item) => total + item.respondents, 0);
 }
 
-function firstVariable(record, keys) {
-  const variables = record.response_variables || {};
-  for (const key of keys) {
-    const value = scalarText(variables[key]);
-    if (value) return value;
-  }
-  return "";
-}
-
-function classifyParty(value) {
-  const text = scalarText(value).toLowerCase();
-  if (!text) return null;
-  if (/don.?t know|do not know|can.?t say|cannot say|none|no party|not sure/.test(text)) return "Uncertain / none";
-  if (/\bbrs\b|bharat rashtra|telangana rashtra/.test(text)) return "BRS";
-  if (/\bbjp\b|bharatiya janata/.test(text)) return "BJP";
-  if (/congress|\binc\b/.test(text)) return "Congress";
-  if (/communist|\bcpi\b|\bcpm\b|left/.test(text)) return "Communist / Left";
-  return scalarText(value);
-}
-
-function leadershipSignal(record) {
-  const leader = firstVariable(record, [
-    "perceived_issue_leader_aided", "perceived_issue_leader", "leadership_preference"
-  ]);
-  if (leader) return classifyParty(leader);
-  const assessment = classifySentiment((record.response_variables || {}).incumbent_assessment);
-  return assessment ? `${assessment} incumbent assessment` : null;
-}
-
-function candidateSentiment(record) {
-  for (const key of [
-    "veeresh_impression", "veeresh_criterion_fit", "candidate_sentiment",
-    "candidate_criterion_fit", "candidate_impression"
-  ]) {
-    const sentiment = classifySentiment((record.response_variables || {})[key]);
-    if (sentiment) return sentiment;
-  }
-  return null;
-}
-
-function distribution(records, derive) {
-  const values = new Map();
-  for (const record of records) {
-    const label = derive(record);
-    if (!label) continue;
-    values.set(label, count(values.get(label)) + 1);
-  }
-  const answered = Array.from(values.values()).reduce((total, value) => total + value, 0);
-  return Array.from(values.entries())
-    .map(([value, respondents]) => ({
-      value,
-      respondents,
-      percentage: percentage(respondents, answered)
-    }))
-    .sort((left, right) => right.respondents - left.respondents || left.value.localeCompare(right.value));
-}
-
-function segmentedSentiment(records, deriveSegment, order = []) {
+function segmentedSentiment(records, deriveSegment, outputKeys, order = []) {
   const segments = new Map();
   for (const record of records) {
     const segment = deriveSegment(record);
@@ -189,17 +120,25 @@ function segmentedSentiment(records, deriveSegment, order = []) {
   }
   return Array.from(segments.entries())
     .map(([label, items]) => {
-      const sentiment = distribution(items, respondentSentiment);
+      const summary = summarizeOutput(items, outputKeys);
+      const sentiment = chartValues(summary);
       return {
         label,
         base: items.length,
-        suppressed: items.length < MINIMUM_REPORTING_BASE,
-        sentiment: items.length < MINIMUM_REPORTING_BASE ? [] : sentiment,
-        positivePct: items.length < MINIMUM_REPORTING_BASE
+        answerBase: summary.answerBase,
+        respondentBase: summary.respondentBase,
+        missingCount: summary.missingCount,
+        cantSayCount: summary.cantSayCount,
+        refusedCount: summary.refusedCount,
+        uncodedCount: summary.uncodedCount,
+        coveragePct: summary.coveragePct,
+        suppressed: summary.suppressed,
+        sentiment,
+        positivePct: summary.suppressed
           ? null
           : percentage(
               sentiment.find((item) => item.value === "Positive")?.respondents,
-              sentiment.reduce((total, item) => total + item.respondents, 0)
+              summary.answerBase
             )
       };
     })
@@ -213,10 +152,11 @@ function segmentedSentiment(records, deriveSegment, order = []) {
     });
 }
 
-function iterationRating(records) {
-  const sentiment = distribution(records, respondentSentiment);
-  const answered = sentiment.reduce((total, item) => total + item.respondents, 0);
-  if (!answered) return null;
+function iterationRating(records, outputKeys) {
+  const summary = summarizeOutput(records, outputKeys);
+  const sentiment = ratedSentiment(summary);
+  const answered = ratedBase(summary);
+  if (answered < MINIMUM_REPORTING_BASE) return null;
   const score = sentiment.reduce((total, item) => {
     const value = item.value === "Positive" ? 5
       : item.value === "Negative" ? 1
@@ -273,7 +213,7 @@ function researchInstrument(iteration) {
   };
 }
 
-function buildComparableTrend(availableIterations, evidenceRows, selectedCampaign, selectedIteration, comparabilityById) {
+function buildComparableTrend(availableIterations, evidenceRows, selectedCampaign, selectedIteration, comparabilityById, outputKeys) {
   const trendCampaignId = selectedCampaign?.id || selectedIteration?.campaign_id || null;
   if (!trendCampaignId) {
     return {
@@ -324,12 +264,12 @@ function buildComparableTrend(availableIterations, evidenceRows, selectedCampaig
       iterationName: iteration.iteration_name,
       campaignName: iteration.campaign_name,
       base: records.length,
-      answeredBase: records.filter((record) => respondentSentiment(record) !== null).length,
-      value: iterationRating(records)
+      answeredBase: ratedBase(summarizeOutput(records, outputKeys)),
+      value: iterationRating(records, outputKeys)
     };
   });
   const latestPoint = wavePoints.at(-1);
-  if (!latestPoint || latestPoint.value === null) {
+  if (!latestPoint || latestPoint.answeredBase === 0) {
     return emptyTrend("NO_HISTORY", "Trend unavailable—this Iteration has no rated responses for the selected scope.", ["No rated responses are available for the selected scope."]);
   }
   if (latestPoint.answeredBase < MINIMUM_REPORTING_BASE) {
@@ -348,7 +288,7 @@ function buildComparableTrend(availableIterations, evidenceRows, selectedCampaig
       stopped = { status: "NOT_COMPARABLE", reasons: comparison.reasons };
       break;
     }
-    if (previous.value === null) {
+    if (previous.answeredBase === 0) {
       stopped = { status: "NO_HISTORY", reasons: ["No rated responses are available for the selected scope."] };
       break;
     }
@@ -394,6 +334,14 @@ export function buildDashboardIntelligence(actor, campaigns, iterationRows, evid
   const requestedProgramId = requestedScopeId(selection.programId, "Program");
   const requestedCampaignId = requestedScopeId(selection.campaignId, "Campaign");
   const requestedIterationId = requestedScopeId(selection.iterationId, "Iteration");
+  const selectedSentimentConstruct = requestedScopeId(selection.sentimentConstruct, "Sentiment construct") || "candidate_impression";
+  const sentimentConstruct = DASHBOARD_SENTIMENT_CONSTRUCTS.find((item) => item.key === selectedSentimentConstruct);
+  if (!sentimentConstruct) {
+    const error = new Error("Unsupported Sentiment construct filter");
+    error.statusCode = 400;
+    throw error;
+  }
+  const sentimentKeys = sentimentConstruct.outputKeys;
   const requestedCampaign = requestedCampaignId
     ? campaigns.find((campaign) => campaign.id === requestedCampaignId) : null;
   if (requestedCampaignId && !requestedCampaign) scopeNotFound("Campaign");
@@ -486,33 +434,29 @@ export function buildDashboardIntelligence(actor, campaigns, iterationRows, evid
     : selectedIteration ? "Full Iteration: all Mandals, genders and age bands" : "Full selected research scope: all Mandals, genders and age bands";
   const suppressed = records.length < MINIMUM_REPORTING_BASE;
   const reportable = suppressed ? [] : records;
-  const sentiment = distribution(reportable, respondentSentiment);
-  const issues = distribution(reportable, (record) => {
-    const variables = record.response_variables || {};
-    return classifyIssue(
-      variables.graduate_issue_priority || variables.development_priority ||
-      variables.priority_development || variables.desired_change || variables.expected_change
-    );
-  }).slice(0, 6);
+  const measures = {
+    sentiment: summarizeOutput(records, sentimentKeys),
+    issues: summarizeOutput(records, ISSUE_KEYS),
+    party: summarizeOutput(records, PARTY_KEYS),
+    candidate: summarizeOutput(records, CANDIDATE_KEYS),
+    leadership: summarizeOutput(records, LEADERSHIP_KEYS)
+  };
+  const sentiment = chartValues(measures.sentiment);
+  const issues = chartValues(measures.issues);
   const trendScope = buildComparableTrend(
     availableIterations,
     evidenceRows.filter(matchesSegment),
     selectedCampaign,
     selectedIteration,
-    comparabilityById
+    comparabilityById,
+    sentimentKeys
   );
   const trend = trendScope.points;
-  const rating = iterationRating(reportable);
-  const confidence = reportable.length >= 100 ? "High"
-    : reportable.length >= 30 ? "Moderate"
-      : "Directional";
+  const rating = iterationRating(reportable, sentimentKeys);
+  const codedAssessmentBase = ratedBase(measures.sentiment);
+  const confidence = rating === null ? "Not assessed" : "Descriptive only";
   const predictiveConfidence = trendScope.status !== "DIRECTIONAL"
-    ? "Not assessed"
-    : trend.length >= 3 && reportable.length >= 100
-    ? "High"
-    : trend.length >= 2 && reportable.length >= 30
-      ? "Moderate"
-      : "Directional";
+    ? "Not assessed" : "Descriptive only";
 
   return {
     programs,
@@ -542,35 +486,39 @@ export function buildDashboardIntelligence(actor, campaigns, iterationRows, evid
       mandals,
       genders,
       ageBands,
+      sentimentConstructs: DASHBOARD_SENTIMENT_CONSTRUCTS.map((item) => ({ key: item.key, label: item.label })),
       selectedProgramId: selectedProgram.id,
       selectedCampaignId: selectedCampaign?.id || "",
       selectedIterationId: selectedIteration?.id || "",
       selectedMandal,
       selectedGender,
-      selectedAgeBand
+      selectedAgeBand,
+      selectedSentimentConstruct
     },
     minimumBase: MINIMUM_REPORTING_BASE,
     scopeLabel,
     respondentBase: suppressed ? null : reportable.length,
     suppressed,
+    sentimentConstruct,
+    sentimentValidation: getSentimentValidation(),
     rating: {
       value: rating,
       scale: 5,
       confidence,
-      basis: "Aggregate sentiment across recorded campaign output variables"
+      answeredBase: codedAssessmentBase,
+      basis: `${sentimentConstruct.label} only (${sentimentKeys.join(", ")}). Descriptive average: Positive=5, Neutral=3, Negative=1. Mixed, None, missing, Can't say, Refused and Uncoded responses are excluded; at least five polarity-coded assessments are required. No other construct supplies missing answers. Human review pending.`
     },
+    measures,
     sentiment,
     issues,
     landscape: {
-      party: distribution(reportable, (record) => classifyParty(firstVariable(record, [
-        "party_salience_unaided", "party_attention", "party_preference"
-      ]))).slice(0, 6),
-      candidate: distribution(reportable, candidateSentiment),
-      leadership: distribution(reportable, leadershipSignal).slice(0, 6)
+      party: chartValues(measures.party),
+      candidate: chartValues(measures.candidate),
+      leadership: chartValues(measures.leadership)
     },
-    age: segmentedSentiment(reportable, (record) => ageBand(record.age), ["18–29", "30–39", "40–49", "50+", "Unknown"]),
-    gender: segmentedSentiment(reportable, (record) => normalizeGender(record.gender), ["Female", "Male", "Other / self-described", "Unknown"]),
-    mandalHeatmap: segmentedSentiment(records, (record) => normalizeMandal(record.mandal_name)),
+    age: segmentedSentiment(reportable, (record) => ageBand(record.age), sentimentKeys, ["18–29", "30–39", "40–49", "50+", "Unknown"]),
+    gender: segmentedSentiment(reportable, (record) => normalizeGender(record.gender), sentimentKeys, ["Female", "Male", "Other / self-described", "Unknown"]),
+    mandalHeatmap: segmentedSentiment(records, (record) => normalizeMandal(record.mandal_name), sentimentKeys),
     predictive: {
       status: trendScope.status,
       scopeLabel: hasSegmentFilter ? `${scopeLabel} in each Iteration` : "Full Iteration in each wave: all Mandals, genders and age bands",
@@ -589,7 +537,7 @@ export function buildDashboardIntelligence(actor, campaigns, iterationRows, evid
         : null,
       confidence: predictiveConfidence,
       statement: trendScope.status === "DIRECTIONAL"
-        ? `${trendScope.reason} The result is directional, not an election forecast or participant-level prediction.`
+        ? `${trendScope.reason} ${sentimentConstruct.label} is kept fixed across every included wave. The result is directional, not an election forecast or participant-level prediction. Human review pending.`
         : trendScope.reason,
       comparability: {
         source: "analytics_iteration_comparability_v1",

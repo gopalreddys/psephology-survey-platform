@@ -70,7 +70,7 @@
 
 .segmentFilters {
   display: grid;
-  grid-template-columns: minmax(230px, 1.2fr) repeat(3, minmax(145px, .7fr)) auto;
+  grid-template-columns: minmax(190px, 1fr) repeat(3, minmax(100px, .6fr)) minmax(185px, 1fr) auto;
   gap: 12px;
   align-items: end;
   margin-top: 12px;

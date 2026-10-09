@@ -1,0 +1,106 @@
+{
+  "version": "OUTPUT_TAXONOMY_V2",
+  "minimumAnswerBase": 5,
+  "missingPattern": "^(null|undefined|n/a|na|not asked|not captured|not recorded|no response|no answer|missing)$",
+  "cantSayPattern": "^(can't say|cannot say|cant say|don't know|do not know|dont know|not sure|unsure|unknown|uncertain|no idea|no opinion|not enough information|తెలియదు|చెప్పలేను|నాకు తెలియదు|पता नहीं|मुझे पता नहीं|कह नहीं सकता)$",
+  "refusedPattern": "^(prefer not to answer|prefer not to say|declined|refused|declined to answer|చెప్పడానికి ఇష్టం లేదు|సమాధానం ఇవ్వను|जवाब नहीं देना चाहता|जवाब नहीं देना चाहती)$",
+  "nonePattern": "^(none|no party|no particular party|no preference|none of them|no stated priority|no issue|ఏదీ లేదు)$",
+  "negatedEntityPattern": "(^|[^a-z])(not|never|no|didn't|did not|don't|do not|without)([^a-z]|$)|కాదు|లేదు|नहीं",
+  "domains": [
+    {
+      "name": "party",
+      "keys": ["party_salience_unaided", "party_salience", "party_attention", "party_preference", "party_named"],
+      "multipleLabel": "Multiple parties mentioned",
+      "categories": [
+        {"label": "BRS", "pattern": "(^|[^a-z])(brs|trs)([^a-z]|$)|bharat rashtra|telangana rashtra|బీఆర్ఎస్|టీఆర్ఎస్|बीआरएस"},
+        {"label": "BJP", "pattern": "(^|[^a-z])bjp([^a-z]|$)|bharatiya janata|భారతీయ జనతా|బీజేపీ|बीजेपी"},
+        {"label": "Congress", "pattern": "(^|[^a-z])(congress|inc)([^a-z]|$)|కాంగ్రెస్|कांग्रेस"},
+        {"label": "Communist / Left", "pattern": "(^|[^a-z])(cpi|cpm|communist|communists|left)([^a-z]|$)|కమ్యూనిస్ట్|कम्युनिस्ट"},
+        {"label": "Independent / graduate group", "pattern": "independent|graduate group|స్వతంత్ర|निर्दलीय"}
+      ]
+    },
+    {
+      "name": "leadership",
+      "keys": ["perceived_issue_leader_aided", "perceived_issue_leader", "leadership_preference", "party_leadership"],
+      "categoryDomain": "party",
+      "selectionPattern": "^(brs|trs|brs government|brs party|bharat rashtra samithi|telangana rashtra samithi|bjp|bjp party|bharatiya janata party|congress|congress government|inc|indian national congress|cpi|cpm|communist / left|communist|left|left parties|independent|independent / graduate group|graduate group|kcr|k[.]? chandrashekar rao|kalvakuntla chandrashekar rao|ktr|k[.]? t[.]? rama rao|revanth reddy|a[.]? revanth reddy|బీఆర్ఎస్|బీజేపీ|కాంగ్రెస్)$",
+      "multipleLabel": "Multiple leaders mentioned",
+      "categories": [
+        {"label": "K. Chandrashekar Rao", "pattern": "(^|[^a-z])kcr([^a-z]|$)|chandrashekar rao"},
+        {"label": "K. T. Rama Rao", "pattern": "(^|[^a-z])ktr([^a-z]|$)|rama rao"},
+        {"label": "Revanth Reddy", "pattern": "revanth reddy"}
+      ]
+    },
+    {
+      "name": "issue",
+      "keys": ["graduate_issue_priority", "issue_priority", "development_priority", "priority_development", "desired_change", "expected_change", "change_priority", "key_issue", "local_issue"],
+      "multipleLabel": "Multiple issues mentioned",
+      "categories": [
+        {"label": "Employment and jobs", "pattern": "job|employment|unemploy|recruit|career|ఉద్యోగ|रोजगार|नौकरी"},
+        {"label": "Education and universities", "pattern": "education|college|university|student|teacher|scholarship|విద్య|शिक्षा"},
+        {"label": "Skills and professional development", "pattern": "skill|training|internship|నైపుణ్య|कौशल"},
+        {"label": "Representation and accessibility", "pattern": "represent|accessibility|available|leadership|ప్రాతినిధ్య|प्रतिनिधित्व"},
+        {"label": "Civic services and infrastructure", "pattern": "road|water|transport|traffic|infrastructure|నీటి|రోడ్డు|सड़क|पानी"}
+      ]
+    },
+    {
+      "name": "candidate",
+      "keys": ["candidate_name", "candidate_preference", "candidate_named", "candidate_reference"],
+      "multipleLabel": "Multiple candidates mentioned",
+      "categories": [
+        {"label": "Kasani Veeresh", "pattern": "(^|[^a-z])(kasani veeresh|veeresh)([^a-z]|$)|కాసాని వీరేశ్|వీరేశ్"}
+      ]
+    },
+    {
+      "name": "assessment",
+      "keys": ["veeresh_impression", "candidate_sentiment", "candidate_impression", "incumbent_assessment", "issue_sentiment", "development_sentiment", "change_sentiment"],
+      "multipleLabel": "Uncoded response",
+      "categories": [
+        {"label": "Positive", "pattern": "^(positive|good|very good|excellent|favourable|favorable|satisfied|very satisfied|బాగుంది|చాలా బాగుంది|మంచి|సంతృప్తి|अच्छा|बहुत अच्छा|संतुष्ट)$"},
+        {"label": "Negative", "pattern": "^(negative|poor|very poor|bad|unfavourable|unfavorable|dissatisfied|not satisfied|not good|బాగోలేదు|చెడ్డది|సంతృప్తి లేదు|खराब|असंतुष्ट|अच्छा नहीं)$"},
+        {"label": "Neutral", "pattern": "^(neutral|average|neither|neither good nor bad|neither good nor poor|moderate|okay|తటస్థం|సగటు|तटस्थ|औसत)$"},
+        {"label": "Mixed", "pattern": "^(mixed|mixed opinion|mixed assessment|both good and bad|మిశ్రమం|मिश्रित)$"}
+      ]
+    },
+    {
+      "name": "suitability",
+      "keys": ["candidate_criterion_fit", "veeresh_criterion_fit"],
+      "multipleLabel": "Uncoded response",
+      "categories": [
+        {"label": "Strong fit", "pattern": "^(strong fit|good fit|very closely)$"},
+        {"label": "Some fit", "pattern": "^(some fit|partial fit|somewhat closely)$"},
+        {"label": "Poor fit", "pattern": "^(poor fit|not very closely|not at all)$"},
+        {"label": "Mixed", "pattern": "^(mixed|mixed fit)$"}
+      ]
+    },
+    {
+      "name": "criterion",
+      "keys": ["candidate_criterion"],
+      "multipleLabel": "Multiple candidate qualities mentioned",
+      "categories": [
+        {"label": "Integrity and trust", "pattern": "honest|integrity|trust|transparent"},
+        {"label": "Accessibility and representation", "pattern": "access|available|represent|approachable"},
+        {"label": "Experience and delivery", "pattern": "experience|track record|delivery|work done|performance"},
+        {"label": "Education and knowledge", "pattern": "education|educated|knowledge|qualified"}
+      ]
+    },
+    {
+      "name": "influence",
+      "keys": ["association_influence"],
+      "multipleLabel": "Uncoded response",
+      "categories": [
+        {"label": "Influence stated", "pattern": "^(yes|influenced|influence stated|yes influenced|strong influence|some influence)$"},
+        {"label": "No influence stated", "pattern": "^(no|none|not influenced|no influence|no influence stated|not at all)$"}
+      ]
+    },
+    {
+      "name": "awareness",
+      "keys": ["veeresh_awareness", "candidate_awareness", "incumbent_awareness", "mlc_role_awareness"],
+      "multipleLabel": "Uncoded response",
+      "categories": [
+        {"label": "Previously aware", "pattern": "^(yes|aware|previously aware|heard of|heard of him|familiar|very familiar|somewhat familiar|know|well aware)$"},
+        {"label": "Not previously aware", "pattern": "^(no|unaware|not aware|not previously aware|not heard|never heard|not familiar)$"}
+      ]
+    }
+  ]
+}
