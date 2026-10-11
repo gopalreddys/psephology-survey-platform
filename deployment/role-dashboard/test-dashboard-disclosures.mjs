@@ -121,6 +121,61 @@ const intelligence = {
   },
   methodology: { sampleType: 'Synthetic convenience fixture', weighted: false, analysisUnit: 'Synthetic respondent observations', disclosure: 'Synthetic methodology explanation' }
 };
+const fixtureVariants = ['default', 'sparse', 'populated'];
+function fixtureIntelligence(variant) {
+  if (variant === 'default') return intelligence;
+  if (variant === 'sparse') return {
+    ...intelligence,
+    rating: { ...intelligence.rating, value: null, answeredBase: 0 },
+    measures: Object.fromEntries(Object.keys(intelligence.measures).map((key) => [key, measure({
+      answerBase: 0, missingCount: 10, cantSayCount: 0, refusedCount: 0,
+      uncodedCount: 0, coveragePct: 0, suppressed: true
+    })])),
+    sentiment: [], issues: [], landscape: { party: [], candidate: [], leadership: [] },
+    age: [], gender: [], mandalHeatmap: [],
+    predictive: { ...intelligence.predictive, points: [], projectedNextRating: null }
+  };
+  return {
+    ...intelligence,
+    sentimentConstruct: {
+      ...intelligence.sentimentConstruct,
+      label: 'Synthetic candidate impression and recorded expectations for accountable public service'
+    },
+    rating: { ...intelligence.rating, value: 3.5, answeredBase: 8 },
+    issues: [
+      'Synthetic opportunities for accessible employment and vocational learning',
+      'Synthetic improvements to transport connectivity and road maintenance',
+      'Synthetic public health access and continuity of essential services',
+      'Synthetic reliable utilities and transparent infrastructure planning',
+      'Synthetic education access and local skills development opportunities',
+      'Synthetic timely grievance handling and accountable public administration'
+    ].map((value) => ({ value, respondents: 1, percentage: 12.5 })),
+    landscape: {
+      ...intelligence.landscape,
+      party: [
+        { value: 'Synthetic party A', respondents: 3, percentage: 37.5 },
+        { value: 'Synthetic party B', respondents: 2, percentage: 25 },
+        { value: 'Synthetic party C', respondents: 1, percentage: 12.5 },
+        { value: 'Synthetic independent response', respondents: 1, percentage: 12.5 },
+        { value: "Can't say", respondents: 1, percentage: 12.5 }
+      ],
+      leadership: [{ value: 'Synthetic recorded leadership response with a deliberately long descriptive label', respondents: 8, percentage: 100 }]
+    },
+    measures: { ...intelligence.measures, party: measure() },
+    age: ['18–29', '30–39', '40–49', '50+'].map((label) => segment(label)),
+    gender: ['Female', 'Male', 'Not recorded'].map((label) => segment(label)),
+    predictive: {
+      ...intelligence.predictive, status: 'INDICATIVE', direction: 'Synthetic comparable descriptive history',
+      projectedNextRating: 3.2,
+      points: [1, 2, 3].map((number) => ({
+        iterationId: `synthetic-iteration-${number}`, iterationNumber: number,
+        iterationName: `Synthetic iteration ${number}`,
+        campaignName: 'Synthetic campaign with a deliberately long research label',
+        base: 10, answeredBase: 8, value: number + 1
+      }))
+    }
+  };
+}
 const summary = {
   campaignsVisible: 1, campaignsCompleted: 0, campaignsWithoutManager: 0,
   iterationsVisible: 3, iterationsCompleted: 1, runsReady: 1, runsRunning: 0, runsClosed: 3,
@@ -199,6 +254,40 @@ function assertClosedDetails(tree) {
     assert.ok(textContent(firstChild).trim(), 'every note has an accessible summary label');
   }
 }
+function assertReportCardStructure(tree, label) {
+  const grids = flatten(tree).filter((element) => hasClass(element, 'reportGrid'));
+  assert.equal(grids.length, 1, `${label}: all nine reports share one flat grid`);
+  const cards = [grids[0].props.children].flat(Infinity).filter(React.isValidElement);
+  assert.equal(cards.length, 9, `${label}: report grid has exactly nine direct cards`);
+  assert.equal(flatten(tree).filter((element) => hasClass(element, 'reportCard')).length, 9,
+    `${label}: reports are not nested in additional layout cards`);
+  for (const [index, card] of cards.entries()) {
+    const prefix = `${label}, report ${index + 1}`;
+    assert.equal(card.type, 'article', `${prefix}: semantic article`);
+    assert.ok(hasClass(card, 'reportCard'), `${prefix}: shared card dimensions class`);
+    const sections = [card.props.children].flat(Infinity).filter(React.isValidElement);
+    assert.equal(sections.length, 3, `${prefix}: consistent header, body and footer`);
+    const [header, body, footer] = sections;
+    assert.equal(header.type, 'header');
+    assert.ok(hasClass(header, 'chartHead'));
+    const heading = [header.props.children].flat(Infinity).filter(React.isValidElement);
+    assert.deepEqual(heading.map((element) => element.type), ['span', 'h3', 'div'],
+      `${prefix}: fixed eyebrow, title and subtitle slots`);
+    assert.ok(textContent(heading[0]).trim(), `${prefix}: eyebrow retained`);
+    assert.ok(textContent(heading[1]).trim(), `${prefix}: heading retained`);
+    assert.ok(hasClass(heading[2], 'chartSubtitle'), `${prefix}: subtitle slot remains even when empty`);
+    assert.ok(hasClass(body, 'reportBody'), `${prefix}: chart body uses common layout`);
+    assert.equal(footer.type, 'footer');
+    assert.ok(hasClass(footer, 'reportFooter'), `${prefix}: measurement uses aligned footer`);
+    const disclosures = flatten(card).filter((element) => element.type === 'details');
+    const footerDisclosures = flatten(footer).filter((element) => element.type === 'details');
+    assert.equal(disclosures.length, 1, `${prefix}: exactly one measurement disclosure`);
+    assert.equal(footerDisclosures.length, 1, `${prefix}: disclosure is in footer, not chart body`);
+    const disclosureLabel = find(footerDisclosures[0], (element) => element.type === 'summary');
+    assert.equal(textContent(disclosureLabel), 'How it’s measured', `${prefix}: consistent measurement label`);
+    assertClosedDetails(card);
+  }
+}
 
 for (const [Component, props] of [
   [ReportNote, { children: 'Synthetic private report calculation' }],
@@ -257,8 +346,11 @@ for (const role of Object.keys(titles)) {
     assert.doesNotMatch(allText, /PROGRAM RESEARCH DASHBOARD|Synthetic score calculation|MANDAL HEATMAP|Research method/,
       'Campaigner never receives the research content, including hidden content');
     assert.equal(flatten(tree).filter((element) => element.type === 'select').length, 0);
+    assert.ok(!find(tree, (element) => hasClass(element, 'reportGrid') || hasClass(element, 'reportCard')),
+      'Campaigner never renders research report cards');
     continue;
   }
+  assertReportCardStructure(tree, role);
   for (const label of ['Synthetic Program · all Campaigns · all Iterations · all Runs', 'Demo · Unweighted · Human review pending', 'Not measured', 'Projection unavailable', 'Full Iterations · all Runs', '8 answered / 10 respondents', '0.0% positive', 'Withheld', 'Recorded mentions · not vote intention']) {
     assert.ok(visible.includes(label), `${role}: ${label} remains visible`);
   }
@@ -289,6 +381,21 @@ assert.match(textContent(suppressedTree, true), /Research result withheld/);
 assert.match(textContent(suppressedTree, true), /Below 5 respondent observations/);
 assert.doesNotMatch(textContent(suppressedTree, true), /DESCRIPTIVE CANDIDATE IMPRESSION|0\.0\/5/);
 assert.match(textContent(suppressedTree), /Withheld values are unavailable, not zero/);
+assert.ok(!find(suppressedTree, (element) => hasClass(element, 'reportGrid') || hasClass(element, 'reportCard')),
+  'Withheld overall research result does not render individual report cards');
+
+for (const variant of ['sparse', 'populated']) {
+  const tree = render({ data: dashboard('SUPER_ADMIN', { intelligence: fixtureIntelligence(variant) }) });
+  assertReportCardStructure(tree, `${variant} synthetic fixture`);
+  assertClosedDetails(tree);
+  if (variant === 'sparse') {
+    assert.match(textContent(tree, true), /No reportable sentiment distribution|No demographic evidence/);
+    assert.match(textContent(tree, true), /0 answered \/ 10 respondents · 0\.0% coverage · Withheld/);
+  } else {
+    assert.match(textContent(tree, true), /Synthetic candidate impression and recorded expectations/);
+    assert.match(textContent(tree, true), /Indicative next-Iteration 3\.2\/5/);
+  }
+}
 
 // No stale role/scope reports are exposed while a new request is being resolved.
 for (const options of [
@@ -330,7 +437,7 @@ for (const [label, expected] of [
   assert.ok(!find(nextTree, (element) => hasClass(element, 'intelligencePanel')));
 }
 assert.equal(apiCalls, 0, 'rendering and filter interactions never make a live API request');
-console.log('Regular Dashboard disclosures: closed accessible notes, retained calculations, roles, scope, bases, zero/withheld values, filters, guards and no live requests passed.');
+console.log('Regular Dashboard disclosures: nine uniform header/body/footer reports, closed accessible notes, retained calculations, roles, scope, bases, zero/withheld values, sparse/long-content fixtures, filters, guards and no live requests passed.');
 
 // Optional browser review uses actual page/CSS with synthetic values only. Native
 // details controls work without JavaScript; there are no live report iframes.
@@ -345,10 +452,14 @@ if (previewArgument) {
     if (url.pathname !== '/') { response.writeHead(404); response.end('Not found'); return; }
     const role = url.searchParams.get('role') || 'SUPER_ADMIN';
     if (!(role in titles)) { response.writeHead(400); response.end('Unknown synthetic role'); return; }
-    const markup = renderToStaticMarkup(render({ role }));
+    const variant = url.searchParams.get('fixture') || 'default';
+    if (!fixtureVariants.includes(variant)) { response.writeHead(400); response.end('Unknown synthetic fixture'); return; }
+    const markup = renderToStaticMarkup(render({ role, data: dashboard(role, { intelligence: fixtureIntelligence(variant) }) }));
     const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Regular Dashboard preview · synthetic data</title><style>
       *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.fixtureLabel{position:sticky;top:0;z-index:10;padding:12px 24px;background:#392b32;color:#fff;font-weight:700;line-height:1.5}
-      ${css}</style></head><body><div class="fixtureLabel" data-show="synthetic-only">Local layout preview · synthetic data only<br><small>No real users, voters, survey results or API requests are loaded. Role: ${role}</small></div>${markup}</body></html>`;
+      /* Match the real AppShell's available content width without loading it. */
+      .fixtureAppShell{margin-left:260px}@media(max-width:1024px){.fixtureAppShell{margin-left:220px}}@media(max-width:760px){.fixtureAppShell{margin-left:0}}
+      ${css}</style></head><body><div class="fixtureLabel" data-show="synthetic-only">Local layout preview · synthetic data only<br><small>No real users, voters, survey results or API requests are loaded. Role: ${role} · Fixture: ${variant}</small></div>${markup}</body></html>`;
     response.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"

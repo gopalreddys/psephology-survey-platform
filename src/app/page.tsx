@@ -196,6 +196,16 @@ function ReportNote({ label = "How it’s measured", children }: { label?: strin
   </details>;
 }
 
+function ReportCard({ eyebrow, title, subtitle, children, footer }: {
+  eyebrow: string; title: string; subtitle?: ReactNode; children: ReactNode; footer: ReactNode;
+}) {
+  return <article className={styles.reportCard}>
+    <header className={styles.chartHead}><span>{eyebrow}</span><h3>{title}</h3><div className={styles.chartSubtitle}>{subtitle}</div></header>
+    <div className={styles.reportBody}>{children}</div>
+    <footer className={styles.reportFooter}>{footer}</footer>
+  </article>;
+}
+
 function BaseCaption({ summary, children }: { summary: MeasureSummary; children: ReactNode }) {
   return <div className={styles.baseCaption}>
     <small>{summary.answerBase} answered / {summary.respondentBase} respondents · {summary.coveragePct.toFixed(1)}% coverage{summary.suppressed ? " · Withheld" : ""}</small>
@@ -359,20 +369,38 @@ export default function Home() {
         </div></div>
         <div className={styles.scope} role="note"><AlertTriangle size={17} /><span><strong>Demo · {data.intelligence.methodology.weighted ? "Weighted" : "Unweighted"} · Human review pending</strong><small className={styles.statusQualifier}>Not a vote forecast</small></span><ReportNote label="About these reports"><p>Program-level reports can be filtered by Campaign, Iteration, Mandal, age and gender. Use Analysis for question, Run and evidence diagnosis.</p><p>{data.intelligence.sentimentValidation.message}</p><p>Rules: {data.intelligence.sentimentValidation.normalizationVersion} · hash {data.intelligence.sentimentValidation.ruleHash}. Source variables: {data.intelligence.sentimentConstruct.outputKeys.join(", ")}. The selected measure is held fixed across demographic views and Iteration history.</p><p>These are descriptive survey outputs, not individual political profiles, population estimates or vote forecasts.</p></ReportNote></div>
         {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Research result withheld</strong><p>Below {data.intelligence.minimumBase} respondent observations.</p><ReportNote label="Why it’s withheld"><p>This selected scope has fewer than {data.intelligence.minimumBase} respondent observations. More responses or a broader research scope are required. Withheld values are unavailable, not zero.</p></ReportNote></div></div> : <>
-          <div className={styles.intelligenceSummary}>
-            <article className={styles.ratingSummary}><span>DESCRIPTIVE {data.intelligence.sentimentConstruct.label.toUpperCase()}</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} · {data.intelligence.rating.answeredBase} coded / {data.intelligence.respondentBase || 0} observations</small><ReportNote><p>{data.intelligence.rating.basis}</p><p>The rating uses polarity-coded assessments of {data.intelligence.sentimentConstruct.label.toLowerCase()}. It is a descriptive score, not a probability or voting prediction. Missing and unavailable values are not zero.</p><p>Scope: {data.intelligence.scopeLabel}</p></ReportNote></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>SELECTED SENTIMENT MEASURE</span><h3>{data.intelligence.sentimentConstruct.label}</h3></div><DashboardDonut items={data.intelligence.sentiment} /><BaseCaption summary={data.intelligence.measures.sentiment}>Explicit structured labels only. Mixed is separate from Neutral; no substitution from other measures.</BaseCaption></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>DESCRIPTIVE ITERATION HISTORY</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? data.intelligence.predictive.status === "SUPPRESSED" ? "Withheld" : "Projection unavailable" : `Indicative next-Iteration ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence}</small><small>{data.intelligence.predictive.scopeLabel}</small></div><TrendChart intelligence={data.intelligence} /><ReportNote><p>{data.intelligence.predictive.statement}</p><p>Two consecutive comparable, reportable Iterations are required. The same sentiment measure is used throughout; the indicative trend is not a vote forecast.</p>{data.intelligence.predictive.comparability.reasons.length > 0 && <ul>{data.intelligence.predictive.comparability.reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>}</ReportNote></article>
-          </div>
-          <div className={styles.landscapeGrid}>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>PARTY LANDSCAPE</span><h3>Unaided party salience</h3><small>Recorded mentions · not vote intention</small></div><LandscapeBars items={data.intelligence.landscape.party} empty="No reportable party-salience distribution is available." /><BaseCaption summary={data.intelligence.measures.party}>Recorded party mentions only; not vote intention.</BaseCaption></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>CANDIDATE LANDSCAPE</span><h3>Candidate impression</h3></div><DashboardDonut items={data.intelligence.landscape.candidate} /><BaseCaption summary={data.intelligence.measures.candidate}>Explicit impressions only; awareness and criterion fit are separate constructs.</BaseCaption></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>LEADERSHIP LANDSCAPE</span><h3>Perceived issue leadership</h3></div><LandscapeBars items={data.intelligence.landscape.leadership} empty="No reportable leadership distribution is available." /><BaseCaption summary={data.intelligence.measures.leadership}>Recorded leadership responses only; no incumbent-assessment proxy.</BaseCaption></article>
-          </div>
           <div className={styles.reportGrid}>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by age</h3></div><SegmentBars items={data.intelligence.age} /><SegmentNote items={data.intelligence.age}>Non-overlapping age bands: 18–29, 30–39, 40–49 and 50+. Bars show the percentage of positive answers for the selected sentiment measure.</SegmentNote></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>GENDER REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by gender</h3></div><SegmentBars items={data.intelligence.gender} /><SegmentNote items={data.intelligence.gender}>Bars show the percentage of positive answers for the selected sentiment measure within each recorded gender.</SegmentNote></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><LandscapeBars items={data.intelligence.issues} empty="No reportable issue-priority distribution is available." /><BaseCaption summary={data.intelligence.measures.issues}>Issue priorities come from the recorded structured answers, not inferred party or candidate preferences.</BaseCaption></article>
+            <ReportCard eyebrow="DESCRIPTIVE RATING" title={data.intelligence.sentimentConstruct.label} footer={<div className={styles.baseCaption}>
+              <small>{data.intelligence.rating.confidence} · {data.intelligence.rating.answeredBase} coded / {data.intelligence.respondentBase || 0} observations</small>
+              <ReportNote><p>{data.intelligence.rating.basis}</p><p>The rating uses polarity-coded assessments of {data.intelligence.sentimentConstruct.label.toLowerCase()}. It is a descriptive score, not a probability or voting prediction. Missing and unavailable values are not zero.</p><p>Scope: {data.intelligence.scopeLabel}</p></ReportNote>
+            </div>}>
+              <div className={styles.ratingSummary}><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div></div>
+            </ReportCard>
+            <ReportCard eyebrow="SELECTED SENTIMENT MEASURE" title={data.intelligence.sentimentConstruct.label} footer={<BaseCaption summary={data.intelligence.measures.sentiment}>Explicit structured labels only. Mixed is separate from Neutral; no substitution from other measures.</BaseCaption>}>
+              <DashboardDonut items={data.intelligence.sentiment} />
+            </ReportCard>
+            <ReportCard eyebrow="DESCRIPTIVE ITERATION HISTORY" title={data.intelligence.predictive.direction} subtitle={<>{data.intelligence.predictive.projectedNextRating === null ? data.intelligence.predictive.status === "SUPPRESSED" ? "Withheld" : "Projection unavailable" : `Indicative next-Iteration ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence}</>} footer={<div className={styles.baseCaption}>
+              <small>{data.intelligence.predictive.scopeLabel}</small>
+              <ReportNote><p>{data.intelligence.predictive.statement}</p><p>Two consecutive comparable, reportable Iterations are required. The same sentiment measure is used throughout; the indicative trend is not a vote forecast.</p>{data.intelligence.predictive.comparability.reasons.length > 0 && <ul>{data.intelligence.predictive.comparability.reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>}</ReportNote>
+            </div>}><TrendChart intelligence={data.intelligence} /></ReportCard>
+            <ReportCard eyebrow="PARTY LANDSCAPE" title="Unaided party salience" subtitle="Recorded mentions · not vote intention" footer={<BaseCaption summary={data.intelligence.measures.party}>Recorded party mentions only; not vote intention.</BaseCaption>}>
+              <LandscapeBars items={data.intelligence.landscape.party} empty="No reportable party-salience distribution is available." />
+            </ReportCard>
+            <ReportCard eyebrow="CANDIDATE LANDSCAPE" title="Candidate impression" footer={<BaseCaption summary={data.intelligence.measures.candidate}>Explicit impressions only; awareness and criterion fit are separate constructs.</BaseCaption>}>
+              <DashboardDonut items={data.intelligence.landscape.candidate} />
+            </ReportCard>
+            <ReportCard eyebrow="LEADERSHIP LANDSCAPE" title="Perceived issue leadership" footer={<BaseCaption summary={data.intelligence.measures.leadership}>Recorded leadership responses only; no incumbent-assessment proxy.</BaseCaption>}>
+              <LandscapeBars items={data.intelligence.landscape.leadership} empty="No reportable leadership distribution is available." />
+            </ReportCard>
+            <ReportCard eyebrow="AGE REPORT" title={`${data.intelligence.sentimentConstruct.label} by age`} footer={<SegmentNote items={data.intelligence.age}>Non-overlapping age bands: 18–29, 30–39, 40–49 and 50+. Bars show the percentage of positive answers for the selected sentiment measure.</SegmentNote>}>
+              <SegmentBars items={data.intelligence.age} />
+            </ReportCard>
+            <ReportCard eyebrow="GENDER REPORT" title={`${data.intelligence.sentimentConstruct.label} by gender`} footer={<SegmentNote items={data.intelligence.gender}>Bars show the percentage of positive answers for the selected sentiment measure within each recorded gender.</SegmentNote>}>
+              <SegmentBars items={data.intelligence.gender} />
+            </ReportCard>
+            <ReportCard eyebrow="ISSUE PRIORITIES" title="What respondents raised" footer={<BaseCaption summary={data.intelligence.measures.issues}>Issue priorities come from the recorded structured answers, not inferred party or candidate preferences.</BaseCaption>}>
+              <LandscapeBars items={data.intelligence.issues} empty="No reportable issue-priority distribution is available." />
+            </ReportCard>
           </div>
           <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>{data.intelligence.sentimentConstruct.label} by Mandal</h3><small>— = withheld · minimum {data.intelligence.minimumBase} answers</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /><SegmentNote items={data.intelligence.mandalHeatmap}>Cell intensity represents each recorded sentiment category&apos;s percentage within a Mandal. Mixed remains distinct from Neutral. Refused and Uncoded stay in the denominator and are listed below, not treated as positive. Scope: {data.intelligence.scopeLabel}</SegmentNote></article>
           <details className={styles.methodologyPanel}>

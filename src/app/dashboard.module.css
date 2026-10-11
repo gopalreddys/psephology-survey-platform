@@ -62,7 +62,8 @@
 .statusQualifier { display: block; margin-top: 3px; font-size: 10px; }
 
 .reportNote { min-width: 0; margin-top: 10px; color: #58766f; }
-.reportNote > summary { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; cursor: pointer; list-style: none; font-size: 11px; font-weight: 750; }
+.reportNote > summary { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; cursor: pointer; list-style: none; font-size: 11px; line-height: 16px; font-weight: 750; }
+.reportNote > summary > svg { flex-shrink: 0; }
 .reportNote > summary::-webkit-details-marker,
 .methodologyHead::-webkit-details-marker { display: none; }
 .reportNote > summary:hover { color: #166f62; }
@@ -111,11 +112,11 @@
 .roleBrief[data-status="ATTENTION_REQUIRED"] .roleBriefDetail a { background: #c65369; }
 
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-bottom: 20px; }
-.metric { display: grid; gap: 5px; padding: 20px; border-radius: 20px; }
+.metric { display: grid; grid-template-rows: 47px minmax(36px, auto) 32px minmax(32px, auto); align-content: start; gap: 5px; min-width: 0; padding: 20px; border-radius: 20px; overflow-wrap: anywhere; }
 .metricIcon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 7px; border-radius: 13px; background: #fff0f3; color: #ca5369; }
-.metric span { color: #927b82; font-size: 13px; }
+.metric span { color: #927b82; font-size: 13px; line-height: 18px; }
 .metric strong { font-size: 29px; line-height: 1.1; }
-.metric small { color: #a18c91; }
+.metric small { color: #a18c91; line-height: 16px; }
 
 .intelligencePanel {
   margin-bottom: 20px;
@@ -126,38 +127,45 @@
 }
 .intelligenceHead { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .intelligenceHead > div:first-child > span,
-.chartHead > span,
-.ratingSummary > span { color: #168b7d; font-size: 10px; font-weight: 850; letter-spacing: .14em; }
+.chartHead > span { color: #168b7d; font-size: 10px; font-weight: 850; letter-spacing: .14em; }
 .intelligenceHead h2 { margin: 6px 0; font-size: 25px; }
 .intelligenceHead p { max-width: 720px; margin: 0; color: #7d6c71; font-size: 12px; line-height: 1.45; }
 .intelligenceFilters { display: grid; grid-template-columns: repeat(3, minmax(145px, 1fr)); gap: 10px; min-width: 590px; }
 .intelligenceFilters label { display: grid; gap: 5px; color: #78676c; font-size: 10px; font-weight: 800; }
 .intelligenceFilters select { min-width: 0; padding: 10px 12px; border: 1px solid #d6e6e2; border-radius: 10px; background: #fff; color: #4d3d42; }
-.intelligenceSummary { display: grid; grid-template-columns: .8fr 1fr 1.2fr; gap: 13px; }
-.reportGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 13px; }
-.landscapeGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 13px; }
-.ratingSummary,
-.chartCard,
-.heatmapCard { padding: 17px; border: 1px solid #dce9e6; border-radius: 17px; background: rgba(255,255,255,.92); }
-.ratingSummary { display: grid; align-content: center; }
-.ratingSummary > strong { margin: 8px 0 3px; font-size: 31px; }
+.reportGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; margin-top: 16px; }
+/* Keep closed cards uniform; an expanded note grows its row, not every row. */
+.reportGrid:has(.reportNote[open]) { grid-auto-rows: auto; }
+.reportCard,
+.heatmapCard { min-width: 0; padding: 20px; border: 1px solid #dce9e6; border-radius: 17px; background: rgba(255,255,255,.92); }
+.reportCard { display: flex; flex-direction: column; gap: 12px; min-height: 360px; overflow-wrap: anywhere; }
+.reportCard > .chartHead { display: grid; grid-template-rows: minmax(24px, auto) minmax(44px, auto) minmax(28px, auto); align-content: start; }
+.reportCard > .chartHead > span { line-height: 12px; }
+.reportCard > .chartHead > h3 { margin: 0; line-height: 22px; }
+.chartSubtitle { color: #917f84; font-size: 11px; line-height: 14px; }
+.reportBody { display: flex; flex: 1; flex-direction: column; justify-content: center; min-width: 0; min-height: 128px; }
+.reportFooter { display: flex; flex-direction: column; justify-content: flex-end; min-height: 60px; }
+.reportFooter > .reportNote { margin-top: auto; }
+.reportFooter > .baseCaption { margin-top: 0; }
+.reportFooter .baseCaption > small { display: block; min-height: 28px; line-height: 14px; }
+.reportFooter .baseCaption > .reportNote { margin-top: 8px; }
+.ratingSummary { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 8px; }
+.ratingSummary > strong { font-size: 31px; line-height: 1.2; }
 .ratingSummary > div { display: flex; gap: 3px; }
 .ratingSummary i { color: #d9cbce; font-size: 23px; font-style: normal; }
 .ratingSummary i[data-filled="true"] { color: #e0a34b; }
-.ratingSummary small,
 .chartHead small { color: #917f84; font-size: 10px; }
 .chartHead h3 { margin: 5px 0; font-size: 16px; }
-.chartCard > p { margin: 10px 0 0; color: #857378; font-size: 9px; line-height: 1.4; }
-.donutWrap { display: grid; grid-template-columns: 105px 1fr; align-items: center; gap: 12px; margin-top: 12px; }
+.donutWrap { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: center; gap: 12px; }
 .donut { display: grid; place-items: center; width: 100px; aspect-ratio: 1; border-radius: 50%; }
 .donut > div { display: grid; place-items: center; width: 70%; aspect-ratio: 1; border-radius: 50%; background: #fff; }
 .donut strong { font-size: 20px; }
 .donut span { color: #8e7d82; font-size: 8px; text-transform: uppercase; }
 .legend { display: grid; gap: 6px; }
-.legend > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; font-size: 9px; }
+.legend > div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; font-size: 10px; line-height: 14px; }
 .legend i { width: 8px; height: 8px; border-radius: 50%; }
 .segmentBars,
-.issueBars { display: grid; gap: 10px; margin-top: 14px; }
+.issueBars { display: grid; gap: 10px; }
 .segmentRow > div:first-child { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 3px 8px; }
 .segmentRow span,
 .issueBars span { color: #59494e; font-size: 11px; font-weight: 750; }
@@ -169,7 +177,7 @@
 .segmentRow i,
 .issueBars i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#1c9b89,#7acaba); }
 .issueBars > div > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
-.trendChart { display: flex; align-items: flex-end; gap: 13px; min-height: 120px; margin-top: 10px; }
+.trendChart { display: flex; align-items: flex-end; gap: 13px; min-height: 120px; }
 .trendChart > div { display: grid; flex: 1; gap: 4px; text-align: center; }
 .trendChart > div > div { position: relative; display: flex; align-items: flex-end; justify-content: center; height: 86px; border-radius: 8px 8px 3px 3px; background: #eef5f3; }
 .trendChart i { display: block; width: 72%; border-radius: 6px 6px 2px 2px; background: linear-gradient(#d75b72,#f0a1b0); }
@@ -187,7 +195,7 @@
 .heatmapRow > span small { color: #9b898e; font-size: 8px; font-weight: 500; }
 .heatmapRow i { display: grid; place-items: center; min-height: 39px; border-radius: 7px; color: #48383d; font-size: 9px; font-style: normal; font-weight: 800; }
 .heatmapRow i[data-suppressed="true"] { color: #aa949a; }
-.chartEmpty { display: grid; place-items: center; min-height: 90px; color: #9a858b; font-size: 11px; text-align: center; }
+.chartEmpty { display: grid; flex: 1; place-items: center; min-height: 128px; color: #9a858b; font-size: 12px; line-height: 18px; text-align: center; }
 .intelligenceSuppressed { display: flex; align-items: flex-start; gap: 10px; padding: 18px; border-radius: 13px; background: #fff1f3; color: #9d4659; }
 .intelligenceSuppressed p { margin: 4px 0 0; font-size: 11px; }
 .methodologyPanel { margin-top: 13px; padding: 16px; border: 1px solid #d8e9e5; border-radius: 15px; background: linear-gradient(135deg,#f2fbf9,#fff); }
@@ -263,11 +271,8 @@
   .roleBriefDetail { padding-top: 18px; padding-left: 0; border-top: 1px solid #d8ebe7; border-left: 0; }
   .intelligenceHead { flex-direction: column; }
   .intelligenceFilters { min-width: 0; }
-  .intelligenceSummary,
   .reportGrid,
-  .landscapeGrid,
   .methodologyGrid { grid-template-columns: 1fr 1fr; }
-  .ratingSummary { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .page { padding: 15px; }
@@ -281,9 +286,9 @@
   .iterations a small { grid-column: 1 / -1; text-align: left; }
   .intelligencePanel { padding: 16px; }
   .intelligenceFilters,
-  .intelligenceSummary,
   .reportGrid,
-  .landscapeGrid,
   .methodologyGrid { grid-template-columns: 1fr; }
-  .ratingSummary { grid-column: auto; }
+  .reportCard { min-height: 360px; padding: 18px; }
+  .donutWrap { grid-template-columns: 84px minmax(0, 1fr); gap: 10px; }
+  .donut { width: 84px; }
 }

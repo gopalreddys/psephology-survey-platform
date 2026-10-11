@@ -62,6 +62,14 @@ change calculations, filters, data access or survey outputs. Operational totals
 remain independent of research filters. Campaign evidence readiness measures
 captured transcript/response slots, not the proportion of fully complete calls.
 
+The nine research report cards share one responsive equal-width grid and a
+consistent header, visualization and footer structure. Closed cards have equal
+heights, matching heading slots and bottom-aligned measurement notes. Long
+labels remain readable; opening a note expands its row without clipping its
+explanation or making every other row taller. The Mandal heatmap stays full-width
+to accommodate its geographic table. Operational metric cards also use shared
+label/value/detail slots.
+
 Analysis remains the detailed evidence workspace for questionnaire performance,
 Run/Iteration diagnosis and interpretation. Dashboard visualizations are concise
 monitoring signals. They do not create participant-level political scores or
@@ -72,6 +80,16 @@ Run the offline rendering regression checks:
 ```bash
 node deployment/role-dashboard/test-dashboard-disclosures.mjs
 ```
+
+For isolated visual review, serve the actual Dashboard/CSS with synthetic data:
+
+```bash
+node deployment/role-dashboard/test-dashboard-disclosures.mjs --serve-fixture=4177
+```
+
+Open `http://127.0.0.1:4177/`, `/?fixture=sparse` or `/?fixture=populated` for
+default, empty and long/populated card layouts. These fixtures disable effects
+and live API requests; they are not deployment or survey-result evidence.
 
 The disclosure-layout change is frontend-only; it requires no API installation
 or database migration.
