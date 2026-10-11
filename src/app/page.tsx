@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList,
-  Clock3, ExternalLink, FileText, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
+  ChevronDown, Clock3, ExternalLink, FileText, Info, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
   ShieldCheck, Users
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -189,12 +189,27 @@ function categoryColor(value: string, index: number) {
   return sentimentColors[value] || CHART_COLORS[index % CHART_COLORS.length];
 }
 
-function BaseCaption({ summary }: { summary: MeasureSummary }) {
-  return <div className={styles.chartHead}><small>
-    {summary.answerBase} answered / {summary.respondentBase} respondents · {summary.coveragePct.toFixed(1)}% coverage
-    <br />Missing {summary.missingCount} · Can&apos;t say {summary.cantSayCount} · Refused {summary.refusedCount} · Uncoded {summary.uncodedCount}
-    <br />{summary.suppressed ? "Percentages withheld: fewer than 5 answers." : "Percentages use all answered responses, including Can't say, Refused and Uncoded."}
-  </small></div>;
+function ReportNote({ label = "How it’s measured", children }: { label?: string; children: ReactNode }) {
+  return <details className={styles.reportNote}>
+    <summary><Info size={13} aria-hidden="true" /><span>{label}</span><ChevronDown size={13} aria-hidden="true" /></summary>
+    <div className={styles.noteBody}>{children}</div>
+  </details>;
+}
+
+function BaseCaption({ summary, children }: { summary: MeasureSummary; children: ReactNode }) {
+  return <div className={styles.baseCaption}>
+    <small>{summary.answerBase} answered / {summary.respondentBase} respondents · {summary.coveragePct.toFixed(1)}% coverage{summary.suppressed ? " · Withheld" : ""}</small>
+    <ReportNote><p>{children}</p><p>Coverage = answered responses ÷ respondent observations × 100. Percentages use all answered responses, including Can&apos;t say, Refused and Uncoded.</p>
+      <p>Missing {summary.missingCount} · Can&apos;t say {summary.cantSayCount} · Refused {summary.refusedCount} · Uncoded {summary.uncodedCount}</p>
+      <p>{summary.suppressed ? "Percentages withheld: fewer than 5 answers." : "The minimum answered base has been met."} Missing answers are not counted as negative or zero.</p>
+    </ReportNote>
+  </div>;
+}
+
+function SegmentNote({ items, children }: { items: Segment[]; children: ReactNode }) {
+  return <ReportNote><p>{children}</p><p>Each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded. Percentages are withheld below five answers; missing answers are not negative responses.</p>
+    <div className={styles.noteTable}><table><caption>Answer coverage by segment</caption><thead><tr><th>Segment</th><th>Answered / respondents</th><th>Coverage</th><th>Missing</th><th>Can&apos;t say</th><th>Refused</th><th>Uncoded</th></tr></thead><tbody>{items.map((item) => <tr key={item.label}><th scope="row">{item.label}</th><td>{item.answerBase} / {item.respondentBase}</td><td>{item.coveragePct.toFixed(1)}%</td><td>{item.missingCount}</td><td>{item.cantSayCount}</td><td>{item.refusedCount}</td><td>{item.uncodedCount}</td></tr>)}</tbody></table></div>
+  </ReportNote>;
 }
 
 function DashboardDonut({ items }: { items: Distribution[] }) {
@@ -217,7 +232,7 @@ function LandscapeBars({ items, empty }: { items: Distribution[]; empty: string 
 
 function SegmentBars({ items }: { items: Segment[] }) {
   if (!items.length) return <div className={styles.chartEmpty}>No demographic evidence is available.</div>;
-  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><small>{item.answerBase} answered / {item.respondentBase} respondents · {item.coveragePct.toFixed(1)}% coverage · missing {item.missingCount}; can&apos;t say {item.cantSayCount}; refused {item.refusedCount}; uncoded {item.uncodedCount}</small><strong>{item.positivePct === null ? "Withheld below 5 answers" : `${item.positivePct.toFixed(1)}% positive`}</strong></div><div><i style={{ width: `${item.positivePct || 0}%` }} /></div></div>)}</div>;
+  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><strong>{item.positivePct === null ? "Withheld" : `${item.positivePct.toFixed(1)}% positive`}</strong><small>{item.answerBase} answered / {item.respondentBase} respondents</small></div><div><i style={{ width: `${item.positivePct || 0}%` }} /></div></div>)}</div>;
 }
 
 function MandalHeatmap({ items }: { items: Segment[] }) {
@@ -225,13 +240,13 @@ function MandalHeatmap({ items }: { items: Segment[] }) {
   if (!items.length) return <div className={styles.chartEmpty}>No Mandal evidence is available.</div>;
   return <div className={styles.heatmap}>
     <div className={styles.heatmapHeader}><span>Mandal</span>{labels.map((label) => <strong key={label}>{label}</strong>)}</div>
-    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{item.answerBase} answered / {item.respondentBase} respondents · missing {item.missingCount}; refused {item.refusedCount}; uncoded {item.uncodedCount}</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage || 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
+    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{item.answerBase} answered / {item.respondentBase} respondents{item.suppressed ? " · Withheld" : ""}</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage || 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
   </div>;
 }
 
 function TrendChart({ intelligence }: { intelligence: DashboardIntelligence }) {
   const points = intelligence.predictive.points;
-  if (!points.length) return <div className={styles.chartEmpty}>{intelligence.predictive.statement}</div>;
+  if (!points.length) return <div className={styles.chartEmpty}>No reportable Iteration history.</div>;
   return <div className={styles.trendChart}>{points.map((point) => <div key={point.iterationId}><div><i style={{ height: `${Math.max((point.value / 5) * 100, 4)}%` }} /><strong>{point.value.toFixed(1)}</strong></div><span>Iteration {point.iterationNumber}</span><small>{point.campaignName} · n={point.answeredBase} rated respondents</small></div>)}</div>;
 }
 
@@ -303,7 +318,7 @@ export default function Home() {
 
   return <AppShell><main className={styles.page}>
     <header className={styles.hero}>
-      <div><span>RESEARCH COMMAND CENTER</span><h1>{role ? titleFor(role) : "Dashboard"}</h1><p>{role ? descriptionFor(role) : "Loading your work…"}</p></div>
+      <div><span>RESEARCH COMMAND CENTER</span><h1>{role ? titleFor(role) : "Dashboard"}</h1></div>
       <div className={styles.heroActions}>
         {(role === "SUPER_ADMIN" || role === "ADMIN") && <Link href="/enterprise-dashboard"><BarChart3 size={16} />Amazon Quick preview <ExternalLink size={14} /></Link>}
         <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
@@ -311,24 +326,29 @@ export default function Home() {
     </header>
     {error && <FeedbackMessage tone="error" message={error} />}
     {loading || (data && (!dashboardMatchesRole || !dashboardMatchesScope)) ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={23} />Loading your Dashboard…</div> : data && <>
-      <div className={styles.scope}><ShieldCheck size={15} />These figures reflect only Campaigns and Iterations visible to your role. No demo result is presented as a vote forecast.</div>
+      <div className={styles.scope}><ShieldCheck size={15} /><span>Role-visible portfolio · operational totals</span><ReportNote label="About this Dashboard"><p>{role ? descriptionFor(role) : "Your visible survey work."}</p><p>Operational summary, workload and Campaign progress cover only Campaigns and Iterations visible to your role. Research filters below affect the research reports, not these operational totals. Demo results are not vote forecasts.</p></ReportNote></div>
       {data.roleBrief && <section className={styles.roleBrief} data-status={data.roleBrief.status}>
         <div className={styles.roleBriefMain}>
           <span>{data.roleBrief.eyebrow}</span>
           <div className={styles.roleTitle}><h2>{data.roleBrief.title}</h2><strong>{data.roleBrief.status.replaceAll("_", " ")}</strong></div>
-          <p>{data.roleBrief.description}</p>
         </div>
         <div className={styles.roleBriefDetail}>
-          <div><span>YOUR CURRENT SCOPE</span><strong>{data.roleBrief.responsibility}</strong></div>
-          <div><span>DECISION BOUNDARY</span><p>{data.roleBrief.boundary}</p></div>
           <Link href={data.roleBrief.nextHref}>{data.roleBrief.nextLabel}<ArrowRight size={16} /></Link>
+          <ReportNote label="Role and scope"><p>{data.roleBrief.description}</p><p><strong>Your scope:</strong> {data.roleBrief.responsibility}</p><p><strong>Decision boundary:</strong> {data.roleBrief.boundary}</p></ReportNote>
         </div>
       </section>}
       <section className={styles.metrics} aria-label="Operational summary">
         {metrics.map(function (metric) { const Icon = metric.icon; return <article key={metric.label} className={styles.metric}><div className={styles.metricIcon}><Icon size={18} /></div><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></article>; })}
       </section>
+      <div className={styles.operationalNote}><ReportNote label="How operational totals are calculated">
+        <p>Counts use role-visible records and are independent of the research filters. Active Runs and execution queue = ready Runs + running Runs. Iterations complete is shown as completed / visible Iterations: a count ratio, not a percentage.</p>
+        <p>Closed Runs have status Completed, Failed, Cancelled or Archived. Completed Iterations have status Completed or Locked, or contain at least three Runs that are all closed. Ownership gaps count non-completed Campaigns without a manager.</p>
+        <p>Pending, retry-eligible and successful contacts count Run-contact rows, not unique voters across Runs. Awaiting callbacks counts active executions without a callback; delayed callbacks are older than 30 minutes.</p>
+        <p>Evidence gaps count missing transcripts + missing structured responses. Admin and Super Admin evidence exceptions also include stale callbacks. These are exception counts, not counts of distinct affected calls; Campaign-card exceptions exclude stale callbacks.</p>
+        <p>Campaign connection rate = connected call records ÷ execution records × 100. Evidence ready measures captured evidence slots: (2 × connected calls − missing transcripts − missing responses) ÷ (2 × connected calls) × 100, limited to 0–100%. Both are zero when their denominator is zero. Evidence ready does not mean every call has both records or that survey findings are validated.</p>
+      </ReportNote></div>
       {role !== "CAMPAIGNER" && data.intelligence && <section className={styles.intelligencePanel}>
-        <div className={styles.intelligenceHead}><div><span>PROGRAM RESEARCH DASHBOARD</span><h2>{data.intelligence.program.name}</h2><p>Program-level pulse with optional Campaign, Iteration, Mandal, age and gender drill-downs. Use Analysis for question, Run and evidence diagnosis.</p></div><div className={styles.intelligenceFilters}>
+        <div className={styles.intelligenceHead}><div><span>PROGRAM RESEARCH DASHBOARD</span><h2>{data.intelligence.program.name}</h2><p>{data.intelligence.scopeLabel}</p></div><div className={styles.intelligenceFilters}>
           <label><span>Program</span><select value={programId || data.intelligence.filters.selectedProgramId} onChange={function (event) { setProgramId(event.target.value); setCampaignId(""); setIterationId(""); setMandal(""); setAgeBand(""); setGender(""); }}>{data.intelligence.programs.map((program) => <option value={program.id} key={program.id}>{program.name} · {program.code}</option>)}</select></label>
           <label><span>Campaign</span><select value={campaignId} onChange={function (event) { setCampaignId(event.target.value); setIterationId(""); setMandal(""); setAgeBand(""); setGender(""); }}><option value="">All Campaigns</option>{data.intelligence.filters.campaigns.map((campaign) => <option value={campaign.id} key={campaign.id}>{campaign.name}</option>)}</select></label>
           <label><span>Iteration</span><select value={iterationId} onChange={function (event) { setIterationId(event.target.value); setMandal(""); setAgeBand(""); setGender(""); }}><option value="">All Iterations</option>{data.intelligence.filters.iterations.map((iteration) => <option value={iteration.id} key={iteration.id}>{iteration.campaignName} · Iteration {iteration.number}</option>)}</select></label>
@@ -337,26 +357,26 @@ export default function Home() {
           <label><span>Gender</span><select value={gender} onChange={(event) => setGender(event.target.value)}><option value="">All genders</option>{data.intelligence.filters.genders.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label><span>Sentiment measure</span><select value={sentimentConstruct} onChange={(event) => setSentimentConstruct(event.target.value)}>{data.intelligence.filters.sentimentConstructs.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
         </div></div>
-        <div className={styles.scope} role="note"><AlertTriangle size={17} /><div><strong>Human review pending</strong><br />{data.intelligence.sentimentValidation.message}<br /><small>Rules: {data.intelligence.sentimentValidation.normalizationVersion} · <span title={data.intelligence.sentimentValidation.ruleHash}>hash {data.intelligence.sentimentValidation.ruleHash.slice(0, 12)}</span>. Source variables: {data.intelligence.sentimentConstruct.outputKeys.join(", ")}. The selected measure is held fixed across demographic views and Iteration history.</small></div></div>
-        {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Research result withheld</strong><p>This selected scope has fewer than {data.intelligence.minimumBase} respondent observations. More responses or a broader research scope are required.</p></div></div> : <>
+        <div className={styles.scope} role="note"><AlertTriangle size={17} /><span><strong>Demo · {data.intelligence.methodology.weighted ? "Weighted" : "Unweighted"} · Human review pending</strong><small className={styles.statusQualifier}>Not a vote forecast</small></span><ReportNote label="About these reports"><p>Program-level reports can be filtered by Campaign, Iteration, Mandal, age and gender. Use Analysis for question, Run and evidence diagnosis.</p><p>{data.intelligence.sentimentValidation.message}</p><p>Rules: {data.intelligence.sentimentValidation.normalizationVersion} · hash {data.intelligence.sentimentValidation.ruleHash}. Source variables: {data.intelligence.sentimentConstruct.outputKeys.join(", ")}. The selected measure is held fixed across demographic views and Iteration history.</p><p>These are descriptive survey outputs, not individual political profiles, population estimates or vote forecasts.</p></ReportNote></div>
+        {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Research result withheld</strong><p>Below {data.intelligence.minimumBase} respondent observations.</p><ReportNote label="Why it’s withheld"><p>This selected scope has fewer than {data.intelligence.minimumBase} respondent observations. More responses or a broader research scope are required. Withheld values are unavailable, not zero.</p></ReportNote></div></div> : <>
           <div className={styles.intelligenceSummary}>
-            <article className={styles.ratingSummary}><span>DESCRIPTIVE {data.intelligence.sentimentConstruct.label.toUpperCase()}</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} · {data.intelligence.rating.answeredBase} polarity-coded assessments / {data.intelligence.respondentBase || 0} respondent observations</small><small>{data.intelligence.rating.basis}</small><small>{data.intelligence.scopeLabel}</small></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>SELECTED SENTIMENT MEASURE</span><h3>{data.intelligence.sentimentConstruct.label}</h3><small>Explicit structured labels only. Mixed is separate from Neutral; no substitution from other measures.</small></div><DashboardDonut items={data.intelligence.sentiment} /><BaseCaption summary={data.intelligence.measures.sentiment} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>DESCRIPTIVE ITERATION HISTORY</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? data.intelligence.predictive.status === "SUPPRESSED" ? `Wave withheld below n=${data.intelligence.minimumBase}` : "Two consecutive comparable, reportable Iterations required" : `Indicative next-Iteration ${data.intelligence.sentimentConstruct.label.toLowerCase()} ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence}</small><small>{data.intelligence.predictive.scopeLabel}</small></div><TrendChart intelligence={data.intelligence} /><p>{data.intelligence.predictive.statement}</p></article>
+            <article className={styles.ratingSummary}><span>DESCRIPTIVE {data.intelligence.sentimentConstruct.label.toUpperCase()}</span><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div><small>{data.intelligence.rating.confidence} · {data.intelligence.rating.answeredBase} coded / {data.intelligence.respondentBase || 0} observations</small><ReportNote><p>{data.intelligence.rating.basis}</p><p>The rating uses polarity-coded assessments of {data.intelligence.sentimentConstruct.label.toLowerCase()}. It is a descriptive score, not a probability or voting prediction. Missing and unavailable values are not zero.</p><p>Scope: {data.intelligence.scopeLabel}</p></ReportNote></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>SELECTED SENTIMENT MEASURE</span><h3>{data.intelligence.sentimentConstruct.label}</h3></div><DashboardDonut items={data.intelligence.sentiment} /><BaseCaption summary={data.intelligence.measures.sentiment}>Explicit structured labels only. Mixed is separate from Neutral; no substitution from other measures.</BaseCaption></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>DESCRIPTIVE ITERATION HISTORY</span><h3>{data.intelligence.predictive.direction}</h3><small>{data.intelligence.predictive.projectedNextRating === null ? data.intelligence.predictive.status === "SUPPRESSED" ? "Withheld" : "Projection unavailable" : `Indicative next-Iteration ${data.intelligence.predictive.projectedNextRating.toFixed(1)}/5`} · {data.intelligence.predictive.confidence}</small><small>{data.intelligence.predictive.scopeLabel}</small></div><TrendChart intelligence={data.intelligence} /><ReportNote><p>{data.intelligence.predictive.statement}</p><p>Two consecutive comparable, reportable Iterations are required. The same sentiment measure is used throughout; the indicative trend is not a vote forecast.</p>{data.intelligence.predictive.comparability.reasons.length > 0 && <ul>{data.intelligence.predictive.comparability.reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>}</ReportNote></article>
           </div>
           <div className={styles.landscapeGrid}>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>PARTY LANDSCAPE</span><h3>Unaided party salience</h3><small>Recorded party mentions only; not vote intention</small></div><LandscapeBars items={data.intelligence.landscape.party} empty="No reportable party-salience distribution is available." /><BaseCaption summary={data.intelligence.measures.party} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>CANDIDATE LANDSCAPE</span><h3>Candidate impression</h3><small>Explicit impressions only; awareness and criterion fit are separate constructs</small></div><DashboardDonut items={data.intelligence.landscape.candidate} /><BaseCaption summary={data.intelligence.measures.candidate} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>LEADERSHIP LANDSCAPE</span><h3>Perceived issue leadership</h3><small>Recorded leadership responses only; no incumbent-assessment proxy</small></div><LandscapeBars items={data.intelligence.landscape.leadership} empty="No reportable leadership distribution is available." /><BaseCaption summary={data.intelligence.measures.leadership} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>PARTY LANDSCAPE</span><h3>Unaided party salience</h3><small>Recorded mentions · not vote intention</small></div><LandscapeBars items={data.intelligence.landscape.party} empty="No reportable party-salience distribution is available." /><BaseCaption summary={data.intelligence.measures.party}>Recorded party mentions only; not vote intention.</BaseCaption></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>CANDIDATE LANDSCAPE</span><h3>Candidate impression</h3></div><DashboardDonut items={data.intelligence.landscape.candidate} /><BaseCaption summary={data.intelligence.measures.candidate}>Explicit impressions only; awareness and criterion fit are separate constructs.</BaseCaption></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>LEADERSHIP LANDSCAPE</span><h3>Perceived issue leadership</h3></div><LandscapeBars items={data.intelligence.landscape.leadership} empty="No reportable leadership distribution is available." /><BaseCaption summary={data.intelligence.measures.leadership}>Recorded leadership responses only; no incumbent-assessment proxy.</BaseCaption></article>
           </div>
           <div className={styles.reportGrid}>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by age</h3><small>Non-overlapping bands · each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded</small></div><SegmentBars items={data.intelligence.age} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>GENDER REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by gender</h3><small>Each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded</small></div><SegmentBars items={data.intelligence.gender} /></article>
-            <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><LandscapeBars items={data.intelligence.issues} empty="No reportable issue-priority distribution is available." /><BaseCaption summary={data.intelligence.measures.issues} /></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>AGE REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by age</h3></div><SegmentBars items={data.intelligence.age} /><SegmentNote items={data.intelligence.age}>Non-overlapping age bands: 18–29, 30–39, 40–49 and 50+. Bars show the percentage of positive answers for the selected sentiment measure.</SegmentNote></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>GENDER REPORT</span><h3>{data.intelligence.sentimentConstruct.label} by gender</h3></div><SegmentBars items={data.intelligence.gender} /><SegmentNote items={data.intelligence.gender}>Bars show the percentage of positive answers for the selected sentiment measure within each recorded gender.</SegmentNote></article>
+            <article className={styles.chartCard}><div className={styles.chartHead}><span>ISSUE PRIORITIES</span><h3>What respondents raised</h3></div><LandscapeBars items={data.intelligence.issues} empty="No reportable issue-priority distribution is available." /><BaseCaption summary={data.intelligence.measures.issues}>Issue priorities come from the recorded structured answers, not inferred party or candidate preferences.</BaseCaption></article>
           </div>
-          <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>{data.intelligence.sentimentConstruct.label} by Mandal</h3><small>Cells are withheld below {data.intelligence.minimumBase} answered responses · Mixed remains distinct from Neutral · denominator includes Can&apos;t say, Refused and Uncoded (the latter two are retained in row captions) · {data.intelligence.scopeLabel}</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /></article>
-          <section className={styles.methodologyPanel}>
-            <div className={styles.methodologyHead}><div><span>RESEARCH DISCLOSURE</span><h3>How to interpret this Dashboard</h3></div><ShieldCheck size={19} /></div>
+          <article className={styles.heatmapCard}><div className={styles.chartHead}><span>MANDAL HEATMAP</span><h3>{data.intelligence.sentimentConstruct.label} by Mandal</h3><small>— = withheld · minimum {data.intelligence.minimumBase} answers</small></div><MandalHeatmap items={data.intelligence.mandalHeatmap} /><SegmentNote items={data.intelligence.mandalHeatmap}>Cell intensity represents each recorded sentiment category&apos;s percentage within a Mandal. Mixed remains distinct from Neutral. Refused and Uncoded stay in the denominator and are listed below, not treated as positive. Scope: {data.intelligence.scopeLabel}</SegmentNote></article>
+          <details className={styles.methodologyPanel}>
+            <summary className={styles.methodologyHead}><span>Research method</span><ChevronDown size={16} aria-hidden="true" /></summary>
             <div className={styles.methodologyGrid}>
               <article><span>Sample</span><strong>Controlled non-probability demo cohort</strong></article>
               <article><span>Collection mode</span><strong>AI-assisted outbound voice interviews</strong></article>
@@ -366,13 +386,13 @@ export default function Home() {
               <article><span>Statistical precision</span><strong>No sampling margin of error</strong></article>
             </div>
             <div className={styles.methodologyNote}><ShieldCheck size={16} /><span>{data.intelligence.methodology.disclosure} AI supports interviewing and structured-output capture; findings remain aggregate and require research oversight.</span></div>
-          </section>
+          </details>
         </>}
       </section>}
       <div className={styles.contentGrid}>
         <section className={styles.panel}>
           <div className={styles.panelHead}><div><span>PRIORITY QUEUE</span><h2>What needs attention</h2></div><strong>{data.actions.length} item{data.actions.length === 1 ? "" : "s"}</strong></div>
-          {!data.actions.length ? <div className={styles.empty}><CheckCircle2 size={24} /><strong>No action flags in your visible work</strong><p>This reflects only Dashboard checks; review Campaigns and Calls for full detail.</p></div> : <div className={styles.actions}>{data.actions.map(function (item, index) { return <Link href={item.href} key={`${item.kind}-${item.href}-${index}`} className={styles.action}><div className={styles.actionIcon} data-urgent={item.priority >= 90}>{item.priority >= 90 ? <AlertTriangle size={18} /> : <ArrowRight size={18} />}</div><div><span>{actionLabel(item.kind)}{item.campaignName ? ` · ${item.campaignName}` : ""}</span><strong>{item.title}</strong><p>{item.detail}</p></div><ArrowRight size={17} /></Link>; })}</div>}
+          {!data.actions.length ? <div className={styles.empty}><CheckCircle2 size={24} /><strong>No action flags in your visible work</strong><ReportNote label="What this checks"><p>This reflects only Dashboard checks; review Campaigns and Calls for full detail. It is not a platform health or research-validation sign-off.</p></ReportNote></div> : <div className={styles.actions}>{data.actions.map(function (item, index) { return <Link href={item.href} key={`${item.kind}-${item.href}-${index}`} className={styles.action}><div className={styles.actionIcon} data-urgent={item.priority >= 90}>{item.priority >= 90 ? <AlertTriangle size={18} /> : <ArrowRight size={18} />}</div><div><span>{actionLabel(item.kind)}{item.campaignName ? ` · ${item.campaignName}` : ""}</span><strong>{item.title}</strong><p>{item.detail}</p></div><ArrowRight size={17} /></Link>; })}</div>}
         </section>
         <section className={styles.panel}>
           <div className={styles.panelHead}><div><span>{role === "CAMPAIGNER" ? "EXECUTION FLOW" : "RESEARCH FLOW"}</span><h2>{role === "CAMPAIGNER" ? "My call workload" : role === "CAMPAIGN_MANAGER" ? "Coverage and evidence" : "Execution and evidence"}</h2></div></div>
@@ -391,7 +411,7 @@ export default function Home() {
         <div className={styles.panelHead}><div><span>VISIBLE CAMPAIGNS</span><h2>{role === "CAMPAIGNER" ? "My allocated work" : "Campaign progress"}</h2></div><Link className={styles.viewAll} href="/campaigns">View all <ArrowRight size={15} /></Link></div>
         {!data.campaigns.length ? <div className={styles.empty}><Megaphone size={24} /><strong>No Campaigns visible yet</strong><p>{role === "CAMPAIGNER" ? "Assigned Campaigns will appear here when work is allocated." : "Create or assign a Campaign to begin tracking research operations."}</p></div> : <div className={styles.campaigns}>{data.campaigns.map(function (campaign) { return <article className={styles.campaign} key={campaign.id}><div className={styles.campaignTop}><div><span>{campaign.code} · {campaign.status}</span><Link href={`/campaigns/${campaign.id}`}>{campaign.name} <ArrowRight size={15} /></Link></div><strong>{campaign.completedIterationCount}/{campaign.iterationCount} Iterations complete</strong></div><div className={styles.campaignFlow}><div><span>Attempts</span><strong>{count(campaign.callAttempts)}</strong></div><div><span>Connected</span><strong>{count(campaign.connectedCalls)}</strong></div><div><span>Successful</span><strong>{count(campaign.successfulContacts)}</strong></div><div><span>Evidence ready</span><strong>{campaign.evidenceReadyPct.toFixed(1)}%</strong></div></div><div className={styles.campaignBar}><i style={{ width: `${Math.min(campaign.connectionRatePct, 100)}%` }} /></div><small className={styles.campaignRate}>{campaign.connectionRatePct.toFixed(1)}% attempt-to-connection rate · {campaign.evidenceExceptions} evidence exception{campaign.evidenceExceptions === 1 ? "" : "s"}</small><div className={styles.iterations}>{!campaign.iterations.length ? <p>No Iterations visible for this Campaign.</p> : campaign.iterations.map(function (iteration) { return <Link href={`/iterations/${iteration.id}`} key={iteration.id}><div><strong>Iteration {iteration.number}</strong><span>{iteration.name}</span></div><small>{iteration.status} · {iteration.readyRunCount} ready · {iteration.runningRunCount} running</small><ArrowRight size={14} /></Link>; })}</div></article>; })}</div>}
       </section>
-      <footer className={styles.footer}>Snapshot generated {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt))}. Status metrics are operational; research interpretation remains in Analytics.</footer>
+      <footer className={styles.footer}>Updated {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(data.generatedAt))}</footer>
     </>}
   </main></AppShell>;
 }

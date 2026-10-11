@@ -46,15 +46,35 @@ response per respondent is retained within each Iteration, filtered cohorts belo
 five observations are withheld, and direct party support must not be inferred when
 the questionnaire records only proxy variables.
 
-The Dashboard exposes a compact research disclosure beside its charts: controlled
-non-probability sample, AI-assisted outbound voice mode, weighting status,
-questionnaire version when one compatible instrument is selected, analysis unit
-and the absence of a sampling margin of error.
+The regular Dashboard keeps results, report scope, answered/respondent bases,
+review status and withholding labels visible. Detailed explanations start closed:
+
+- “About this Dashboard” distinguishes role-visible operational totals from
+  filtered research reports.
+- “Role and scope” retains responsibilities and decision boundaries.
+- “How it’s measured” explains each report, denominator and unavailable values.
+- Demographic and Mandal notes retain detailed answer-coverage tables.
+- “Research method” retains sample, collection mode, weighting, instrument,
+  analysis unit and statistical-precision disclosures.
+
+These native expandable notes work with mouse, keyboard and touch; they do not
+change calculations, filters, data access or survey outputs. Operational totals
+remain independent of research filters. Campaign evidence readiness measures
+captured transcript/response slots, not the proportion of fully complete calls.
 
 Analysis remains the detailed evidence workspace for questionnaire performance,
 Run/Iteration diagnosis and interpretation. Dashboard visualizations are concise
 monitoring signals. They do not create participant-level political scores or
 election forecasts.
+
+Run the offline rendering regression checks:
+
+```bash
+node deployment/role-dashboard/test-dashboard-disclosures.mjs
+```
+
+The disclosure-layout change is frontend-only; it requires no API installation
+or database migration.
 
 Install on the API host:
 

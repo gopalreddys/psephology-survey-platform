@@ -47,6 +47,7 @@
 .scope {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 18px 0;
   padding: 11px 14px;
@@ -56,6 +57,33 @@
   color: #457e72;
   font-size: 12px;
 }
+.scope > svg { flex-shrink: 0; }
+.scope > .reportNote { flex-basis: 100%; margin-top: 0; }
+.statusQualifier { display: block; margin-top: 3px; font-size: 10px; }
+
+.reportNote { min-width: 0; margin-top: 10px; color: #58766f; }
+.reportNote > summary { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; cursor: pointer; list-style: none; font-size: 11px; font-weight: 750; }
+.reportNote > summary::-webkit-details-marker,
+.methodologyHead::-webkit-details-marker { display: none; }
+.reportNote > summary:hover { color: #166f62; }
+.reportNote > summary:focus-visible,
+.methodologyHead:focus-visible { outline: 2px solid #168b7d; outline-offset: 4px; border-radius: 4px; }
+.reportNote > summary > svg:last-child,
+.methodologyHead > svg { transition: transform .15s ease; }
+.reportNote[open] > summary > svg:last-child,
+.methodologyPanel[open] > .methodologyHead > svg { transform: rotate(180deg); }
+.noteBody { margin-top: 6px; padding: 12px; border: 1px solid #e0ebe8; border-radius: 10px; background: #f8fcfb; color: #6f6266; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.noteBody p { margin: 0 0 8px; }
+.noteBody p:last-child { margin-bottom: 0; }
+.noteBody ul { margin: 8px 0 0; padding-left: 18px; }
+.noteTable { max-width: 100%; overflow-x: auto; }
+.noteTable table { width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; }
+.noteTable caption { padding: 8px 0; font-weight: 750; text-align: left; }
+.noteTable th, .noteTable td { padding: 6px; border-bottom: 1px solid #dce9e5; white-space: nowrap; }
+.baseCaption { margin-top: 12px; }
+.baseCaption > small { color: #917f84; font-size: 10px; }
+.baseCaption > .reportNote { margin-top: 4px; }
+.operationalNote { margin: -8px 0 20px; }
 
 .roleBrief {
   display: grid;
@@ -133,7 +161,7 @@
 .segmentRow > div:first-child { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 3px 8px; }
 .segmentRow span,
 .issueBars span { color: #59494e; font-size: 11px; font-weight: 750; }
-.segmentRow small { color: #9a888d; font-size: 8px; }
+.segmentRow small { grid-column: 1 / -1; color: #9a888d; font-size: 8px; }
 .segmentRow strong,
 .issueBars strong { color: #168b7d; font-size: 9px; }
 .segmentRow > div:last-child,
@@ -163,8 +191,8 @@
 .intelligenceSuppressed { display: flex; align-items: flex-start; gap: 10px; padding: 18px; border-radius: 13px; background: #fff1f3; color: #9d4659; }
 .intelligenceSuppressed p { margin: 4px 0 0; font-size: 11px; }
 .methodologyPanel { margin-top: 13px; padding: 16px; border: 1px solid #d8e9e5; border-radius: 15px; background: linear-gradient(135deg,#f2fbf9,#fff); }
-.methodologyHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; color: #168b7d; }
-.methodologyHead span { font-size: 9px; font-weight: 850; letter-spacing: .13em; }
+.methodologyHead { display: flex; align-items: center; justify-content: space-between; gap: 14px; color: #168b7d; cursor: pointer; list-style: none; }
+.methodologyHead span { font-size: 12px; font-weight: 800; }
 .methodologyHead h3 { margin: 4px 0 0; color: #4d393f; font-size: 16px; }
 .methodologyGrid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-top: 13px; }
 .methodologyGrid article { padding: 10px; border: 1px solid #e1ece9; border-radius: 10px; background: rgba(255,255,255,.86); }
