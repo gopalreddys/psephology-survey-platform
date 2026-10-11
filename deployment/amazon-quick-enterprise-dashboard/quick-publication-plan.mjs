@@ -5,6 +5,7 @@
  * UpdateDataSet, UpdateDashboard and UpdateDashboardPublishedVersion.
  */
 import { createHash } from "node:crypto";
+import { ANSWER_STATE_LABELS } from "./quick-insight-catalog.mjs";
 
 export const PARTY_COLORS = Object.freeze({ BRS: "#E91E8F", BJP: "#FF9933", Congress: "#138808" });
 // Sentiment is a separate construct: party hues must never imply polarity.
@@ -110,6 +111,26 @@ export function visualPartitionColumns(visual, datasetIdentifier) {
     if (dimension?.Column?.DataSetIdentifier === datasetIdentifier) columns.push(dimension.Column.ColumnName);
   });
   return [...new Set(columns)].sort();
+}
+
+// Live AWS validation rejected a translated analysis-level dimension inside
+// distinctCountOver. Only these exact deterministic display aliases may use
+// their underlying raw grouping. Unknown answer statuses are conservatively
+// checked separately even when their display fallback shares a label.
+export const PRIVACY_DISPLAY_DIMENSIONS = Object.freeze({
+  quick_iteration_label: {
+    columns: ["iteration_number"],
+    expression: "concat('Iteration ', toString({iteration_number}))"
+  },
+  quick_issue_answer_state: {
+    columns: ["issue_priority_status"],
+    expression: `ifelse(${Object.entries(ANSWER_STATE_LABELS).flatMap(([status, label]) => [`{issue_priority_status} = ${JSON.stringify(status)}`, JSON.stringify(label)]).join(", ")}, 'Uncoded response')`
+  }
+});
+
+export function privacyPartitionColumns(visual, datasetIdentifier) {
+  return [...new Set(visualPartitionColumns(visual, datasetIdentifier)
+    .flatMap((column) => PRIVACY_DISPLAY_DIMENSIONS[column]?.columns ?? [column]))].sort();
 }
 
 export function uniquePersonWindowExpression(sourceKey, partitions) {
@@ -223,6 +244,14 @@ export function stagedDatasetRequest({ awsAccountId, dataset, view, columns, new
 export function validatePublicationCandidate({ definition, bindings, guards = [], answerStatusFilters = [], percentagePolicies = [], reviewedVisualIds = [] }) {
   const errors = [];
   const sheets = definition.Sheets ?? [];
+  for (const sheet of sheets) {
+    if ((sheet.TextBoxes?.length ?? 0) > 100) errors.push(`Too many text boxes: ${sheet.SheetId}`);
+    for (const element of sheet.Layouts?.[0]?.Configuration?.GridLayout?.Elements ?? []) {
+      if (!Number.isInteger(element.RowSpan) || element.RowSpan < 1 || element.RowSpan > 21
+        || !Number.isInteger(element.ColumnSpan) || element.ColumnSpan < 1 || element.ColumnSpan > 36
+        || element.RowIndex < 0 || element.RowIndex > 9009 || element.ColumnIndex < 0 || element.ColumnIndex > 35) errors.push(`Invalid grid dimensions: ${element.ElementId}`);
+    }
+  }
   for (const sheet of sheets) for (const box of sheet.TextBoxes ?? []) {
     if (box.Content && !/^<text-box(?:\s[^>]*)?>[\s\S]*<\/text-box>$/.test(box.Content)) errors.push(`Unsupported textbox markup root: ${box.SheetTextBoxId}`);
   }
@@ -255,6 +284,11 @@ export function validatePublicationCandidate({ definition, bindings, guards = []
   // Person keys are allowed as aggregated measures/window operands, not dimensions.
   for (const sheet of sheets) for (const union of sheet.Visuals ?? []) {
     const visual = Object.values(union)[0];
+    for (const action of visual.Actions ?? []) {
+      if (action.Trigger !== "DATA_POINT_MENU" || action.Status !== "ENABLED" || action.ActionOperations?.length !== 1
+        || !sheets.some((target) => target.Name === "Measurement guide" && target.SheetId === action.ActionOperations[0]?.NavigationOperation?.LocalNavigationConfiguration?.TargetSheetId)
+        || Object.keys(action.ActionOperations[0] ?? {}).join() !== "NavigationOperation") errors.push(`Unsafe or invalid measurement navigation: ${visual.VisualId}`);
+    }
     walk(visual, (item) => {
       if (["respondent_key", "evidence_key"].includes(item.CategoricalDimensionField?.Column?.ColumnName)) errors.push(`Respondent detail dimension: ${visual.VisualId}`);
     });
@@ -282,7 +316,11 @@ function hasGuard(definition, guard) {
     const sheet = definition.Sheets?.find((item) => item.SheetId === guard.sheetId);
     const visual = sheet?.Visuals?.map((union) => Object.values(union)[0]).find((item) => item.VisualId === guard.visualId);
     if (!visual || guard.aggregation !== "NONE" || !/^respondent_key$|^quick_(?:incumbent|candidate|party|leadership|issue)_(?:missing_)?respondent_key$/.test(guard.sourceKey)
-      || JSON.stringify(guard.partitions) !== JSON.stringify(visualPartitionColumns(visual, guard.datasetIdentifier))) return false;
+      || JSON.stringify(guard.partitions) !== JSON.stringify(privacyPartitionColumns(visual, guard.datasetIdentifier))) return false;
+    for (const column of visualPartitionColumns(visual, guard.datasetIdentifier)) {
+      const displayAlias = PRIVACY_DISPLAY_DIMENSIONS[column];
+      if (displayAlias && definition.CalculatedFields?.find((item) => item.DataSetIdentifier === guard.datasetIdentifier && item.Name === column)?.Expression !== displayAlias.expression) return false;
+    }
     const window = definition.CalculatedFields?.find((item) => item.DataSetIdentifier === guard.datasetIdentifier && item.Name === guard.column);
     if (window?.Expression !== uniquePersonWindowExpression(guard.sourceKey, guard.partitions)) return false;
     const measuredPersonSources = [];
@@ -352,6 +390,140 @@ export function validatePublicationReadback(readback, candidate) {
     if (!safeguards.valid) errors.push(...safeguards.errors.map((error) => `Readback safeguard: ${error}`));
   }
   return { valid: errors.length === 0, errors };
+}
+
+// Only the defaults observed and individually reviewed in the 2026-10-10
+// analysis export are equivalent here. Do not recursively drop empty values,
+// all Options, arbitrary expression syntax, or custom-action fields.
+const removeExact = (object, key, value) => {
+  if (object && Object.hasOwn(object, key) && canonicalJson(object[key]) === canonicalJson(value)) delete object[key];
+};
+const REVIEWED_GENDER_PARTITION_EXPRESSIONS = {
+  quick_candidate_gender_base: "distinctCountOver({quick_candidate_answer_key}, [{gender}], PRE_AGG)",
+  quick_cell_quick_age_gender_coverage_respondent_key_count: "distinctCountOver({respondent_key}, [{age_band}, {gender}], PRE_AGG)",
+  quick_cell_quick_candidate_gender_quick_candidate_respondent_key_count: "distinctCountOver({quick_candidate_respondent_key}, [{candidate_sentiment}, {gender}], PRE_AGG)",
+  quick_cell_quick_gender_count_respondent_key_count: "distinctCountOver({respondent_key}, [{gender}], PRE_AGG)",
+  quick_cell_quick_gender_party_quick_party_respondent_key_count: "distinctCountOver({quick_party_respondent_key}, [{gender}, {party_salience}], PRE_AGG)",
+  quick_cell_quick_issue_gender_quick_issue_respondent_key_count: "distinctCountOver({quick_issue_respondent_key}, [{gender}, {issue_priority}], PRE_AGG)",
+  quick_issue_gender_base: "distinctCountOver({quick_issue_answer_key}, [{gender}], PRE_AGG)",
+  quick_party_gender_base: "distinctCountOver({quick_party_answer_key}, [{gender}], PRE_AGG)"
+};
+
+function normalizeReviewedServiceDefinition(definition) {
+  if (!definition) return definition;
+  const normalized = clone(definition);
+  removeExact(normalized, "ParameterDeclarations", []);
+  for (const field of normalized.CalculatedFields ?? []) {
+    const reviewed = REVIEWED_GENDER_PARTITION_EXPRESSIONS[field.Name];
+    if (reviewed && field.Expression === reviewed.replaceAll("{gender}", "gender")) field.Expression = reviewed;
+  }
+  for (const group of normalized.FilterGroups ?? []) for (const filter of group.Filters ?? []) {
+    const range = filter.NumericRangeFilter;
+    if (range && !Object.hasOwn(range, "RangeMaximum")) removeExact(range, "IncludeMaximum", false);
+  }
+  for (const sheet of normalized.Sheets ?? []) {
+    removeExact(sheet, "ContentType", "INTERACTIVE");
+    removeExact(sheet, "FilterControls", []);
+    for (const control of sheet.FilterControls ?? []) removeExact(control.Dropdown, "DisplayOptions", { SelectAllOptions: { Visibility: "VISIBLE" } });
+    for (const box of sheet.TextBoxes ?? []) {
+      // This exported markup has one inline child. Preserve whitespace inside
+      // its text and between multiple inline children; it can affect meaning.
+      const content = /^<text-box>\s*<inline font-size="16px">([^<]*)<\/inline>\s*<\/text-box>$/.exec(box.Content ?? "");
+      if (content) box.Content = `<text-box><inline font-size="16px">${content[1]}</inline></text-box>`;
+    }
+    for (const union of sheet.Visuals ?? []) {
+      const [kind, visual] = Object.entries(union)[0] ?? [];
+      const chart = visual?.ChartConfiguration;
+      if (["HeatMapVisual", "BarChartVisual", "PieChartVisual", "KPIVisual", "TableVisual"].includes(kind)) removeExact(chart, "SortConfiguration", {});
+      if (["HeatMapVisual", "BarChartVisual", "PieChartVisual", "KPIVisual"].includes(kind)) removeExact(visual, "ColumnHierarchies", []);
+      if (["HeatMapVisual", "BarChartVisual", "PieChartVisual"].includes(kind)) removeExact(chart?.DataLabels, "Overlap", "DISABLE_OVERLAP");
+      if (kind === "KPIVisual") {
+        removeExact(chart?.FieldWells, "TargetValues", []);
+        removeExact(chart?.FieldWells, "TrendGroups", []);
+      }
+      if (kind === "BarChartVisual") removeExact(chart?.FieldWells?.BarChartAggregatedFieldWells, "Colors", []);
+      if (kind === "PieChartVisual") removeExact(chart, "DonutOptions", { ArcOptions: { ArcThickness: "WHOLE" } });
+      // Detailed setup is dormant only while BASIC remains selected, and only
+      // this exact empty map configuration was observed in the reviewed export.
+      if (kind === "GeospatialMapVisual" && chart?.Tooltip?.SelectedTooltipType === "BASIC") removeExact(chart.Tooltip, "FieldBasedTooltip", { AggregationVisibility: "HIDDEN", TooltipTitleType: "NONE", TooltipFields: [] });
+    }
+  }
+  return normalized;
+}
+
+/**
+ * Explicit alternative for individually reviewed AWS serialization defaults.
+ * The publication executor still uses the strict comparator by default. All
+ * Options, including click highlighting, and custom actions remain exact:
+ * missing CustomActionDefaults is a meaningful difference, not a default.
+ */
+export function validateServiceNormalizedPublicationReadback(readback, candidate) {
+  const expected = normalizeReviewedServiceDefinition(candidate.definition);
+  const actual = normalizeReviewedServiceDefinition(readback?.Definition);
+  const result = validatePublicationReadback({ ...readback, Definition: actual }, { ...candidate, definition: expected });
+  if (canonicalJson((actual?.DataSetIdentifierDeclarations ?? []).map(canonicalJson).sort()) !== canonicalJson((expected.DataSetIdentifierDeclarations ?? []).map(canonicalJson).sort())) result.errors.push("Dashboard dataset declaration contents differ from the reviewed candidate");
+  // Also retain strict comparison of less common top-level definition fields
+  // that the baseline gate does not currently need for its generated candidate.
+  const checked = new Set(["DataSetIdentifierDeclarations", "CalculatedFields", "FilterGroups", "Sheets", "Options"]);
+  for (const field of new Set([...Object.keys(expected ?? {}), ...Object.keys(actual ?? {})])) {
+    if (!checked.has(field) && canonicalJson(actual?.[field]) !== canonicalJson(expected?.[field])) result.errors.push(`Dashboard ${field} contents differ from the reviewed candidate`);
+  }
+  result.valid = result.errors.length === 0;
+  return result;
+}
+
+/**
+ * Console Replace namespaces sheet/visual identities with the dashboard ID.
+ * Prepare an explicit expected candidate; never strip arbitrary prefixes from
+ * readback content. Only typed references change, with a whole-candidate inverse
+ * proof. The API executor and its strict gate remain unchanged.
+ */
+export function prepareConsoleNamespacedCandidate(candidate, dashboardId) {
+  if (!/^[A-Za-z0-9_-]{1,512}$/.test(dashboardId ?? "")) throw new Error("Explicit dashboard identity is required");
+  const originalGate = validatePublicationCandidate(candidate);
+  if (!originalGate.valid) throw new Error(`Source candidate rejected: ${originalGate.errors.join("; ")}`);
+  const prefix = `${dashboardId}_`;
+  const sheets = (candidate.definition.Sheets ?? []).map((sheet) => sheet.SheetId);
+  const visuals = candidate.definition.Sheets.flatMap((sheet) => (sheet.Visuals ?? []).map((union) => Object.values(union)[0].VisualId));
+  if (new Set(sheets).size !== sheets.length || new Set(visuals).size !== visuals.length) throw new Error("Console source identities must be unique");
+  if ([...sheets, ...visuals].some((id) => typeof id !== "string" || !id || `${prefix}${id}`.length > 512)) throw new Error("Console namespaced identities must fit the AWS identifier limit");
+  const sheetMap = new Map(sheets.map((id) => [id, `${prefix}${id}`]));
+  const visualMap = new Map(visuals.map((id) => [id, `${prefix}${id}`]));
+  const change = (value, map, path) => {
+    if (!map.has(value)) throw new Error(`Unreviewed console reference: ${path}`);
+    return map.get(value);
+  };
+  const transform = (value, sheetIds, visualIds) => {
+    const next = clone(value);
+    const visit = (node, path) => {
+      if (Array.isArray(node)) return node.forEach((item, index) => visit(item, `${path}[${index}]`));
+      if (!node || typeof node !== "object") return;
+      for (const [key, item] of Object.entries(node)) {
+        if (["SheetId", "TargetSheetId", "sheetId"].includes(key)) node[key] = change(item, sheetIds, `${path}.${key}`);
+        else if (["VisualId", "visualId"].includes(key)) node[key] = change(item, visualIds, `${path}.${key}`);
+        else if (["VisualIds", "reviewedVisualIds"].includes(key)) {
+          if (!Array.isArray(item)) throw new Error(`Console references must be arrays: ${path}.${key}`);
+          node[key] = item.map((id) => change(id, visualIds, `${path}.${key}`));
+        } else if (key === "ElementId" && node.ElementType === "VISUAL") node[key] = change(item, visualIds, `${path}.${key}`);
+        else visit(item, `${path}.${key}`);
+      }
+    };
+    visit(next, "candidate");
+    return next;
+  };
+  const prepared = transform(candidate, sheetMap, visualMap);
+  const inverse = (map) => new Map([...map].map(([from, to]) => [to, from]));
+  if (canonicalJson(transform(prepared, inverse(sheetMap), inverse(visualMap))) !== canonicalJson(candidate)) throw new Error("Console identity inverse proof failed");
+  const preparedGate = validatePublicationCandidate(prepared);
+  if (!preparedGate.valid) throw new Error(`Console candidate safeguards rejected: ${preparedGate.errors.join("; ")}`);
+  return { candidate: prepared, receipt: {
+    mode: "OFFLINE_CONSOLE_IDENTITY_EXPECTATION", cloudChanges: false, dashboardId,
+    sheets: [...sheetMap].map(([from, to]) => ({ from, to })),
+    visuals: [...visualMap].map(([from, to]) => ({ from, to })),
+    inverseWholeCandidateMatches: true,
+    sourceCanonicalSha256: createHash("sha256").update(canonicalJson(candidate)).digest("hex"),
+    expectedCanonicalSha256: createHash("sha256").update(canonicalJson(prepared)).digest("hex")
+  } };
 }
 
 /** UpdateDashboard is NOT publication. Freeze old definitions before any mutation. */

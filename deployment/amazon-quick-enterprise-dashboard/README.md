@@ -16,17 +16,32 @@ that every desired report has an implemented extraction field.
 
 - leadership overview: separate unique-participant and respondent–Iteration
   observation bases, recorded party salience, candidate impression, issue
-  leadership, issue priorities and incumbent performance assessment;
+  leadership, issue priorities, incumbent performance assessment and issue
+  answer coverage;
 - demographic pulse: the age bands 18–29, 30–39, 40–49 and 50+, age-band
-  incumbent assessment, gender composition and
-  party salience by gender;
+  incumbent assessment, gender composition, party salience by gender, issue
+  priorities and candidate impression by age/gender, and an age–gender
+  participation heat table;
 - geographic intelligence: constituency and Mandal count-intensity heat tables,
-  with a party-filtered Mandal observation map over Amazon
-  Quick's native base-map layer;
+  issue priorities, candidate impression and incumbent assessment by Mandal,
+  Mandal–Iteration evidence coverage, and a party-filtered Mandal observation
+  map over Amazon Quick's native base-map layer;
 - Iteration movement: qualified descriptive positive incumbent-assessment and
   candidate-impression changes, standalone wave bases and withheld-change reasons;
 - research quality: connection, transcript and structured-output coverage,
-  demographic completeness, fieldwork dates and a qualified evidence status.
+  demographic completeness, fieldwork dates and a qualified evidence status;
+- Measurement guide: source, counting base, filter scope and limitations for
+  each chart, available as a tab even when no data is reportable, and through
+  the native **How it's measured** data-point menu when supported.
+
+`quick-insight-catalog.mjs` adds ten demographic, geographic and answer-coverage
+charts using existing governed v2 columns. Titles and captions stay concise;
+detailed explanations live on the sixth Measurement guide sheet. Demographic
+charts show counts, and darker heat-table cells mean more observations, not
+stronger opinion. Larger sampled groups can therefore have larger counts.
+Candidate awareness, candidate suitability and development outcomes are
+unavailable in these governed sources and are not inferred or filled in.
+The catalog introduces no personal details, source extraction or forecasts.
 
 Admin and Super Admin users can declare the target population, sample frame,
 sampling method, selection method, weighting approach and fieldwork mode for
@@ -86,15 +101,17 @@ The platform's native enterprise evidence panel uses the v2 movement view.
 The authoring blueprint targets v2 datasets, but installing/migrating the API
 **does not republish existing Amazon Quick datasets or dashboards**. Existing
 v1 assets remain intact until an explicitly approved authoring/publication
-step is verified. The current transition stages separate governed v2 datasets
-and retains the existing published dashboard version **3** until its replacement
-passes ingestion, API and live visual/filter checks. Do not mutate the old
-published version's source datasets as a shortcut.
+step is verified. The transition staged separate governed v2 datasets and kept
+published version **3** live until replacement checks passed. The existing
+dashboard is now published as version **7**; see the dated publication evidence
+below. The historical source datasets were not mutated as a shortcut.
 
 Local regressions:
 
 ```bash
 node deployment/amazon-quick-enterprise-dashboard/test-amazon-quick-dashboard.js
+node deployment/amazon-quick-enterprise-dashboard/test-quick-publication-plan.mjs
+node deployment/amazon-quick-enterprise-dashboard/test-quick-insights.mjs
 PGLITE_MODULE_PATH=/path/to/pglite/dist/index.js \
   node deployment/amazon-quick-enterprise-dashboard/test-normalized-output-sql.js
 ```
@@ -131,7 +148,7 @@ curl --retry 10 --retry-connrefused --retry-delay 1 -i http://127.0.0.1:3000/rea
    `analytics_iteration_comparability_v1` to the Research quality sheet.
 4. Save recoverable dataset, analysis and published-dashboard definitions.
    Stage the governed datasets, run a **FULL SPICE refresh**, and author the
-   five sheets using `quick-publication-definition.mjs`. Preserve the existing
+   six sheets using `quick-publication-definition.mjs`. Preserve the existing
    dashboard identity and embedding integration. Inspect the candidate version
    before a separate verified publication operation; an API update is not a
    publication or live QA sign-off.
@@ -155,7 +172,8 @@ embedding.
 ## Governed authoring and publication
 
 `quick-publication-plan.mjs` supplies offline request and guard helpers;
-`quick-publication-definition.mjs` builds the five-sheet candidate. They are
+`quick-publication-definition.mjs` builds the six-sheet candidate using
+`quick-insight-catalog.mjs`. They are
 authoring specifications, not evidence that a cloud change is complete. Keep
 the verified import-only Data Prep graphs and their column IDs, and retain the
 map dataset's latitude/longitude geographic tags. Complex transforms require
@@ -193,6 +211,13 @@ version 3 during staging. Disable underlying/detail exports, retain the
 Admin/Super Admin application restriction, and verify the existing authenticated
 embed after publication. No IAM, sharing or public-embedding change is implied.
 
+For an insight-only revision, `prepare-quick-insights.mjs PREVIOUS_STAGED_BUNDLE
+NEW_OUTPUT_JSON` reuses the existing verified staging bindings and writes a new
+offline candidate. It creates no datasets and refuses to overwrite its output.
+This preparation is not AWS API validation, a data refresh or publication.
+Measurement notes are split into bounded text boxes because Quick grid elements
+allow at most 21 rows; local validation also checks that limit.
+
 Filter scope is deliberately sheet-specific:
 
 - Leadership and demographic sheets use the respondent-level evidence dataset
@@ -206,6 +231,8 @@ Filter scope is deliberately sheet-specific:
 - Quality totals are whole-Campaign and support Program/Campaign. The separate
   comparability registry source has no Program column: its table is controlled
   by Campaign only until an explicitly verified Program mapping is added.
+- Measurement guide contains static measurement notes. Added charts do not
+  extend fieldwork totals to demographic, Mandal, Iteration or Run scope.
 
 The quality view's legacy `sampling_design` and `weighting_status` constants
 must not be presented as actual declarations. The registry provides actual
@@ -343,9 +370,54 @@ The executor rejects updates to datasets referenced by the published dashboard
 and updates outside the reviewed candidate/account before any mutation. Never
 relax validation or publish merely to clear a readback error.
 
-On 2026-10-09 the reviewed Steps 1–4 analysis and all six staged SPICE ingestions
+Historical checkpoint — on 2026-10-09 the reviewed Steps 1–4 analysis and all six staged SPICE ingestions
 passed. The existing dashboard remains on published version 3: unpublished
 versions 4 and 5 reported successful builds, but their definition exports
 retained old dataset declarations and column errors. The explicit-template
 publication route did not resolve that mismatch. Keep the reviewed draft and
-metadata receipts for diagnosis; publication and Step 5 are not complete.
+metadata receipts for diagnosis; publication was blocked at that checkpoint,
+and Step 5 had not been started.
+On 2026-10-10 the enhanced working analysis compiled successfully with six
+sheets, 41 visuals and zero AWS errors. Its saved definition matched the reviewed
+candidate after narrowly reviewed service serialization and three explicitly
+accepted UI settings (responsive demographic canvas, interactive/responsive new
+sheet defaults, and analysis-only AUTO query execution). API updates dropped
+click highlighting; it was restored through Analysis Settings and its exact
+saved value verified. The historical-alias API experiment (unpublished version
+6) still retained stale definition bindings and column errors; it was not
+published. A separate unshared validation dashboard then compiled the reviewed
+definition with all six bindings and zero errors. Its complete definition passed
+the same semantic readback gate before the existing dashboard was replaced
+through the console from the verified analysis.
+
+The existing dashboard is now on published version 7: six sheets, 41 visuals,
+all six intended staged datasets, zero definition errors, and unchanged access
+permissions/link-sharing configuration. Version 3 and durable metadata backups
+remain available for rollback. A live sparse 50+ filter test withheld cells;
+filters were restored afterward. A chart's “How it’s measured” menu action
+opened Measurement guide successfully. This publication reused the 9 October
+SPICE ingestions; it is not a fresh survey-data refresh or Step 5 completion.
+The unshared diagnostic dashboard `psephology-insights-validation-20261010`
+remains retained and is not wired into the platform.
+
+`validateServiceNormalizedPublicationReadback` is an explicit alternative for
+the documented, path-specific serialization review; the publication executor
+still uses the strict comparator. Unknown differences, Options, nonempty
+settings, safeguards, bindings and actions remain gated. Do not use it to ignore
+a missing highlighting configuration or a new UI setting.
+
+`prepareConsoleNamespacedCandidate` prepares an offline expectation for the
+console's sheet/visual ID prefixes, using only typed references, an explicit
+dashboard ID and a reversible whole-candidate proof. It never strips arbitrary
+prefixes from a cloud export or relaxes formula, filter, dataset, option, palette
+or action validation. The API publication executor remains strict and unchanged.
+`test-console-quick-readback.mjs` checks this mapping, content-tampering rejection
+and, when saved artifacts are present, the exact published version 7 readback.
+
+`remap-historical-quick-identifiers.mjs --candidate INPUT --backup BACKUP --out NEW`
+prepares an offline, draft-only identifier experiment. It derives three aliases
+from the saved historical ARN mappings, retains all six current dataset ARNs,
+proves inverse whole-bundle identity and refuses overwrite. It performs no AWS
+operations or publication. It is a diagnostic hypothesis, not a guaranteed fix.
+Analysis-only AUTO is allowed explicitly; QueryExecutionOptions is not a
+DashboardVersionDefinition field and is rejected in dashboard requests.

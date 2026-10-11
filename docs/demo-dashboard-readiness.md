@@ -8,10 +8,13 @@ No synthetic responses are mixed with captured survey evidence.
 
 ## Report-to-source coverage
 
-This is a source-code audit as of 9 October 2026, not a declaration that every
-deployed agent version has returned these fields. The current local Quick
-authoring definition covers five sheets and 31 visuals. Its replacement is
-unpublished; the existing published dashboard remains version 3.
+This is a source-code audit updated on 11 October 2026, not a declaration that
+every deployed agent version has returned these fields. The reviewed Quick
+dashboard was published on 10 October as version 7: six sheets, 41 visuals and
+six intended staged dataset bindings, with zero AWS definition errors. Full
+definition checks and live chart/filter tests passed; permissions and link
+sharing are unchanged. The sixth sheet holds on-demand measurement guidance.
+These assets reuse the 9 October SPICE imports, not a fresh survey-data refresh.
 
 | Report | Collection source | Reporting status and interpretation |
 | --- | --- | --- |
@@ -71,10 +74,20 @@ For each intended report:
 
 ## Current outstanding work
 
-The Quick working analysis has been reviewed, but candidate dashboard versions
-4/5 have definition-readback errors/stale dataset bindings. Keep version 3 live
-until the replacement passes verification. Sparse values are not the cause or
-an acceptable substitute for resolving this technical publication gate.
+The Quick publication gate is resolved. Unpublished API versions 4–6 failed
+definition readback and were not published. An unshared isolated validation
+dashboard passed full checks; console replacement from the verified analysis
+then published version 7 to the original dashboard identity. Version 3 remains
+recoverable, and the diagnostic dashboard is retained privately, outside the
+platform embedding integration. Sparse values were not treated as a substitute
+for resolving technical errors.
+
+Release work remaining after the cloud publication: commit/deploy the native
+dashboard simplification, verify the authenticated in-platform embed and role
+access for that release, and retain final deployment/baseline evidence. Refresh
+SPICE if newer survey evidence must be presented. Keep actual sentiment review
+and missing historical methodology declarations visible; do not infer sign-off
+or invent declarations from code tests.
 
 Development/expected-change Quick reporting, personal-leader assessment and
 generalized candidate/party-qualified measures are not end-to-end certified by

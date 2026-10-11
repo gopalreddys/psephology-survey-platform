@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import {
   PARTY_COLORS, SENTIMENT_COLORS, REPORTING_VIEWS, REQUIRED_SHEETS, reportingSelect,
-  enterpriseEvidenceSelect, minimumCellFilter, visualPartitionColumns, uniquePersonWindowExpression, partyPalette, applyPartyColors,
+  enterpriseEvidenceSelect, minimumCellFilter, privacyPartitionColumns, uniquePersonWindowExpression, partyPalette, applyPartyColors,
   sentimentPalette, applySentimentColors,
-  datasetUpdateRequest, validatePublicationCandidate, validatePublicationReadback, executePublication, quickInputColumns, stagedDatasetRequest
+  datasetUpdateRequest, validatePublicationCandidate, validatePublicationReadback, validateServiceNormalizedPublicationReadback,
+  executePublication, quickInputColumns, stagedDatasetRequest
 } from "./quick-publication-plan.mjs";
 import { buildGovernedDefinition, quickTextBoxContent } from "./quick-publication-definition.mjs";
 
@@ -186,8 +187,88 @@ optionsFixture.Options = structuredClone(savedOptions);
 const optionsCandidate = buildGovernedDefinition({ bindings, existingDefinition: optionsFixture });
 assert.deepEqual(optionsCandidate.definition.Options, savedOptions, "Saved insight, action and exclusion options are preserved exactly");
 assert.deepEqual(optionsFixture.Options, savedOptions, "Saved backup options are not mutated");
+const serviceReadback = { ResourceStatus: "UPDATE_SUCCESSFUL", Errors: [], Definition: structuredClone(optionsCandidate.definition) };
+serviceReadback.Definition.ParameterDeclarations = [];
+for (const field of serviceReadback.Definition.CalculatedFields) {
+  if (field.Expression.startsWith("distinctCountOver(") && field.Expression.endsWith(", PRE_AGG)")) field.Expression = field.Expression.replaceAll("{gender}", "gender");
+}
+for (const group of serviceReadback.Definition.FilterGroups) for (const filter of group.Filters) {
+  if (filter.NumericRangeFilter) filter.NumericRangeFilter.IncludeMaximum = false;
+}
+for (const sheet of serviceReadback.Definition.Sheets) {
+  sheet.ContentType = "INTERACTIVE";
+  for (const control of sheet.FilterControls) control.Dropdown.DisplayOptions = { SelectAllOptions: { Visibility: "VISIBLE" } };
+  if (sheet.FilterControls.length === 0) delete sheet.FilterControls;
+  for (const box of sheet.TextBoxes) box.Content = box.Content.replace("<text-box>", "<text-box>\n  ").replace("</text-box>", "\n</text-box>");
+  for (const union of sheet.Visuals) {
+    const [kind, visual] = Object.entries(union)[0];
+    const chart = visual.ChartConfiguration;
+    if (["HeatMapVisual", "BarChartVisual", "PieChartVisual", "KPIVisual", "TableVisual"].includes(kind)) chart.SortConfiguration = {};
+    if (["HeatMapVisual", "BarChartVisual", "PieChartVisual", "KPIVisual"].includes(kind)) visual.ColumnHierarchies = [];
+    if (["HeatMapVisual", "BarChartVisual", "PieChartVisual"].includes(kind) && chart.DataLabels) chart.DataLabels.Overlap = "DISABLE_OVERLAP";
+    if (kind === "KPIVisual") { chart.FieldWells.TargetValues = []; chart.FieldWells.TrendGroups = []; }
+    if (kind === "BarChartVisual" && !chart.FieldWells.BarChartAggregatedFieldWells.Colors) chart.FieldWells.BarChartAggregatedFieldWells.Colors = [];
+    if (kind === "PieChartVisual") chart.DonutOptions = { ArcOptions: { ArcThickness: "WHOLE" } };
+  }
+}
+// AWS may reorder declarations/calculations/filter groups, not arrays within
+// the visual or layout. Compare these identity collections independently.
+for (const field of ["DataSetIdentifierDeclarations", "CalculatedFields", "FilterGroups", "Sheets"]) serviceReadback.Definition[field].reverse();
+const serviceReadbackBefore = structuredClone(serviceReadback);
+const optionsCandidateBefore = structuredClone(optionsCandidate);
+assert.equal(validatePublicationReadback(serviceReadback, optionsCandidate).valid, false, "The original strict gate is not implicitly loosened");
+assert.equal(validateServiceNormalizedPublicationReadback(serviceReadback, optionsCandidate).valid, true,
+  JSON.stringify(validateServiceNormalizedPublicationReadback(serviceReadback, optionsCandidate).errors));
+assert.deepEqual(serviceReadback, serviceReadbackBefore, "Comparison does not mutate the service readback");
+assert.deepEqual(optionsCandidate, optionsCandidateBefore, "Comparison does not mutate the reviewed candidate");
+const serviceVisual = (definition, visualId) => Object.values(definition.Sheets.flatMap((sheet) => sheet.Visuals).find((union) => Object.values(union)[0].VisualId === visualId))[0];
+const serviceSheet = (definition, sheetId) => definition.Sheets.find((sheet) => sheet.SheetId === sheetId);
+const serviceRange = (definition) => definition.FilterGroups.flatMap((group) => group.Filters).find((filter) => filter.NumericRangeFilter).NumericRangeFilter;
+const serviceGenderGuard = optionsCandidate.guards.find((guard) => guard.visualId === "quick-gender-party");
+for (const [label, mutate] of [
+  ["missing highlight default", (readback) => { delete readback.Definition.Options.CustomActionDefaults; }],
+  ["disabled highlighting", (readback) => { readback.Definition.Options.CustomActionDefaults.highlightOperation.Trigger = "NONE"; }],
+  ["hover highlighting", (readback) => { readback.Definition.Options.CustomActionDefaults.highlightOperation.Trigger = "DATA_POINT_HOVER"; }],
+  ["different insight option", (readback) => { readback.Definition.Options.QBusinessInsightsStatus = "ENABLED"; }],
+  ["excluded dataset dropped", (readback) => { readback.Definition.Options.ExcludedDataSetArns = []; }],
+  ["stale binding", (readback) => { readback.Definition.DataSetIdentifierDeclarations[0].DataSetArn = "arn:old-dataset"; }],
+  ["extra declaration field", (readback) => { readback.Definition.DataSetIdentifierDeclarations[0].UnreviewedDefault = {}; }],
+  ["service error", (readback) => { readback.Errors = [{ Type: "COLUMN_NOT_FOUND" }]; }],
+  ["unsuccessful status", (readback) => { readback.ResourceStatus = "UPDATE_IN_PROGRESS"; }],
+  ["minimum four", (readback) => { serviceRange(readback.Definition).RangeMinimum.StaticValue = 4; }],
+  ["nulls included", (readback) => { serviceRange(readback.Definition).NullOption = "ALL_VALUES"; }],
+  ["maximum is present", (readback) => { serviceRange(readback.Definition).RangeMaximum = { StaticValue: 100 }; }],
+  ["unsupported maximum default", (readback) => { serviceRange(readback.Definition).IncludeMaximum = true; }],
+  ["pre-filter denominator", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression.replace("PRE_AGG", "PRE_FILTER"); }],
+  ["observations replace people", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression.replace("{quick_party_respondent_key}", "{evidence_key}"); }],
+  ["partition dropped", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = "distinctCountOver({quick_party_respondent_key}, [gender], PRE_AGG)"; }],
+  ["unreviewed expression syntax", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression.replace("{party_salience}", "party_salience"); }],
+  ["disabled action", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].Status = "DISABLED"; }],
+  ["menu action becomes click", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].Trigger = "DATA_POINT_CLICK"; }],
+  ["wrong guide destination", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].ActionOperations[0].NavigationOperation.LocalNavigationConfiguration.TargetSheetId = "sheet-0"; }],
+  ["additional action operation", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].ActionOperations.push({ URLOperation: { URLTemplate: "https://example.com", URLTarget: "NEW_TAB" } }); }],
+  ["tooltip base aggregation", (readback) => { serviceVisual(readback.Definition, "quick-party-count").ChartConfiguration.Tooltip.FieldBasedTooltip.TooltipFields.find((field) => field.ColumnTooltipItem).ColumnTooltipItem.Aggregation.NumericalAggregationFunction.SimpleNumericalAggregation = "SUM"; }],
+  ["tooltip base column", (readback) => { serviceVisual(readback.Definition, "quick-party-count").ChartConfiguration.Tooltip.FieldBasedTooltip.TooltipFields.find((field) => field.ColumnTooltipItem).ColumnTooltipItem.Column.ColumnName = "respondent_key"; }],
+  ["changed layout", (readback) => { serviceSheet(readback.Definition, "sheet-0").Layouts[0].Configuration.GridLayout.Elements[0].RowSpan++; }],
+  ["changed text", (readback) => { serviceSheet(readback.Definition, "sheet-0").TextBoxes[0].Content = serviceSheet(readback.Definition, "sheet-0").TextBoxes[0].Content.replace('<inline font-size="16px">', '<inline font-size="16px"> '); }],
+  ["changed overlap", (readback) => { serviceVisual(readback.Definition, "quick-party-count").ChartConfiguration.DataLabels.Overlap = "ENABLE_OVERLAP"; }],
+  ["real sort", (readback) => { serviceVisual(readback.Definition, "quick-party-count").ChartConfiguration.SortConfiguration = { CategorySort: [{ FieldSort: { FieldId: "quick-party-count-category", Direction: "DESC" } }] }; }],
+  ["real hierarchy", (readback) => { serviceVisual(readback.Definition, "quick-party-count").ColumnHierarchies = [{ ExplicitHierarchy: { HierarchyId: "unexpected", Columns: [] } }]; }],
+  ["different donut", (readback) => { serviceVisual(readback.Definition, "quick-incumbent-count").ChartConfiguration.DonutOptions.ArcOptions.ArcThickness = "SMALL"; }],
+  ["real parameters", (readback) => { readback.Definition.ParameterDeclarations = [{ StringParameterDeclaration: { ParameterValueType: "SINGLE_VALUED", Name: "unexpected" } }]; }],
+  ["unknown empty top-level field", (readback) => { readback.Definition.UnreviewedDefault = []; }],
+  ["unknown empty nested field", (readback) => { serviceVisual(readback.Definition, "quick-party-count").ChartConfiguration.UnreviewedDefault = {}; }],
+  ["filter selection default changed", (readback) => { serviceSheet(readback.Definition, "sheet-0").FilterControls[0].Dropdown.DisplayOptions.SelectAllOptions.Visibility = "HIDDEN"; }]
+]) {
+  const tampered = structuredClone(serviceReadback); mutate(tampered);
+  assert.equal(validateServiceNormalizedPublicationReadback(tampered, optionsCandidate).valid, false, `Reviewed normalization cannot hide ${label}`);
+}
+const missingHighlight = structuredClone(serviceReadback);
+delete missingHighlight.Definition.Options.CustomActionDefaults;
+assert.equal(validateServiceNormalizedPublicationReadback(missingHighlight, optionsCandidate, { reviewedMissingClickHighlightDefault: true }).valid, false,
+  "There is no policy flag that equates missing highlighting with selection");
 assert.equal(validatePublicationCandidate(generated).valid, true, JSON.stringify(validatePublicationCandidate(generated).errors));
-assert.equal(generated.definition.Sheets.length, 5);
+assert.equal(generated.definition.Sheets.length, 6);
 assert.equal(generated.definition.Sheets[0].SheetId, "sheet-0");
 const generatedGroupIds = generated.definition.FilterGroups.map((group) => group.FilterGroupId);
 const generatedFilterIds = generated.definition.FilterGroups.flatMap((group) => group.Filters.map((filter) => Object.values(filter)[0].FilterId));
@@ -233,7 +314,7 @@ assert.equal(incumbentGuard.aggregation, "NONE", "Filter operates on the numeric
 const enterpriseGuards = generated.guards.filter((guard) => guard.datasetIdentifier === "enterprise");
 for (const guard of enterpriseGuards) {
   const visual = generated.definition.Sheets.find((sheet) => sheet.SheetId === guard.sheetId).Visuals.map((union) => Object.values(union)[0]).find((item) => item.VisualId === guard.visualId);
-  assert.deepEqual(guard.partitions, visualPartitionColumns(visual, "enterprise"));
+  assert.deepEqual(guard.partitions, privacyPartitionColumns(visual, "enterprise"));
   assert.equal(generated.definition.CalculatedFields.find((field) => field.Name === guard.column).Expression, uniquePersonWindowExpression(guard.sourceKey, guard.partitions));
   assert.match(guard.sourceKey, /respondent_key$/);
   assert.doesNotMatch(guard.sourceKey, /evidence|answer_key/);
@@ -319,7 +400,7 @@ for (const sheet of generated.definition.Sheets) {
   }
   const disclosureLayout = layout.find((item) => item.ElementType === "TEXT_BOX");
   assert.equal(disclosureLayout.ColumnSpan, 36);
-  assert.ok(disclosureLayout.RowSpan >= 10, "The complete methodology/privacy disclosure must be visible, not clipped to one line");
+  assert.ok(disclosureLayout.RowSpan >= (sheet.Name === "Measurement guide" ? 12 : 4), "Compact context and on-demand definitions both need legible space");
   assert.equal(disclosureLayout.RowIndex, Math.ceil(sheet.FilterControls.length / 3) * 4);
   for (const union of sheet.Visuals) {
     const kind = Object.keys(union)[0], visual = union[kind];
@@ -332,7 +413,7 @@ for (const sheet of generated.definition.Sheets) {
     const vertical = current.RowIndex < other.RowIndex + other.RowSpan && other.RowIndex < current.RowIndex + current.RowSpan;
     assert.equal(horizontal && vertical, false, `Layout collision: ${current.ElementId}/${other.ElementId}`);
   }
-  assert.match(sheet.TextBoxes[0].Content, /HUMAN_REVIEW_PENDING/);
+  assert.match(sheet.TextBoxes[0].Content, sheet.Name === "Measurement guide" ? /HUMAN_REVIEW_PENDING/ : /human review pending/);
   assert.match(sheet.TextBoxes[0].Content, /^<text-box><inline font-size="16px">[\s\S]+<\/inline><\/text-box>$/);
   assert.doesNotMatch(sheet.TextBoxes[0].Content, /<text>|<p>/);
   for (const visual of sheet.Visuals) if (visual.PieChartVisual) assert.equal(visual.PieChartVisual.ChartConfiguration.DataLabels.LabelContent, "VALUE");
@@ -353,7 +434,7 @@ if (existsSync(liveBackupFile)) {
   const liveBindings = bindings.map((binding) => ({ ...binding, ...(binding.role === "enterprise" ? { arn: live.enterprise.DataSet.Arn } : binding.role === "geographic" ? { arn: live.geographic.DataSet.Arn } : {}) }));
   liveBindings.push({ role: "map", identifier: "map", view: REPORTING_VIEWS.geographic, arn: live.map.DataSet.Arn });
   const liveCandidate = buildGovernedDefinition({ bindings: liveBindings, existingDefinition: live.dashboard.Definition, mapVisual: actualMap });
-  assert.deepEqual(liveCandidate.definition.Options, live.dashboard.Definition.Options, "Saved live security/action options survive the five-sheet rebuild");
+  assert.deepEqual(liveCandidate.definition.Options, live.dashboard.Definition.Options, "Saved live security/action options survive the insight rebuild");
   assert.equal(validatePublicationCandidate(liveCandidate).valid, true);
   assertNonMissingMapFilter(liveCandidate, "quick-mandal-party-map", "map");
   assertNonMissingMapFilter(liveCandidate, "quick-map-evidence-table", "geographic");
@@ -365,6 +446,67 @@ if (existsSync(liveBackupFile)) {
   assert.equal(wells.Values[0].NumericalMeasureField.Column.DataSetIdentifier, "map");
   assert.equal(map.ChartConfiguration.Tooltip.FieldBasedTooltip, undefined, "Old tooltip field IDs cannot refer to replaced value/color wells");
   assert.equal(map.ChartConfiguration.VisualPalette.ColorMap.find((entry) => entry.Element.FieldValue === "BRS").Color, PARTY_COLORS.BRS);
+  const mapReadback = { ResourceStatus: "UPDATE_SUCCESSFUL", Errors: [], Definition: structuredClone(liveCandidate.definition) };
+  const readbackMap = serviceVisual(mapReadback.Definition, map.VisualId);
+  readbackMap.ChartConfiguration.Tooltip.FieldBasedTooltip = { AggregationVisibility: "HIDDEN", TooltipTitleType: "NONE", TooltipFields: [] };
+  assert.equal(validateServiceNormalizedPublicationReadback(mapReadback, liveCandidate).valid, true, "The exact dormant empty map tooltip is equivalent only while BASIC remains selected");
+  for (const mutate of [
+    (tooltip) => { tooltip.SelectedTooltipType = "DETAILED"; },
+    (tooltip) => { tooltip.FieldBasedTooltip.TooltipFields.push({ FieldTooltipItem: { FieldId: "unexpected", Visibility: "VISIBLE" } }); },
+    (tooltip) => { tooltip.FieldBasedTooltip.TooltipTitleType = "PRIMARY_VALUE"; },
+    (tooltip) => { tooltip.FieldBasedTooltip.UnreviewedDefault = {}; }
+  ]) {
+    const tampered = structuredClone(mapReadback); mutate(serviceVisual(tampered.Definition, map.VisualId).ChartConfiguration.Tooltip);
+    assert.equal(validateServiceNormalizedPublicationReadback(tampered, liveCandidate).valid, false, "Map tooltip normalization is not a general tooltip exception");
+  }
   console.log("Saved live map definition regression passed (read-only local snapshot; no cloud operations).");
+}
+const reviewedBundleFile = new URL("../../../artifacts/quick-insights-candidate-20261010-raw-partitions.json", import.meta.url);
+const reviewedReadbackFile = new URL("../../../artifacts/quick-insights-analysis-readback-20261010.json", import.meta.url);
+if (existsSync(reviewedBundleFile) && existsSync(reviewedReadbackFile)) {
+  const bundle = JSON.parse(readFileSync(reviewedBundleFile, "utf8"));
+  const reviewedCandidate = { ...bundle.manifest, definition: bundle.analysisRequest.Definition };
+  const originalReadback = JSON.parse(readFileSync(reviewedReadbackFile, "utf8"));
+  assert.deepEqual(validateServiceNormalizedPublicationReadback(originalReadback, reviewedCandidate), {
+    valid: false, errors: ["Dashboard options differ from the reviewed candidate"]
+  }, "The original live export is blocked solely by meaningful missing click highlighting after narrow normalization");
+  // Synthetic test setup only, not evidence of a downloaded cloud correction.
+  const syntheticRestoredReadback = structuredClone(originalReadback);
+  syntheticRestoredReadback.Definition.Options.CustomActionDefaults = structuredClone(reviewedCandidate.definition.Options.CustomActionDefaults);
+  assert.equal(validateServiceNormalizedPublicationReadback(syntheticRestoredReadback, reviewedCandidate).valid, true,
+    JSON.stringify(validateServiceNormalizedPublicationReadback(syntheticRestoredReadback, reviewedCandidate).errors));
+  assert.equal(validatePublicationReadback(syntheticRestoredReadback, reviewedCandidate).valid, false, "The original executor gate remains strict even for a semantically matching service export");
+  console.log("Original cloud export regression passed; restored highlighting fixture is synthetic (offline only).");
+}
+const friendlyBundleFile = new URL("../../../artifacts/quick-insights-candidate-20261010-friendly-axes.json", import.meta.url);
+const finalReadbackFile = new URL("../../../artifacts/quick-insights-final-readback-20261010.json", import.meta.url);
+if (existsSync(friendlyBundleFile) && existsSync(finalReadbackFile)) {
+  const bundle = JSON.parse(readFileSync(friendlyBundleFile, "utf8"));
+  const finalReadback = JSON.parse(readFileSync(finalReadbackFile, "utf8"));
+  const approvedUiCandidate = { ...bundle.manifest, definition: structuredClone(bundle.analysisRequest.Definition) };
+  assert.deepEqual(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate), {
+    valid: false, errors: ["Dashboard Sheets contents differ from the reviewed candidate", "Dashboard AnalysisDefaults contents differ from the reviewed candidate", "Dashboard QueryExecutionOptions contents differ from the reviewed candidate"]
+  }, "UI-generated settings are not silently treated as normalizing defaults");
+  // Individually reviewed settings are explicit expected values, not removals
+  // from the comparator. AUTO is analysis-only, never a dashboard API field.
+  const responsiveCanvas = { ScreenCanvasSizeOptions: { ResizeOption: "RESPONSIVE" } };
+  approvedUiCandidate.definition.AnalysisDefaults = { DefaultNewSheetConfiguration: {
+    InteractiveLayoutConfiguration: { Grid: { CanvasSizeOptions: structuredClone(responsiveCanvas) } }, SheetContentType: "INTERACTIVE"
+  } };
+  approvedUiCandidate.definition.QueryExecutionOptions = { QueryExecutionMode: "AUTO" };
+  approvedUiCandidate.definition.Sheets.find((sheet) => sheet.Name === "Demographic pulse").Layouts[0].Configuration.GridLayout.CanvasSizeOptions = structuredClone(responsiveCanvas);
+  assert.equal(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate).valid, true,
+    JSON.stringify(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate).errors));
+  for (const mutate of [
+    (definition) => { definition.QueryExecutionOptions.QueryExecutionMode = "MANUAL"; },
+    (definition) => { definition.AnalysisDefaults.DefaultNewSheetConfiguration.SheetContentType = "PAGINATED"; },
+    (definition) => { definition.AnalysisDefaults.DefaultNewSheetConfiguration.InteractiveLayoutConfiguration.Grid.CanvasSizeOptions.ScreenCanvasSizeOptions.ResizeOption = "FIXED"; },
+    (definition) => { definition.Sheets.find((sheet) => sheet.Name === "Demographic pulse").Layouts[0].Configuration.GridLayout.CanvasSizeOptions.ScreenCanvasSizeOptions.ResizeOption = "FIXED"; },
+    (definition) => { delete definition.Options.CustomActionDefaults; }
+  ]) {
+    const tampered = structuredClone(finalReadback); mutate(tampered.Definition);
+    assert.equal(validateServiceNormalizedPublicationReadback(tampered, approvedUiCandidate).valid, false, "Approved UI settings and restored highlighting are still exact");
+  }
+  console.log("Final analysis export matches only with explicit reviewed UI settings; meaningful setting tampering is rejected.");
 }
 console.log("Quick publication plan regressions passed (offline only; no cloud operations).");

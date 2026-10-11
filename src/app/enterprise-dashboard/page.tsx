@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
-  AlertTriangle, ArrowLeft, BarChart3, LoaderCircle,
+  AlertTriangle, ArrowLeft, BarChart3, ChevronDown, Info, LoaderCircle,
   RefreshCw, ShieldCheck
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -119,6 +119,27 @@ type ResearchQualityResponse = {
     comparisonReasons: string[];
   }>;
 };
+
+function MeasurementNote({ label = "How it’s measured", children }: {
+  label?: string;
+  children: ReactNode;
+}) {
+  return <details className={styles.measurementNote}>
+    <summary><Info size={14} aria-hidden="true" />{label}</summary>
+    <div className={styles.noteContent}>{children}</div>
+  </details>;
+}
+
+function SupportingPanel({ title, status, children }: {
+  title: string;
+  status: string;
+  children: ReactNode;
+}) {
+  return <details className={styles.supportingPanel}>
+    <summary><span>{title}</span><small>{status}</small><ChevronDown size={17} aria-hidden="true" /></summary>
+    <div className={styles.supportingContent}>{children}</div>
+  </details>;
+}
 
 type DesignForm = {
   targetPopulation: string;
@@ -402,94 +423,65 @@ export default function EnterpriseDashboardPage() {
     <header className={styles.hero}>
       <div>
         <Link href="/"><ArrowLeft size={16} />Back to Dashboard</Link>
-        <span>AMAZON QUICK · ENTERPRISE PREVIEW</span>
-        <h1>Leadership research intelligence</h1>
-        <p>Interactive, aggregate survey reporting across geography, constituency, Iteration, age, gender, party, candidate and leadership variables.</p>
+        <span>LEADERSHIP DASHBOARD</span>
+        <h1>Survey outcomes</h1>
+        <p>Explore the results by campaign, Iteration and voter segment.</p>
       </div>
       <button type="button" onClick={function () { void loadDashboard(); }} disabled={loading || registryBusy}>
-        <RefreshCw size={16} className={loading ? styles.spin : ""} />Refresh session
+        <RefreshCw size={16} className={loading ? styles.spin : ""} />Refresh
       </button>
     </header>
 
-    <section className={styles.governance}>
-      <ShieldCheck size={18} />
-      <div><strong>Governed leadership view · human review pending</strong><span>Aggregate output variables only. No names, phone numbers, EPIC IDs, transcripts or raw JSON enter the BI dataset. Sentiment uses explicit labels, not a validated NLP model. Existing Amazon Quick assets require a separate dataset refresh and label review before presentation.</span></div>
+    <section className={styles.resultContext} aria-label="Survey interpretation status">
+      <div className={styles.contextLabels}>
+        <strong>DEMO · TEST SURVEY EVIDENCE</strong>
+        <span>Unweighted</span><span>Human review pending</span>
+      </div>
+      <MeasurementNote label="About these results">
+        <h2>Reporting capability preview, not population findings</h2>
+        <p>This preview uses a small test cohort. It is not an electorate estimate or a vote forecast. Unavailable values are not replaced with zero, and minimum-person safeguards are not lowered to fill a chart.</p>
+        <dl>
+          <div><dt>Not recorded</dt><dd>The required answer or demographic field was not captured.</dd></div>
+          <div><dt>Withheld</dt><dd>Fewer than five distinct people qualify for the displayed cell after filters, or its answered base is below the minimum.</dd></div>
+          <div><dt>Not comparable</dt><dd>Survey waves do not pass the recorded-method and questionnaire checks.</dd></div>
+          <div><dt>Technical error</dt><dd>A dataset, visual or session cannot load. This still needs a fix; it is not a missing survey value.</dd></div>
+        </dl>
+        <p>Aggregate output variables only. No names, phone numbers, EPIC IDs, transcripts or raw JSON enter the BI dataset. Sentiment uses explicit labels, not a validated NLP model. Existing Amazon Quick assets require a separate dataset refresh and label review before presentation.</p>
+        <p>Before an actual survey, each report needs a matching question, committed agent extraction field, captured callback output and tested reporting mapping. A chart design alone does not confirm that collection contract.</p>
+      </MeasurementNote>
     </section>
 
-    <section className={styles.demoNotice} aria-labelledby="demo-reporting-title">
-      <div><span>DEMO · TEST SURVEY EVIDENCE</span><h2 id="demo-reporting-title">Reporting capability preview, not population findings</h2></div>
-      <p>This preview demonstrates the reporting structure using a small test cohort. Empty charts are acceptable: we do not invent responses, replace unavailable values with zero, or lower minimum-person safeguards to populate a visual.</p>
-      <dl>
-        <div><dt>Not recorded</dt><dd>The required answer or demographic field was not captured.</dd></div>
-        <div><dt>Withheld</dt><dd>Fewer than five distinct people qualify for the displayed cell after filters.</dd></div>
-        <div><dt>Not comparable</dt><dd>Survey waves do not pass the recorded-method and questionnaire checks.</dd></div>
-        <div><dt>Technical error</dt><dd>A dataset, visual or session cannot load. This still needs a fix; it is not a missing survey value.</dd></div>
-      </dl>
-      <p>Before an actual survey, each report needs a matching question, committed agent extraction field, captured callback output and tested reporting mapping. A chart design alone does not confirm that collection contract.</p>
-    </section>
+    {qualityError && <section className={styles.qualityUnavailable} role="alert"><AlertTriangle size={16} /><span>Survey quality unavailable: {qualityError}</span></section>}
 
-    {quality && <section className={styles.qualityPanel}>
-      <div className={styles.qualityHead}>
-        <div><span>PSEPHOLOGY QUALITY GATE</span><h2>Evidence strength before interpretation</h2><p>Separates fieldwork and data quality from findings. Operational coverage is not model validation, statistical confidence or electoral probability.</p><p>{quality.scope?.label || "Whole portfolio; independent of embedded Amazon Quick filters"}. {quality.scope?.runScope || "All Runs within each Iteration"}.</p></div>
-        <strong data-status={quality.portfolio.evidenceQualityStatus}>{quality.portfolio.evidenceQualityStatus}</strong>
-      </div>
-      <div className={styles.qualityMetrics}>
-        <article><span>Respondent evidence</span><strong>{quality.portfolio.respondentBase}</strong><small>latest connected response per voter and Iteration</small></article>
-        <article><span>Connection rate</span><strong>{quality.portfolio.connectionRatePct}%</strong><small>{quality.portfolio.connectedCalls} of {quality.portfolio.callAttempts} attempts connected</small></article>
-        <article><span>Structured outputs</span><strong>{quality.portfolio.responseCoveragePct}%</strong><small>{quality.portfolio.responsesCaptured} of {quality.portfolio.connectedCalls} connected calls retaining analyzable variables</small></article>
-        <article><span>Demographic completeness</span><strong>{quality.portfolio.demographicCompletenessPct}%</strong><small>base: {quality.portfolio.demographicFieldBase} gender, age band and Mandal field slots</small></article>
-      </div>
-      <div className={styles.methodStrip}>
-        <div><span>Sampling</span><strong>{quality.methodology.samplingDesign}</strong></div>
-        <div><span>Weighting</span><strong>{quality.methodology.weightingStatus}</strong></div>
-        <div><span>Precision</span><strong>{quality.methodology.statisticalPrecision}</strong></div>
-      </div>
-      <div className={styles.interpretationGuard}>
-        <ShieldCheck size={17} />
-        <p><strong>Permitted:</strong> {quality.methodology.permittedUse}. <strong>Do not use for:</strong> {quality.methodology.prohibitedUse}. {quality.methodology.comparisonRule}.</p>
-      </div>
-      <div className={styles.interpretationGuard} role="note">
-        <AlertTriangle size={17} />
-        <p><strong>Human review pending.</strong> {quality.sentimentValidation.message} Rules: {quality.sentimentValidation.normalizationVersion} · <span title={quality.sentimentValidation.ruleHash}>hash {quality.sentimentValidation.ruleHash.slice(0, 12)}</span>.<br />{quality.methodology.sentimentConstruct}. {quality.methodology.candidateConstruct}. {quality.methodology.sentimentCoding}.<br />{quality.methodology.assetPublication}.</p>
-      </div>
-      {quality.movement.length > 0 && <div className={styles.movementPreview}>
-        <p>{quality.scope?.movementScope || "Full Iterations, not filtered by age, gender or Mandal"}. Use the native Dashboard or Analysis filters for segment-specific comparisons.</p>
-        <div><span>DESCRIPTIVE ITERATION MOVEMENT</span><strong>Fixed-construct wave signals · human review pending</strong></div>
-        <div className={styles.movementGrid}>{quality.movement.slice(-6).map((item) => <article key={item.iterationId}>
-          <span>{item.campaignName}</span>
-          <strong>Iteration {item.iterationNumber}</strong>
-          <small>Respondent evidence n={item.respondentBase}</small>
-          <small>{item.sentimentConstruct}</small>
-          <small>Positive incumbent assessment {item.positiveSentimentPct === null ? "withheld" : `${item.positiveSentimentPct}%`} · answer base n={item.sentimentAnswerBase}</small>
-          <small>Sentiment: {item.sentimentMissingCount} missing · {item.sentimentUncodedCount} uncoded · {item.sentimentCantSayCount} can’t say · {item.sentimentRefusedCount} declined</small>
-          <small>{item.candidateConstruct}</small>
-          <small>Positive candidate impression {item.candidatePositivePct === null ? "withheld" : `${item.candidatePositivePct}%`} · answer base n={item.candidateAnswerBase}</small>
-          <small>Candidate: {item.candidateMissingCount} missing · {item.candidateUncodedCount} uncoded · {item.candidateCantSayCount} can’t say · {item.candidateRefusedCount} declined</small>
-          <small>{item.percentageBasis}</small>
-          <em>{item.comparisonBasis === "BASELINE" ? "Baseline" : item.comparisonBasis !== "COMPARABLE" ? `Movement suppressed · ${item.comparisonReasons.join(" · ")}` : item.positiveSentimentChangePct === null ? "Sentiment movement unavailable: at least five answers are required in each adjacent wave" : `${item.positiveSentimentChangePct >= 0 ? "+" : ""}${item.positiveSentimentChangePct} pp vs previous · answer bases ${item.previousSentimentAnswerBase} → ${item.sentimentAnswerBase}`}</em>
-        </article>)}</div>
-      </div>}
-    </section>}
-
-    {quality && <ResearchDesignRegistry data={quality} onSaved={loadDashboard} onBusy={setRegistryBusy} />}
-
-    {qualityError && <section className={styles.qualityUnavailable}><AlertTriangle size={16} /><span>Research quality gate unavailable: {qualityError}</span></section>}
-
-    {user && <TelanganaBoundaryMap />}
-
-    {loading && <section className={styles.loading}><LoaderCircle size={24} className={styles.spin} />Creating a secure Amazon Quick Sight session…</section>}
+    {loading && <section className={styles.loading} role="status"><LoaderCircle size={24} className={styles.spin} />Loading survey reports…</section>}
 
     {!loading && error && <>
       <FeedbackMessage tone="error" message={error} />
       <section className={styles.setup}>
-        <div className={styles.setupHead}><AlertTriangle size={22} /><div><span>ENTERPRISE PREVIEW SETUP</span><h2>Dashboard session unavailable</h2><p>The reporting concept is listed below. This session error is separate from sparse survey answers; check the published dashboard, authorized Reader and allowed domain before presentation.</p></div></div>
-        <div className={styles.previewGrid}>{PREVIEW_SECTIONS.map(([title, detail]) => <article key={title}><BarChart3 size={17} /><div><strong>{title}</strong><span>{detail}</span></div></article>)}</div>
-        <Link href="/">View the native program dashboard preview <BarChart3 size={16} /></Link>
+        <div className={styles.setupHead}><AlertTriangle size={22} /><div><h2>Dashboard session unavailable</h2><p>The reports could not load. Refresh to try again; this is not a missing survey answer.</p></div></div>
+        <MeasurementNote label="Troubleshooting and available reports">
+          <p>Check the published dashboard, authorized Reader and allowed domain before presentation.</p>
+          <div className={styles.previewGrid}>{PREVIEW_SECTIONS.map(([title, detail]) => <article key={title}><BarChart3 size={17} /><div><strong>{title}</strong><span>{detail}</span></div></article>)}</div>
+        </MeasurementNote>
+        <Link href="/">Open the native dashboard <BarChart3 size={16} /></Link>
       </section>
     </>}
 
-    {!loading && dashboard?.embedUrl && <section className={styles.framePanel}>
-      <div><span>LIVE AMAZON QUICK SIGHT</span><strong>{dashboard.mode === "ONE_CLICK" ? "Authenticated one-click embed" : "Short-lived registered-user session"}</strong><small>Filters and exports remain inside the governed BI experience.</small></div>
+    {!loading && dashboard?.embedUrl && <section className={styles.framePanel} aria-label="Survey reports">
+      <div className={styles.frameHeader}>
+        <div><h2>Survey results</h2><span>Amazon Quick</span></div>
+        <MeasurementNote label="Report definitions">
+          <dl>
+            <div><dt>Party mentions</dt><dd>Recorded party salience: attention or unaided mentions, not vote intention or party support.</dd></div>
+            <div><dt>Candidate impression</dt><dd>Recorded positive, neutral, negative or mixed impressions. Candidate awareness and criterion fit are separate measures.</dd></div>
+            <div><dt>Incumbent assessment</dt><dd>Recorded assessment of incumbent performance, not overall political sentiment or named-leader approval.</dd></div>
+            <div><dt>Issues and priorities</dt><dd>Issues raised and groups perceived as responsive to them, where those answers were captured.</dd></div>
+            <div><dt>Wave comparisons</dt><dd>Changes appear only for comparable adjacent Iterations with sufficient answered bases. A baseline is not a trend.</dd></div>
+            <div><dt>Segments and percentages</dt><dd>Check the base shown on each chart after filters. Missing, uncoded, can’t say and declined answers remain distinct. Age bands are 18–29, 30–39, 40–49 and 50+.</dd></div>
+          </dl>
+          <p>Use the report tabs and filters inside Amazon Quick. The fieldwork summary and supporting comparisons below have their own portfolio scope and do not follow these filters.</p>
+        </MeasurementNote>
+      </div>
       <iframe
         title="Psephology enterprise leadership dashboard"
         src={dashboard.embedUrl}
@@ -497,5 +489,65 @@ export default function EnterpriseDashboardPage() {
         referrerPolicy="strict-origin-when-cross-origin"
       />
     </section>}
+
+    {quality && <section className={styles.qualityPanel}>
+      <div className={styles.qualityHead}>
+        <div><h2>Fieldwork summary</h2><p>Whole portfolio · all Runs · independent of report filters</p></div>
+        <strong data-status={quality.portfolio.evidenceQualityStatus}>{quality.portfolio.evidenceQualityStatus === "LIMITED" ? "Limited evidence" : quality.portfolio.evidenceQualityStatus === "MIXED" ? "Mixed coverage" : "Directional evidence"}</strong>
+      </div>
+      <div className={styles.qualityMetrics}>
+        <article><span>Response records</span><strong>{quality.portfolio.respondentBase}</strong><small>Person–Iteration records</small><MeasurementNote><p>Latest connected response per voter and Iteration. One person participating in multiple Iterations can count more than once; this is not a unique-person count for the portfolio.</p></MeasurementNote></article>
+        <article><span>Calls connected</span><strong>{quality.portfolio.connectionRatePct}%</strong><small>{quality.portfolio.connectedCalls} / {quality.portfolio.callAttempts} attempts</small><MeasurementNote><p>Connected calls divided by all call attempts, including retries. This is an operational connection rate, not a standardized survey response rate.</p></MeasurementNote></article>
+        <article><span>Answers captured</span><strong>{quality.portfolio.responseCoveragePct}%</strong><small>{quality.portfolio.responsesCaptured} / {quality.portfolio.connectedCalls} connected calls</small><MeasurementNote><p>Connected calls retaining structured output variables divided by all connected calls. A retained response set does not mean every question was answered or validated.</p></MeasurementNote></article>
+        <article><span>Profile completeness</span><strong>{quality.portfolio.demographicCompletenessPct}%</strong><small>Age · gender · Mandal</small><MeasurementNote><p>Recorded gender, age band and Mandal fields divided by {quality.portfolio.demographicFieldBase} available field slots (three per response record). This measures profile completeness, not population representativeness.</p></MeasurementNote></article>
+      </div>
+
+      <MeasurementNote label="Quality checks and interpretation limits">
+        <p>{quality.scope?.label || "Whole portfolio; independent of embedded Amazon Quick filters"}. {quality.scope?.runScope || "All Runs within each Iteration"}. Quality status describes fieldwork and completeness, not model validation, statistical confidence or electoral probability.</p>
+        <div className={styles.methodStrip}>
+          <div><span>Sampling</span><strong>{quality.methodology.samplingDesign}</strong></div>
+          <div><span>Weighting</span><strong>{quality.methodology.weightingStatus}</strong></div>
+          <div><span>Precision</span><strong>{quality.methodology.statisticalPrecision}</strong></div>
+        </div>
+        <div className={styles.interpretationGuard}>
+          <ShieldCheck size={17} />
+          <p><strong>Permitted:</strong> {quality.methodology.permittedUse}. <strong>Do not use for:</strong> {quality.methodology.prohibitedUse}. {quality.methodology.comparisonRule}.</p>
+        </div>
+        <div className={styles.interpretationGuard} role="note">
+          <AlertTriangle size={17} />
+          <p><strong>Human review pending.</strong> {quality.sentimentValidation.message} Rules: {quality.sentimentValidation.normalizationVersion} · <span title={quality.sentimentValidation.ruleHash}>hash {quality.sentimentValidation.ruleHash.slice(0, 12)}</span>.<br />{quality.methodology.sentimentConstruct}. {quality.methodology.candidateConstruct}. {quality.methodology.sentimentCoding}.<br />{quality.methodology.assetPublication}.</p>
+        </div>
+      </MeasurementNote>
+    </section>}
+
+    {quality && quality.movement.length > 0 && <SupportingPanel title="Iteration comparisons" status="Full Iterations · not filtered by age, gender or Mandal">
+      <div className={styles.movementPreview}>
+        <p>{quality.scope?.movementScope || "Full Iterations, not filtered by age, gender or Mandal"}. Human review pending.</p>
+        <div className={styles.movementGrid}>{quality.movement.slice(-6).map((item) => <article key={item.iterationId}>
+          <span>{item.campaignName}</span>
+          <strong>Iteration {item.iterationNumber}</strong>
+          <small>Response records: {item.respondentBase}</small>
+          <small>Incumbent positive: {item.positiveSentimentPct === null ? "Withheld" : `${item.positiveSentimentPct}%`} · n={item.sentimentAnswerBase}</small>
+          <small>Candidate positive: {item.candidatePositivePct === null ? "Withheld" : `${item.candidatePositivePct}%`} · n={item.candidateAnswerBase}</small>
+          <em>{item.comparisonBasis === "BASELINE" ? "Baseline — no earlier comparison" : item.comparisonBasis === "SUPPRESSED" ? "Withheld — too few response records" : item.comparisonBasis !== "COMPARABLE" ? "Not comparable — change withheld" : item.positiveSentimentChangePct === null ? "Change unavailable" : `${item.positiveSentimentChangePct >= 0 ? "+" : ""}${item.positiveSentimentChangePct} pp incumbent positive vs previous`}</em>
+          <MeasurementNote label="Measures and comparison checks">
+            <small>{item.sentimentConstruct}</small>
+            <small>Positive incumbent assessment {item.positiveSentimentPct === null ? "withheld" : `${item.positiveSentimentPct}%`} · answer base n={item.sentimentAnswerBase}</small>
+            <small>Sentiment: {item.sentimentMissingCount} missing · {item.sentimentUncodedCount} uncoded · {item.sentimentCantSayCount} can’t say · {item.sentimentRefusedCount} declined</small>
+            <small>{item.candidateConstruct}</small>
+            <small>Positive candidate impression {item.candidatePositivePct === null ? "withheld" : `${item.candidatePositivePct}%`} · answer base n={item.candidateAnswerBase}</small>
+            <small>Candidate: {item.candidateMissingCount} missing · {item.candidateUncodedCount} uncoded · {item.candidateCantSayCount} can’t say · {item.candidateRefusedCount} declined</small>
+            <small>{item.percentageBasis}</small>
+            <em>{item.comparisonBasis === "BASELINE" ? "Baseline" : item.comparisonBasis === "SUPPRESSED" ? "Movement withheld: at least five response records are required in each adjacent wave" : item.comparisonBasis !== "COMPARABLE" ? `Movement suppressed · ${item.comparisonReasons.join(" · ")}` : item.positiveSentimentChangePct === null ? "Sentiment movement unavailable: at least five answers are required in each adjacent wave" : `${item.positiveSentimentChangePct >= 0 ? "+" : ""}${item.positiveSentimentChangePct} pp vs previous · answer bases ${item.previousSentimentAnswerBase} → ${item.sentimentAnswerBase}`}</em>
+          </MeasurementNote>
+        </article>)}</div>
+      </div>
+    </SupportingPanel>}
+
+    {quality && user && ["SUPER_ADMIN", "ADMIN"].includes(user.role.code) && <SupportingPanel title="Research setup" status={`${quality.researchDesigns.filter((item) => item.declarationComplete).length}/${quality.researchDesigns.length} methodology declarations recorded`}>
+      <ResearchDesignRegistry data={quality} onSaved={loadDashboard} onBusy={setRegistryBusy} />
+    </SupportingPanel>}
+
+    {user && <SupportingPanel title="Boundary explorer" status="Geographic reference · not a survey heatmap"><TelanganaBoundaryMap /></SupportingPanel>}
   </main></AppShell>;
 }

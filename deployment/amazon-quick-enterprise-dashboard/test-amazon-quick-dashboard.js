@@ -106,7 +106,7 @@ assert.match(enterpriseUi, /expectedRevision: editingRevision/);
 assert.match(enterpriseUi, /I confirm these entries describe the actual fieldwork/);
 assert.match(routes, /independent of embedded Amazon Quick filters/);
 assert.match(routes, /positive_sentiment_pct === null \? null/);
-assert.equal(blueprint.sheets.length, 5);
+assert.equal(blueprint.sheets.length, 6);
 assert.equal(blueprint.qualityDatasetView, "analytics_research_quality_v1");
 assert.equal(blueprint.datasetView, "analytics_research_enterprise_v2");
 assert.equal(blueprint.movementDatasetView, "analytics_iteration_movement_v2");

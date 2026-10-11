@@ -57,6 +57,8 @@ const bundle = {
     VersionDescription: `Governed Steps 1–4, distinct-person suppression, fixed constructs and party colors · ${releaseTag}`
   },
   manifest: { bindings, guards: candidate.guards, answerBaseGuards: candidate.answerBaseGuards,
+    answerStatusFilters: candidate.answerStatusFilters, percentagePolicies: candidate.percentagePolicies,
+    measurementNotes: candidate.measurementNotes,
     filterScopes: candidate.filterScopes, coloredVisuals: candidate.coloredVisuals,
     sentimentColoredVisuals: candidate.sentimentColoredVisuals,
     reviewedVisualIds: candidate.reviewedVisualIds, validation }

@@ -1,5 +1,6 @@
-import { applyPartyColors, applySentimentColors, minimumCellFilter, visualPartitionColumns, uniquePersonWindowExpression, REPORTING_VIEWS, REQUIRED_SHEETS, VALIDATION_DISCLOSURE } from "./quick-publication-plan.mjs";
+import { applyPartyColors, applySentimentColors, minimumCellFilter, privacyPartitionColumns, PRIVACY_DISPLAY_DIMENSIONS, uniquePersonWindowExpression, REPORTING_VIEWS, REQUIRED_SHEETS, VALIDATION_DISCLOSURE } from "./quick-publication-plan.mjs";
 import { getSentimentValidation } from "../output-variable-standardization/output-normalization.repository.js";
+import { ADDITIONAL_INSIGHT_VISUALS, EXISTING_VISUAL_NOTES } from "./quick-insight-catalog.mjs";
 
 const text = (value) => ({ Visibility: "VISIBLE", FormatText: { PlainText: value } });
 const dim = (dataset, column, id) => ({ CategoricalDimensionField: { FieldId: id, Column: { DataSetIdentifier: dataset, ColumnName: column } } });
@@ -11,6 +12,41 @@ const number = (dataset, column, id, aggregation = "MIN") => ({ NumericalMeasure
 const numericDim = (dataset, column, id) => ({ NumericalDimensionField: { FieldId: id, Column: { DataSetIdentifier: dataset, ColumnName: column } } });
 const wrap = (kind, id, title, subtitle, config) => ({ [kind]: { VisualId: id, Title: text(title), Subtitle: text(subtitle), ChartConfiguration: config } });
 const escape = (value) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+// Display labels reference the existing field wells; neither grouping nor
+// aggregation changes when internal source names are replaced on the axes.
+const barAxisLabels = (wells) => {
+  const dimensions = {
+    age_band: "Age group", gender: "Gender", mandal_name: "Mandal",
+    constituency_name: "Constituency", iteration_number: "Iteration",
+    campaign_name: "Campaign", quick_iteration_label: "Iteration",
+    party_salience: "Party attention", party_leadership: "Party perceived as responsive",
+    candidate_sentiment: "Candidate impression", respondent_sentiment: "Incumbent assessment",
+    issue_priority: "Issue priority", quick_issue_answer_state: "Answer status"
+  };
+  const measures = {
+    evidence_key: "Survey observations",
+    quick_incumbent_answer_key: "Recorded answers", quick_candidate_answer_key: "Recorded answers",
+    quick_party_answer_key: "Recorded answers", quick_leadership_answer_key: "Recorded answers",
+    quick_issue_answer_key: "Recorded answers",
+    positive_sentiment_change_pct: "Change (percentage points)",
+    candidate_positive_change_pct: "Change (percentage points)"
+  };
+  const options = (fields, labels) => ({
+    Visibility: "VISIBLE",
+    AxisLabelOptions: fields.map((field) => {
+      const reference = Object.values(field)[0];
+      const CustomLabel = labels[reference.Column.ColumnName];
+      if (!CustomLabel) throw new Error(`Friendly bar-axis label required for ${reference.Column.ColumnName}`);
+      return { ApplyTo: { Column: structuredClone(reference.Column), FieldId: reference.FieldId }, CustomLabel };
+    })
+  });
+  return {
+    CategoryLabelOptions: options(wells.Category, dimensions),
+    ...(wells.Colors?.length ? { ColorLabelOptions: options(wells.Colors, dimensions) } : {}),
+    ValueLabelOptions: options(wells.Values, measures)
+  };
+};
 
 // Markup is verified from AWS's exported CUDOS definition, not HTML grammar:
 // https://github.com/aws-samples/aws-cudos-framework-deployment/blob/main/dashboards/cudos/CUDOS-v5-definition.yaml
@@ -44,7 +80,7 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
     if (!result.CalculatedFields.some((item) => item.DataSetIdentifier === dataset && item.Name === name)) result.CalculatedFields.push({ DataSetIdentifier: dataset, Name: name, Expression: expression });
     return name;
   };
-  for (const dataset of new Set([role.enterprise, role.geographic, role.movement, role.comparability, role.map].filter(Boolean))) calc(dataset, "quick_iteration_label", "concat('Iteration ', toString({iteration_number}))");
+  for (const dataset of new Set([role.enterprise, role.geographic, role.movement, role.comparability, role.map].filter(Boolean))) calc(dataset, "quick_iteration_label", PRIVACY_DISPLAY_DIMENSIONS.quick_iteration_label.expression);
   calc(enterprise, "quick_party_label", "{party_salience}");
   calc(role.geographic, "quick_party_label", "{party_name}");
   if (role.map) calc(role.map, "quick_party_label", "{party_name}");
@@ -63,6 +99,13 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
   calc(enterprise, "quick_party_gender_base", "distinctCountOver({quick_party_answer_key}, [{gender}], PRE_AGG)");
   calc(enterprise, "quick_party_mandal_base", "distinctCountOver({quick_party_answer_key}, [{mandal_name}], PRE_AGG)");
   calc(enterprise, "quick_incumbent_constituency_base", "distinctCountOver({quick_incumbent_answer_key}, [{constituency_name}], PRE_AGG)");
+  for (const insight of ADDITIONAL_INSIGHT_VISUALS) if (insight.answerBase) {
+    const kind = insight.id.includes("candidate") ? "candidate" : insight.id.includes("incumbent") ? "incumbent" : "issue";
+    calc(enterprise, insight.answerBase, `distinctCountOver({quick_${kind}_answer_key}, [${insight.answerBasePartitions.map((column) => `{${column}}`).join(", ")}], PRE_AGG)`);
+  }
+  // AWS's ifelse examples support double-quoted string literals. This avoids
+  // depending on an undocumented single-quote escape for the Can't say label.
+  calc(enterprise, "quick_issue_answer_state", PRIVACY_DISPLAY_DIMENSIONS.quick_issue_answer_state.expression);
   for (const [name, numerator, denominator, multiplier] of [
     ["quick_connection_pct", "connected_calls", "call_attempts", 100],
     ["quick_response_pct", "responses_captured", "connected_calls", 100],
@@ -76,7 +119,7 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
     if (dataset === enterprise) {
       const sourceKey = column;
       const visual = sheet.Visuals.map((union) => Object.values(union)[0]).find((item) => item.VisualId === id);
-      const partitions = visualPartitionColumns(visual, dataset);
+      const partitions = privacyPartitionColumns(visual, dataset);
       column = calc(dataset, `quick_cell_${id.replaceAll("-", "_")}_${sourceKey}_count`, uniquePersonWindowExpression(sourceKey, partitions));
       aggregation = "NONE";
       sourceMetadata = { sourceKey, partitions, stage: "PRE_AGG_AFTER_DIMENSION_FILTERS" };
@@ -105,7 +148,9 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
     answerStatusFilters.push({ sheetId: sheet.SheetId, visualId, dataset, column: "party_answer_status", excluded: ["MISSING"] });
   };
   const add = (sheet, visual, { guardColumn, dataset = enterprise, aggregation, answerBase } = {}) => {
-    const body = Object.values(visual)[0]; sheet.Visuals.push(visual); reviewedVisualIds.push(body.VisualId);
+    const body = Object.values(visual)[0];
+    if (visual.BarChartVisual) Object.assign(body.ChartConfiguration, barAxisLabels(body.ChartConfiguration.FieldWells.BarChartAggregatedFieldWells));
+    sheet.Visuals.push(visual); reviewedVisualIds.push(body.VisualId);
     addGuard(sheet, body.VisualId, dataset, guardColumn ?? (dataset === enterprise ? "respondent_key" : "respondent_base"), aggregation ?? (dataset === enterprise ? "DISTINCT_COUNT" : "MIN"));
     if (answerBase) addAnswerBaseGuard(sheet, body.VisualId, answerBase);
     return body.VisualId;
@@ -149,7 +194,14 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
     if (index === 2) explanation += " Maps show recorded party-salience counts only; not vote choice. Demo Serilingampally centroids are approximate, not verified Mandal boundaries. Geographic rollups do not support age or gender filters.";
     if (index === 3) explanation += " Full consecutive Iterations/all Runs only. No demographic/Mandal/party filtering. Changes require declared comparable frozen instruments and at least five non-missing answers in both waves. Null is unavailable, not zero; no waves are bridged.";
     if (index === 4) explanation += " Whole-Campaign operational fieldwork. Rates use summed numerators and denominators. Method declarations below are actual recorded registry values, not applied survey weights. Evidence status is not confidence or representativeness. No age, gender, Mandal or Iteration filtering for campaign totals. The Program control filters fieldwork only; the registry view has no Program field. Select Campaign to scope both fieldwork and the methodology registry.";
-    sheet.TextBoxes.push({ SheetTextBoxId: `${sheet.SheetId}-research-disclosure`, Content: quickTextBoxContent(explanation) });
+    // Keep the report canvas readable; full definitions remain available on a
+    // separate native sheet even when a chart has no selectable data point.
+    const context = index === 3 ? "Full Iterations · comparable adjacent waves only · unavailable is not zero"
+      : index === 4 ? "Whole-Campaign fieldwork · Campaign scopes both tables; Program scopes fieldwork only"
+      : index === 2 ? "Recorded counts · approximate demo map · no age/gender map filters"
+      : "Recorded survey counts · select an Iteration for one wave";
+    sheet.TextBoxes.push({ SheetTextBoxId: `${sheet.SheetId}-research-disclosure`, Content: quickTextBoxContent(`Demo · unweighted · human review pending · cells need 5 distinct people. ${context}. Definitions: Measurement guide.`) });
+    sheet.measurementExplanation = explanation;
     result.Sheets.push(sheet);
   }
   const [leadership, demographic, geographic, movement, quality] = result.Sheets;
@@ -221,6 +273,53 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
   });
   quality.Visuals.push(gateTable); reviewedVisualIds.push("quick-comparability-registry");
 
+  const byRole = { leadership, demographic, geographic };
+  for (const insight of ADDITIONAL_INSIGHT_VISUALS) {
+    const sheet = byRole[insight.sheetRole];
+    if (insight.kind === "BAR") bar(sheet, insight.id, insight.title, insight.statusLabels ? "quick_issue_answer_state" : insight.category, insight.color, insight.answerBase);
+    else if (insight.kind === "HEAT") heat(sheet, insight.id, insight.title, insight.row, insight.column, insight.answerBase);
+    else throw new Error(`Unsupported insight kind: ${insight.kind}`);
+  }
+  const guide = { SheetId: existingDefinition.Sheets.find((sheet) => sheet.Name === "Measurement guide")?.SheetId ?? "quick-measurement-guide", Name: "Measurement guide", Visuals: [], FilterControls: [], TextBoxes: [] };
+  const insightNotes = Object.fromEntries(ADDITIONAL_INSIGHT_VISUALS.map((insight) => [insight.id, insight]));
+  const measurementNotes = [];
+  const guideBox = (id, value) => {
+    // Quick grid cells may span at most 21 rows. Split long definitions into
+    // bounded boxes instead of clipping a multi-page paragraph into one cell.
+    let remaining = value, part = 0;
+    while (remaining.length) {
+      const end = remaining.length > 1150 ? remaining.lastIndexOf(" ", 1150) : remaining.length;
+      if (end <= 0) throw new Error(`Unbreakable measurement note: ${id}`);
+      guide.TextBoxes.push({ SheetTextBoxId: `${guide.SheetId}-${id}-${part++}`, Content: quickTextBoxContent(remaining.slice(0, end)) });
+      remaining = remaining.slice(end).trimStart();
+    }
+  };
+  guideBox("intro", `How to read these reports. ${VALIDATION_DISCLOSURE} Rules/implementation SHA-256: ${sentimentValidation.ruleHash}. Charts show recorded evidence, not voting predictions or individual profiles. Unknown, missing, withheld and not comparable are different states. Use the report tabs to return; filters remain sheet-specific.`);
+  for (const sheet of result.Sheets) {
+    guideBox(`${sheet.SheetId}-scope`, `${sheet.Name}. ${sheet.measurementExplanation}`);
+    for (const union of sheet.Visuals) {
+      const [kind, visual] = Object.entries(union)[0];
+      const note = insightNotes[visual.VisualId] ?? EXISTING_VISUAL_NOTES[visual.VisualId];
+      if (!note) throw new Error(`Measurement note required for ${visual.VisualId}`);
+      visual.Title = text(note.title); visual.Subtitle = text(note.subtitle);
+      guideBox(visual.VisualId, `${note.title}: ${note.measurementNote}`);
+      measurementNotes.push({ visualId: visual.VisualId, sheetId: sheet.SheetId, title: note.title, measurementNote: note.measurementNote });
+      // Local navigation only; never a URL action, individual-level filter or
+      // change to the saved left-click highlight operation/security options.
+      visual.Actions = [{ CustomActionId: `${visual.VisualId}-measurement-note`, Name: "How it’s measured", Status: "ENABLED", Trigger: "DATA_POINT_MENU", ActionOperations: [{ NavigationOperation: { LocalNavigationConfiguration: { TargetSheetId: guide.SheetId } } }] }];
+      if (["BarChartVisual", "PieChartVisual", "HeatMapVisual"].includes(kind) && visual.ChartConfiguration.FieldWells) {
+        const valueId = `${visual.VisualId}-value`;
+        // Only generated fields are used; saved map tooltip IDs are not reused.
+        const fields = [{ FieldTooltipItem: { FieldId: valueId, Label: sheet === movement ? "Percentage-point change" : "Recorded response count", Visibility: "VISIBLE" } }];
+        const base = answerBaseGuards.find((item) => item.visualId === visual.VisualId);
+        if (base) fields.push({ ColumnTooltipItem: { Column: { DataSetIdentifier: enterprise, ColumnName: base.column }, Aggregation: { NumericalAggregationFunction: { SimpleNumericalAggregation: "MIN" } }, Label: "Full answered base · this row", Visibility: "VISIBLE" } });
+        visual.ChartConfiguration.Tooltip = { TooltipVisibility: "VISIBLE", SelectedTooltipType: "DETAILED", FieldBasedTooltip: { AggregationVisibility: "HIDDEN", TooltipTitleType: "PRIMARY_VALUE", TooltipFields: fields } };
+      }
+    }
+    delete sheet.measurementExplanation;
+  }
+  result.Sheets.push(guide);
+
   const controls = (sheet, dataset, columns, crossDataset = "SINGLE_DATASET", visualIds) => {
     for (const [column, title] of columns) {
       const id = `${sheet.SheetId}-${column}`;
@@ -247,7 +346,10 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
       elements.push({ ElementId: control.Dropdown.FilterControlId, ElementType: "FILTER_CONTROL", ColumnIndex: (index % 3) * 12, ColumnSpan: 12, RowIndex: Math.floor(index / 3) * 4, RowSpan: 4 });
     }
     row = Math.ceil(sheet.FilterControls.length / 3) * 4;
-    elements.push({ ElementId: sheet.TextBoxes[0].SheetTextBoxId, ElementType: "TEXT_BOX", ColumnIndex: 0, ColumnSpan: 36, RowIndex: row, RowSpan: 10 }); row += 10;
+    for (const box of sheet.TextBoxes) {
+      const height = sheet === guide ? Math.max(12, Math.ceil(box.Content.length / 100) + 8) : 4;
+      elements.push({ ElementId: box.SheetTextBoxId, ElementType: "TEXT_BOX", ColumnIndex: 0, ColumnSpan: 36, RowIndex: row, RowSpan: height }); row += height;
+    }
     let half = false, pendingHeight = 0;
     for (const union of sheet.Visuals) {
       const kind = Object.keys(union)[0], visual = union[kind];
@@ -261,5 +363,5 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
   }
   const sentiments = applySentimentColors(result);
   const colored = applyPartyColors(sentiments.definition);
-  return { definition: colored.definition, bindings, guards, answerBaseGuards, answerStatusFilters, percentagePolicies: [], reviewedVisualIds, filterScopes, coloredVisuals: colored.colored, sentimentColoredVisuals: sentiments.colored };
+  return { definition: colored.definition, bindings, guards, answerBaseGuards, answerStatusFilters, percentagePolicies: [], reviewedVisualIds, filterScopes, measurementNotes, coloredVisuals: colored.colored, sentimentColoredVisuals: sentiments.colored };
 }

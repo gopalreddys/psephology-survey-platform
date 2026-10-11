@@ -2,6 +2,15 @@
   "name": "Psephology Enterprise Leadership Dashboard",
   "provider": "Amazon Quick Sight",
   "definitionGenerator": "quick-publication-definition.mjs",
+  "insightCatalog": "quick-insight-catalog.mjs",
+  "presentation": {
+    "regularDashboard": "At-a-glance operational and survey summary",
+    "amazonQuick": "Exploratory aggregate comparisons, demographic profiles, geographic count-intensity views and qualified wave comparisons",
+    "captions": "Concise titles and units; full definitions on the Measurement guide sheet",
+    "measurementAccess": "Measurement guide tab always available; native data-point menu navigation when supported; count and full answered-base tooltips",
+    "additionalVisuals": 10,
+    "newSourceColumnsRequired": false
+  },
   "datasetView": "analytics_research_enterprise_v2",
   "qualityDatasetView": "analytics_research_quality_v1",
   "movementDatasetView": "analytics_iteration_movement_v2",
@@ -43,7 +52,8 @@
         { "type": "BAR", "title": "Recorded issue leadership", "dimension": "party_leadership", "measure": "distinct_count(quick_leadership_answer_key)", "answerStatus": "party_leadership_status", "answerBase": "quick_leadership_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" },
         { "type": "BAR", "title": "Recorded issue priorities", "dimension": "issue_priority", "measure": "distinct_count(quick_issue_answer_key)", "answerStatus": "issue_priority_status", "answerBase": "quick_issue_base", "excludeMissingFromMix": true },
         { "type": "KPI", "title": "Incumbent assessment · no response", "measure": "distinct_count(quick_incumbent_missing_key)", "privacyGuard": "distinct_count(quick_incumbent_missing_respondent_key) >= 5" },
-        { "type": "KPI", "title": "Candidate impression · no response", "measure": "distinct_count(quick_candidate_missing_key)", "privacyGuard": "distinct_count(quick_candidate_missing_respondent_key) >= 5" }
+        { "type": "KPI", "title": "Candidate impression · no response", "measure": "distinct_count(quick_candidate_missing_key)", "privacyGuard": "distinct_count(quick_candidate_missing_respondent_key) >= 5" },
+        { "type": "BAR", "title": "Issue answer coverage", "dimension": "quick_issue_answer_state", "sourceColumn": "issue_priority_status", "measure": "distinct_count(evidence_key)", "includeMissing": true, "privacyGuard": "distinct_count(respondent_key) >= 5 per answer state" }
       ]
     },
     {
@@ -53,7 +63,12 @@
         { "type": "BAR", "title": "Age bands · 18–29 / 30–39 / 40–49 / 50+", "dimension": "age_band", "measure": "distinct_count(evidence_key)", "privacyGuard": "distinct_count(respondent_key) >= 5 by age_band", "unknownAgeSeparate": true },
         { "type": "STACKED_BAR", "title": "Incumbent performance assessment by age", "dimension": "age_band", "color": "respondent_sentiment", "measure": "distinct_count(quick_incumbent_answer_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "quick_incumbent_age_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
         { "type": "DONUT", "title": "Gender composition", "dimension": "gender", "measure": "distinct_count(evidence_key)", "labels": "COUNTS_ONLY", "privacyGuard": "distinct_count(respondent_key) >= 5 by gender" },
-        { "type": "STACKED_BAR", "title": "Recorded party salience by gender", "dimension": "gender", "color": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_gender_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" }
+        { "type": "STACKED_BAR", "title": "Recorded party salience by gender", "dimension": "gender", "color": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_gender_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "colorConvention": "partyColors" },
+        { "type": "STACKED_BAR", "title": "Issue priorities by age", "dimension": "age_band", "color": "issue_priority", "measure": "distinct_count(quick_issue_answer_key)", "answerBase": "quick_issue_age_base" },
+        { "type": "STACKED_BAR", "title": "Issue priorities by gender", "dimension": "gender", "color": "issue_priority", "measure": "distinct_count(quick_issue_answer_key)", "answerBase": "quick_issue_gender_base" },
+        { "type": "STACKED_BAR", "title": "Candidate impression by age", "dimension": "age_band", "color": "candidate_sentiment", "measure": "distinct_count(quick_candidate_answer_key)", "answerBase": "quick_candidate_age_base", "sourceKeys": ["candidate_impression", "candidate_sentiment", "veeresh_impression"], "excludeMissingFromMix": true, "showMissingSeparately": true, "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "STACKED_BAR", "title": "Candidate impression by gender", "dimension": "gender", "color": "candidate_sentiment", "measure": "distinct_count(quick_candidate_answer_key)", "answerBase": "quick_candidate_gender_base", "sourceKeys": ["candidate_impression", "candidate_sentiment", "veeresh_impression"], "excludeMissingFromMix": true, "showMissingSeparately": true, "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "HEAT_TABLE", "title": "Who took part: age and gender", "rows": "age_band", "columns": "gender", "measure": "distinct_count(evidence_key)", "populationBenchmarkAvailable": false }
       ]
     },
     {
@@ -67,7 +82,11 @@
         { "type": "HEAT_TABLE", "title": "Mandal × recorded party salience · count intensity", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "party_salience", "measure": "distinct_count(quick_party_answer_key)", "answerStatus": "party_salience_status", "answerBase": "quick_party_mandal_base", "excludeMissingFromMix": true, "showMissingSeparately": true },
         { "type": "HEAT_TABLE", "title": "Constituency × incumbent assessment · count intensity", "datasetView": "analytics_research_enterprise_v2", "rows": "constituency_name", "columns": "respondent_sentiment", "measure": "distinct_count(quick_incumbent_answer_key)", "answerStatus": "respondent_sentiment_status", "answerBase": "quick_incumbent_constituency_base", "excludeMissingFromMix": true, "showMissingSeparately": true, "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
         { "type": "POINT_MAP", "title": "Mandal party-salience observations · demo centroids", "latitude": "latitude", "longitude": "longitude", "size": "sum(respondent_count)", "color": "party_name", "colorConvention": "partyColors", "filter": "party_name", "numericPartyStrengthDisplayed": false, "reuseVerifiedGeographicRoleTags": true },
-        { "type": "TABLE", "title": "Mandal map evidence · already-qualified rows", "dimensions": ["campaign_name", "iteration_number", "mandal_name", "party_name", "interpretation_label"], "measures": ["respondent_count"], "minimumQualifiedCell": 5 }
+        { "type": "TABLE", "title": "Mandal map evidence · already-qualified rows", "dimensions": ["campaign_name", "iteration_number", "mandal_name", "party_name", "interpretation_label"], "measures": ["respondent_count"], "minimumQualifiedCell": 5 },
+        { "type": "HEAT_TABLE", "title": "Issue priorities by Mandal", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "issue_priority", "measure": "distinct_count(quick_issue_answer_key)", "answerBase": "quick_issue_mandal_base" },
+        { "type": "HEAT_TABLE", "title": "Candidate impression by Mandal", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "candidate_sentiment", "measure": "distinct_count(quick_candidate_answer_key)", "answerBase": "quick_candidate_mandal_base", "sourceKeys": ["candidate_impression", "candidate_sentiment", "veeresh_impression"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "HEAT_TABLE", "title": "Incumbent assessment by Mandal", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "respondent_sentiment", "measure": "distinct_count(quick_incumbent_answer_key)", "answerBase": "quick_incumbent_mandal_base", "sourceKeys": ["incumbent_assessment"], "categories": ["Positive", "Neutral", "Negative", "Mixed", "Can't say", "Declined to answer", "Uncoded response"] },
+        { "type": "HEAT_TABLE", "title": "Survey coverage by Mandal and Iteration", "datasetView": "analytics_research_enterprise_v2", "rows": "mandal_name", "columns": "quick_iteration_label", "measure": "distinct_count(evidence_key)", "comparisonClaim": false }
       ]
     },
     {
@@ -99,6 +118,12 @@
         { "type": "TABLE", "title": "Campaign fieldwork and evidence qualification", "dimensions": ["campaign_name", "evidence_quality_status", "interpretation_label"], "measures": ["call_attempts", "connected_calls", "callbacks_received", "transcripts_captured", "responses_captured", "respondent_base"] },
         { "type": "TABLE", "title": "Recorded methodology and comparison gate", "datasetView": "analytics_iteration_comparability_v1", "dimensions": ["campaign_name", "iteration_number", "iteration_name", "sampling_method", "weighting_status", "fieldwork_mode", "quick_declaration_status", "comparison_status", "comparison_reasons"], "measures": [], "actualDeclarationsOnly": true }
       ]
+    },
+    {
+      "name": "Measurement guide",
+      "supportedFilters": [],
+      "visuals": [],
+      "content": "Full source-variable definitions, units, denominators, scope, missing/suppressed-state meaning and current validation status; no respondent data"
     }
   ],
   "governance": {
