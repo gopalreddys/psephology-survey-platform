@@ -27,6 +27,7 @@ import {
 import AppShell
   from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import QuestionnaireReportingContracts from "@/components/QuestionnaireReportingContracts";
 
 import {
   apiFetch
@@ -563,6 +564,12 @@ export default function QuestionnaireDetailPage() {
           />
 
         </section>
+
+
+        <QuestionnaireReportingContracts
+          key={`${questionnaireId}:${questionnaire.questions.length}`}
+          questionnaireId={questionnaireId}
+        />
 
 
         {showAdd && (

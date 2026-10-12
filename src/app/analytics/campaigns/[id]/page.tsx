@@ -7,6 +7,7 @@ import { Activity, AlertTriangle, ArrowLeft, FileQuestion, LoaderCircle, PhoneCa
 
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import ResearchReportingPanel from "@/components/ResearchReportingPanel";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./strategic.module.css";
@@ -286,6 +287,14 @@ export default function StrategicCampaignAnalyticsPage() {
 
   function resetSegments() { setGender(""); setAgeBand(""); setMandal(""); }
 
+  const researchReportQuery = new URLSearchParams();
+  if (iterationId) researchReportQuery.set("iterationId", iterationId);
+  if (runId) researchReportQuery.set("runId", runId);
+  if (gender) researchReportQuery.set("gender", gender);
+  if (ageBand) researchReportQuery.set("ageBand", ageBand);
+  if (mandal) researchReportQuery.set("mandal", mandal);
+  researchReportQuery.set("sentimentConstruct", sentimentConstruct);
+
   if (loading || (data && loadedScopeKey !== scopeKey && !error)) return <AppShell><main className={styles.loading}><LoaderCircle className={styles.spin} />Preparing decision analysis…</main></AppShell>;
 
   return (
@@ -308,6 +317,8 @@ export default function StrategicCampaignAnalyticsPage() {
           <label><span>Sentiment construct</span><select value={sentimentConstruct} onChange={(event) => setSentimentConstruct(event.target.value)}>{(data.options.sentimentConstructs || [{ key: "candidate_impression", label: "Candidate impression" }]).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
           <button type="button" onClick={resetSegments} disabled={!gender && !ageBand && !mandal}>Clear</button>
         </section>
+
+        <ResearchReportingPanel key={`${scopeKey}:${data.generatedAt}`} campaignId={campaignId} query={researchReportQuery.toString()} />
 
         <section className={scopeStyles.comparability} aria-label="Iteration movement comparability">
           <div><ShieldAlert size={19} /><strong>{data.comparison?.status === "COMPARABLE" && data.comparison.movements.length ? "Consecutive-wave movement available" : "Consecutive-wave movement withheld"}</strong></div>
