@@ -137,9 +137,12 @@ function transcriptPresent(value) {
   return value.some((turn) => {
     if (typeof turn === 'string') return Boolean(turn.trim());
     const item = object(turn); if (!item) return false;
-    const content = item.content ?? item.text ?? item.message ?? item.transcript ?? item.utterance;
-    return typeof content === 'string' ? Boolean(content.trim()) : Array.isArray(content)
-      && content.some((block) => typeof block === 'string' ? Boolean(block.trim()) : typeof block?.text === 'string' && Boolean(block.text.trim()));
+    // Sarvam retains bilingual turn text as en_text/indic_text. A blank or
+    // unsupported primary field must not mask a separate supported text field.
+    const providerText = [item.en_text, item.indic_text].some((content) => typeof content === 'string' && Boolean(content.trim()));
+    const contents = [item.content, item.text, item.message, item.transcript, item.utterance];
+    return providerText || contents.some((content) => typeof content === 'string' ? Boolean(content.trim()) : Array.isArray(content)
+      && content.some((block) => typeof block === 'string' ? Boolean(block.trim()) : typeof block?.text === 'string' && Boolean(block.text.trim())));
   });
 }
 

@@ -84,8 +84,18 @@ function frozenInstrument(snapshot, questionnaireId) {
 }
 function transcriptTurn(value) {
   if (typeof value === 'string' && value.trim()) return { speaker: 'Turn', text: value };
-  const item = object(value), raw = item.content ?? item.text ?? item.message ?? item.transcript ?? item.utterance;
-  const text = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw.map((block) => typeof block === 'string' ? block : object(block).text || '').join(' ') : '';
+  const item = object(value);
+  let text = '';
+  // Sarvam retains native and English text on the same turn. Display one
+  // supported nonblank representation, never duplicate bilingual turns or
+  // stringify unknown metadata into transcript evidence.
+  for (const key of ['content', 'text', 'message', 'transcript', 'utterance', 'indic_text', 'en_text']) {
+    const raw = item[key];
+    const candidate = typeof raw === 'string' ? raw : Array.isArray(raw) && !['indic_text', 'en_text'].includes(key)
+      ? raw.map((block) => typeof block === 'string' ? block : typeof object(block).text === 'string' ? block.text : '')
+        .filter((block) => block.trim()).join(' ') : '';
+    if (candidate.trim()) { text = candidate; break; }
+  }
   if (!text.trim()) return null;
   return { speaker: String(item.role || item.speaker || item.participant || item.source || 'Turn').slice(0, 80), text };
 }

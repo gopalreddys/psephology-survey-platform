@@ -56,6 +56,43 @@ if (process.argv[1]?.endsWith('test-call-quality-review.mjs')) {
   assert.deepEqual(evidence.evidence.outputs, { issue_priority: 'Public transport' });
   assert.ok(!JSON.stringify(evidence.evidence).includes('PRIVATE_SOURCE_NAME'));
   assert.ok(!JSON.stringify(evidence.evidence).includes('9000000000'));
+  const sarvamTranscript = [
+    { role: 'agent', en_text: 'Which service should improve?', indic_text: 'ఏ సేవ మెరుగుపడాలి?' },
+    { role: 'user', en_text: 'Public transport.', indic_text: 'ప్రజా రవాణా.' },
+    { role: 'user', en_text: 'Transport access.', indic_text: ' ' }
+  ];
+  const sarvam = evaluateEvidence({ ...sourceRow, interaction_transcript: sarvamTranscript }, ruleHash);
+  assert.equal(sarvam.reviewable, true); assert.equal(sarvam.sourceReady, true);
+  assert.deepEqual(sarvam.evidence.transcript, [
+    { speaker: 'agent', text: 'ఏ సేవ మెరుగుపడాలి?' },
+    { speaker: 'user', text: 'ప్రజా రవాణా.' },
+    { speaker: 'user', text: 'Transport access.' }
+  ], 'Native text is preferred; a translated copy does not become another turn');
+  assert.equal(sarvam.evidence.transcript.length, sarvamTranscript.length);
+  assert.notEqual(evaluateEvidence({ ...sourceRow, interaction_transcript: sarvamTranscript.map((turn, index) =>
+    index === 0 ? { ...turn, en_text: 'Changed retained translation.' } : turn) }, ruleHash).evidenceFingerprint,
+  sarvam.evidenceFingerprint, 'The unused bilingual representation still binds the raw evidence fingerprint');
+  assert.deepEqual(evaluateEvidence({ ...sourceRow, interaction_transcript: [
+    { role: 'user', content: '', text: 'Legacy text fallback.' },
+    { role: 'user', content: ' ', text: '', message: [], indic_text: 'సేవలు మెరుగుపడాలి.', en_text: 'Services should improve.' },
+    { role: 'user', content: { metadata: 'NOT_TRANSCRIPT' }, indic_text: '', en_text: 'Supported provider fallback.' },
+    { role: 'user', content: [{ text: ' ' }, { text: 0 }], text: ['Legacy blocks.', { text: 'Retained text.' }] }
+  ] }, ruleHash).evidence.transcript, [
+    { speaker: 'user', text: 'Legacy text fallback.' },
+    { speaker: 'user', text: 'సేవలు మెరుగుపడాలి.' },
+    { speaker: 'user', text: 'Supported provider fallback.' },
+    { speaker: 'user', text: 'Legacy blocks. Retained text.' }
+  ], 'Empty or unsupported primary fields must not suppress a supported nonblank alias');
+  for (const unsupported of [
+    [{ role: 'user', en_text: '', indic_text: ' ' }],
+    [{ role: 'user', en_text: { text: 'Nested unsupported' }, indic_text: 42 }],
+    [{ role: 'user', en_text: ['Unsupported provider array'], indic_text: false }],
+    [{ role: 'user', content: [{ text: 42 }], metadata: 'Not transcript content' }]
+  ]) {
+    const result = evaluateEvidence({ ...sourceRow, interaction_transcript: unsupported }, ruleHash);
+    assert.equal(result.reviewable, false); assert.equal(result.evidenceFingerprint, null);
+    assert.deepEqual(result.evidence.transcript, []);
+  }
   for (const altered of [
     { response_variables: { ...sourceRow.response_variables, phone_number: '9000000001' } },
     { interaction_transcript: [{ role: 'user', content: 'Different retained answer' }] },

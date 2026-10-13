@@ -61,6 +61,27 @@ async function test() {
     assert.deepEqual(actual.coverage, nullCoverage); assert.deepEqual(actual.questions, []);
     if (reason) assert.ok(actual.reasonCodes.includes(reason), actual.reasonCodes.join(','));
   };
+  for (const transcript of [
+    [{ role: 'user', en_text: 'Roads matter.', indic_text: 'రోడ్లు ముఖ్యం.' }],
+    [{ role: 'user', en_text: '', indic_text: 'రోడ్లు ముఖ్యం.' }],
+    [{ role: 'user', content: '', text: 'Roads matter.' }],
+    [{ role: 'user', content: '', text: '', en_text: 'Roads matter.', indic_text: '' }],
+    [{ role: 'user', content: {}, en_text: '', indic_text: 'రోడ్లు ముఖ్యం.' }]
+  ]) {
+    const assessed = build({ interaction_transcript: transcript });
+    assert.equal(assessed.status, 'COMPLETE_RECORDED');
+    assert.ok(!JSON.stringify(assessed).includes('రోడ్లు ముఖ్యం.'));
+    assert.ok(!JSON.stringify(assessed).includes('Roads matter.'));
+    unresolved({ interaction_transcript: transcript, call_count: 2 }, 'MATCHED_CALL_IDENTITY_REQUIRED');
+    unresolved({ interaction_transcript: transcript, callback_received_at: null }, 'TERMINAL_CALLBACK_REQUIRED');
+    unresolved({ interaction_transcript: transcript, questionnaire_snapshot: { ...snapshot(), snapshot_schema_version: 1 } }, 'VERIFIED_FROZEN_INSTRUMENT_REQUIRED');
+  }
+  for (const transcript of [[{ role: 'user', en_text: ' ', indic_text: '' }],
+    [{ role: 'user', content: '', text: '', en_text: {}, indic_text: [] }],
+    [{ role: 'user', en_text: ['Unsupported provider array text'], indic_text: [{ text: 'Unsupported provider block text' }] }],
+    [{ role: 'user', unrelated_text: 'Roads matter.' }]]) {
+    unresolved({ interaction_transcript: transcript }, 'CONNECTED_TRANSCRIPT_REQUIRED');
+  }
   for (const missing of [null, '', ' ', 'NOT_ANSWERED', 'not asked', 'not-captured', 'not recorded', 'UNRECORDED', 'NO_RESPONSE', 'No answer', 'no answer.']) {
     detail = build({ response_variables: { public_need: 'Roads', awareness: missing } });
     assert.equal(detail.status, 'PARTIAL_RECORDED'); assert.equal(detail.coverage.missingQuestions, 1);
