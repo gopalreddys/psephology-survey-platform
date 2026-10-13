@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import { builtinModules, createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -171,6 +172,46 @@ async function writeLedger(root, releaseId, ledger) {
   await atomicWrite(root, `var/platform-releases/${releaseId}/release.json`, JSON.stringify(ledger, null, 2) + '\n');
 }
 
+async function assertWritableAncestor(root, relative, label, beforeWritableCheck) {
+  let directory = relative
+    ? await checkedPath(root, relative, { allowMissing: true, file: false })
+    : root;
+  // New controlled directories are created recursively; their nearest existing
+  // ancestor must permit both directory creation and traversal before any write.
+  for (;;) {
+    try {
+      const info = await lstat(directory);
+      if (info.isSymbolicLink() || !info.isDirectory()) throw new Error(`Expected real directory: ${directory}`);
+      break;
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      if (directory === root) throw error;
+      directory = path.dirname(directory);
+    }
+  }
+  try {
+    // An in-process test hook can deny access, never bypass the real OS check.
+    await beforeWritableCheck?.(directory, label);
+    await access(directory, constants.W_OK | constants.X_OK);
+  } catch (cause) {
+    throw new Error(`Release apply permission preflight failed: ${label} requires a writable, searchable directory at ${directory}. No lock, release ledger, backups or runtime files were changed.`, { cause });
+  }
+}
+
+export function formatReleaseError(error) {
+  const lines = [], seen = new Set();
+  function visit(value, label, depth) {
+    if (seen.has(value)) return;
+    seen.add(value);
+    const message = value?.message || String(value);
+    lines.push(`${'  '.repeat(depth)}${label}${value?.code ? `[${value.code}] ` : ''}${message}`);
+    if (value instanceof AggregateError) for (const [index, nested] of value.errors.entries()) visit(nested, `Failure ${index + 1}: `, depth + 1);
+    if (value?.cause) visit(value.cause, 'Caused by: ', depth + 1);
+  }
+  visit(error, '', 0);
+  return lines.join('\n');
+}
+
 async function restoreEntries(root, releaseId, entries) {
   const failures = [];
   for (const entry of [...entries].reverse()) {
@@ -195,11 +236,17 @@ export async function installRelease(options) {
   if (!options.apply) return { ...summary, status: 'DRY_RUN', runtimeChanged: false };
   if (!options.ackApiStopped) throw new Error('Multi-file promotion requires --ack-api-stopped after the operator stops the API and other deployment tools. No service is stopped by this installer.');
   if (!changed.length) return { ...summary, status: 'UNCHANGED', runtimeChanged: false };
+  // Read-only OS permission checks are apply-only and precede even the lock.
+  // An inaccessible existing var/ must not become a misleading rollback failure.
+  await assertWritableAncestor(root, '', 'runtime lock directory', options.beforeWritableCheck);
+  for (const entry of changed) await assertWritableAncestor(root, path.dirname(entry.target).split(path.sep).join('/'), `target parent for ${entry.target}`, options.beforeWritableCheck);
+  await assertWritableAncestor(root, 'var/platform-releases', 'release ledger and backup ancestor', options.beforeWritableCheck);
   const lockRelative = '.platform-consolidation.lock';
   const lock = path.join(root, lockRelative);
   await writeFile(lock, `${process.pid}\n`, { flag: 'wx', mode: 0o600 });
   const releaseId = `${manifest.releaseVersion}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}`;
   const promoted = [];
+  let ledgerCreated = false;
   let ledger = { schemaVersion: 1, releaseId, releaseVersion: manifest.releaseVersion, manifestHash, status: 'PREPARED', createdAt: new Date().toISOString(), apiStoppedAcknowledged: true, files: changed.map(({ target, sourceHash, previousHash, mode }) => ({ target, sourceHash, previousHash, mode })), promotedTargets: [] };
   try {
     // Reject a concurrent edit between preflight and promotion instead of overwriting it.
@@ -211,6 +258,7 @@ export async function installRelease(options) {
       if (sha256(source) !== entry.sourceHash) throw new Error(`Release source changed after preflight: ${entry.source}`);
     }
     await writeLedger(root, releaseId, ledger);
+    ledgerCreated = true;
     for (const entry of changed) if (entry.previous !== null) {
       const backupRelative = `var/platform-releases/${releaseId}/backups/${entry.target}`;
       await atomicWrite(root, backupRelative, entry.previous, 0o600);
@@ -227,6 +275,7 @@ export async function installRelease(options) {
     await writeLedger(root, releaseId, ledger);
     return { ...summary, status: 'COMMITTED', releaseId, ledger: `var/platform-releases/${releaseId}/release.json`, runtimeChanged: true };
   } catch (failure) {
+    if (!ledgerCreated && !promoted.length) throw new Error(`Release preparation failed before any runtime file was promoted; no runtime rollback was needed. Any incomplete metadata is limited to var/platform-releases/${releaseId}.`, { cause: failure });
     try {
       await restoreEntries(root, releaseId, promoted);
       ledger.status = 'ROLLED_BACK'; ledger.failedAt = new Date().toISOString();
@@ -291,8 +340,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log(JSON.stringify(result, null, 2));
     console.log('No service restarts, SQL execution, historical backfills, calls, frontend deployment or AWS publication/refresh were performed.');
   } catch (error) {
-    console.error(error.message);
-    if (error.cause) console.error(error.cause.message);
+    console.error(formatReleaseError(error));
     process.exitCode = 1;
   }
 }

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { installRelease, preflightRelease, rollbackRelease } from './install-platform-consolidation.mjs';
+import { formatReleaseError, installRelease, preflightRelease, rollbackRelease } from './install-platform-consolidation.mjs';
 
 const roots = [];
 const write = async (root, relative, text) => { await mkdir(path.dirname(path.join(root, relative)), { recursive: true }); await writeFile(path.join(root, relative), text); };
@@ -39,6 +39,64 @@ try {
   assert.deepEqual((await readdir(clean.runtimeRoot)).sort(), ['package.json', 'src'], 'dry run creates no target metadata or staging files');
   await assert.rejects(installRelease({ ...clean, apply: true }), /ack-api-stopped/);
   assert.deepEqual(await oldSnapshot(clean), old);
+
+  for (const deniedLabel of ['runtime lock directory', 'target parent for src/repositories/b.js', 'release ledger and backup ancestor']) {
+    const denied = await fixture();
+    await mkdir(path.join(denied.runtimeRoot, 'var'));
+    const canonicalRoot = await realpath(denied.runtimeRoot);
+    const permissionCause = Object.assign(new Error('Controlled permission denial'), { code: 'EACCES' });
+    let checked = false;
+    await assert.rejects(installRelease({
+      ...denied, apply: true, ackApiStopped: true,
+      beforeWritableCheck(directory, label) {
+        if (label === deniedLabel) {
+          checked = true;
+          assert.equal(directory, path.join(canonicalRoot, label.startsWith('target parent') ? 'src/repositories' : label.startsWith('release ledger') ? 'var' : ''));
+          throw permissionCause;
+        }
+      }
+    }), (error) => /permission preflight failed/.test(error.message) && error.cause === permissionCause);
+    assert.equal(checked, true);
+    assert.deepEqual(await oldSnapshot(denied), old, 'permission failures precede every runtime promotion');
+    assert.equal(await exists(denied.runtimeRoot, '.platform-consolidation.lock'), false, 'permission failures occur before lock creation');
+    assert.equal(await exists(denied.runtimeRoot, 'src/repositories/helper.js'), false);
+    assert.deepEqual(await readdir(path.join(denied.runtimeRoot, 'var')), [], 'permission failures create no ledger, release folder or backups');
+  }
+
+  const newParent = await fixture();
+  await write(newParent.sourceRoot, 'deployment/test/new.sql', '-- new migration asset\n');
+  newParent.manifest.files.push({ source: 'deployment/test/new.sql', target: 'sql/new/034_test.sql', allowNew: true });
+  const canonicalNewRoot = await realpath(newParent.runtimeRoot);
+  await assert.rejects(installRelease({ ...newParent, apply: true, ackApiStopped: true, beforeWritableCheck(directory, label) {
+    if (label === 'target parent for sql/new/034_test.sql') {
+      assert.equal(directory, canonicalNewRoot, 'a missing target parent checks its nearest existing ancestor');
+      throw Object.assign(new Error('Controlled permission denial'), { code: 'EACCES' });
+    }
+  } }), /permission preflight failed/);
+  assert.deepEqual((await readdir(newParent.runtimeRoot)).sort(), ['package.json', 'src'], 'missing parent directories are not created by permission preflight');
+
+  // Real permission behavior is exercised for non-root runners; root can bypass
+  // Unix mode bits, so the harmless deny hooks above provide portable coverage.
+  if (typeof process.getuid === 'function' && process.getuid() !== 0) {
+    const deniedVar = await fixture();
+    await mkdir(path.join(deniedVar.runtimeRoot, 'var'), { mode: 0o755 });
+    await chmod(path.join(deniedVar.runtimeRoot, 'var'), 0o555);
+    try {
+      assert.equal((await installRelease(deniedVar)).status, 'DRY_RUN', 'dry runs require no write permission to release metadata');
+      await assert.rejects(installRelease({ ...deniedVar, apply: true, ackApiStopped: true }), (error) => /release ledger and backup ancestor/.test(error.message) && error.cause?.code === 'EACCES');
+      assert.deepEqual(await oldSnapshot(deniedVar), old);
+      assert.equal(await exists(deniedVar.runtimeRoot, '.platform-consolidation.lock'), false);
+      assert.deepEqual(await readdir(path.join(deniedVar.runtimeRoot, 'var')), []);
+    } finally { await chmod(path.join(deniedVar.runtimeRoot, 'var'), 0o755); }
+  }
+
+  const diagnostic = formatReleaseError(new AggregateError([
+    new Error('Promotion failed', { cause: Object.assign(new Error('Directory is not writable'), { code: 'EACCES' }) }),
+    new AggregateError([new Error('Backup checksum failed')], 'Rollback failed')
+  ], 'Release needs review'));
+  assert.match(diagnostic, /Failure 1: Promotion failed/);
+  assert.match(diagnostic, /Caused by: \[EACCES\] Directory is not writable/);
+  assert.match(diagnostic, /Failure 2: Rollback failed\n\s+Failure 1: Backup checksum failed/, 'CLI diagnostics include nested aggregate failures and causes');
 
   const missingExisting = await fixture();
   await unlink(path.join(missingExisting.runtimeRoot, 'src/repositories/b.js'));
@@ -132,7 +190,7 @@ try {
   assert.equal(controlled.files.filter((item) => item.target === 'src/repositories/research-scope.repository.js').length, 1);
   assert.ok(controlled.requiredPackages.includes('@aws-sdk/client-quicksight'));
   for (const entry of controlled.files) await readFile(new URL(`../../${entry.source}`, import.meta.url));
-  console.log('Release manifest, dry-run containment/dependency/syntax/mount checks, atomic promotion, failure rollback, recoverable backups and idempotency tests passed.');
+  console.log('Release manifest, read-only dry-run, pre-mutation permissions, nested diagnostics, containment/dependency/syntax/mount checks, atomic promotion, failure rollback, recoverable backups and idempotency tests passed.');
 } finally {
   // All roots are exact mkdtemp results created by this test, never user/runtime directories.
   for (const root of roots) await rm(root, { recursive: true, force: true });

@@ -204,8 +204,14 @@ assert.deepEqual(optionsFixture.Options, savedOptions, "Saved backup options are
 const serviceReadback = { ResourceStatus: "UPDATE_SUCCESSFUL", Errors: [], Definition: structuredClone(optionsCandidate.definition) };
 serviceReadback.Definition.ParameterDeclarations = [];
 for (const field of serviceReadback.Definition.CalculatedFields) {
-  if (!field.Name.startsWith('quick_partition_') && field.Expression.startsWith("distinctCountOver(") && field.Expression.endsWith(", PRE_AGG)")) field.Expression = field.Expression.replaceAll("{gender}", "gender");
+  if (field.Expression.startsWith("distinctCountOver(") && field.Expression.endsWith(", PRE_AGG)")) field.Expression = field.Expression.replaceAll("{gender}", "gender");
 }
+assert.equal(serviceReadback.Definition.CalculatedFields.find((field) => field.Name === 'quick_partition_incumbent_0_gender_count').Expression,
+  'distinctCountOver({quick_partition_incumbent_0_person_key}, [gender], PRE_AGG)',
+  'Exercise the exact new whole-partition serialization observed in AWS');
+assert.equal(serviceReadback.Definition.CalculatedFields.find((field) => field.Name === 'quick_partition_incumbent_0_age_band_gender_count').Expression,
+  'distinctCountOver({quick_partition_incumbent_0_person_key}, [{age_band}, gender], PRE_AGG)',
+  'AWS preserves the age token while emitting bare gender in the joint partition');
 for (const group of serviceReadback.Definition.FilterGroups) for (const filter of group.Filters) {
   if (filter.NumericRangeFilter) filter.NumericRangeFilter.IncludeMaximum = false;
 }
@@ -239,6 +245,8 @@ const serviceVisual = (definition, visualId) => Object.values(definition.Sheets.
 const serviceSheet = (definition, sheetId) => definition.Sheets.find((sheet) => sheet.SheetId === sheetId);
 const serviceRange = (definition) => definition.FilterGroups.flatMap((group) => group.Filters).find((filter) => filter.NumericRangeFilter).NumericRangeFilter;
 const serviceGenderGuard = optionsCandidate.guards.find((guard) => guard.visualId === "quick-gender-party");
+const servicePartitionGenderField = (readback) => readback.Definition.CalculatedFields.find((field) => field.Name === 'quick_partition_incumbent_0_gender_count');
+const servicePartitionAgeGenderField = (readback) => readback.Definition.CalculatedFields.find((field) => field.Name === 'quick_partition_incumbent_0_age_band_gender_count');
 for (const [label, mutate] of [
   ["missing highlight default", (readback) => { delete readback.Definition.Options.CustomActionDefaults; }],
   ["disabled highlighting", (readback) => { readback.Definition.Options.CustomActionDefaults.highlightOperation.Trigger = "NONE"; }],
@@ -257,6 +265,16 @@ for (const [label, mutate] of [
   ["observations replace people", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression.replace("{quick_party_respondent_key}", "{evidence_key}"); }],
   ["partition dropped", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = "distinctCountOver({quick_party_respondent_key}, [gender], PRE_AGG)"; }],
   ["unreviewed expression syntax", (readback) => { readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression = readback.Definition.CalculatedFields.find((field) => field.Name === serviceGenderGuard.column).Expression.replace("{party_salience}", "party_salience"); }],
+  ["whole-partition source changed", (readback) => { servicePartitionGenderField(readback).Expression = 'distinctCountOver({respondent_key}, [gender], PRE_AGG)'; }],
+  ["whole-partition evidence source", (readback) => { servicePartitionGenderField(readback).Expression = 'distinctCountOver({evidence_key}, [gender], PRE_AGG)'; }],
+  ["whole-partition operand index changed", (readback) => { servicePartitionGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_1_person_key}, [gender], PRE_AGG)'; }],
+  ["whole-partition dropped", (readback) => { servicePartitionGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_0_person_key}, [], PRE_AGG)'; }],
+  ["whole-partition added", (readback) => { servicePartitionGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_0_person_key}, [{age_band}, gender], PRE_AGG)'; }],
+  ["whole-partition pre-filter stage", (readback) => { servicePartitionGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_0_person_key}, [gender], PRE_FILTER)'; }],
+  ["whole-partition wrong dataset", (readback) => { servicePartitionGenderField(readback).DataSetIdentifier = 'movement'; }],
+  ["whole-partition bare age token", (readback) => { servicePartitionAgeGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_0_person_key}, [age_band, gender], PRE_AGG)'; }],
+  ["whole-partition age dropped", (readback) => { servicePartitionAgeGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_0_person_key}, [gender], PRE_AGG)'; }],
+  ["whole-partition order changed", (readback) => { servicePartitionAgeGenderField(readback).Expression = 'distinctCountOver({quick_partition_incumbent_0_person_key}, [gender, {age_band}], PRE_AGG)'; }],
   ["disabled action", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].Status = "DISABLED"; }],
   ["menu action becomes click", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].Trigger = "DATA_POINT_CLICK"; }],
   ["wrong guide destination", (readback) => { serviceVisual(readback.Definition, "quick-party-count").Actions[0].ActionOperations[0].NavigationOperation.LocalNavigationConfiguration.TargetSheetId = "sheet-0"; }],

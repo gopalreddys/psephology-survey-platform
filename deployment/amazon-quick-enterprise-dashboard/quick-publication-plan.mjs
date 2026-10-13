@@ -438,12 +438,32 @@ const REVIEWED_GENDER_PARTITION_EXPRESSIONS = {
   quick_party_gender_base: "distinctCountOver({quick_party_answer_key}, [{gender}], PRE_AGG)"
 };
 
-function normalizeReviewedServiceDefinition(definition) {
+function reviewedPartitionGenderExpressions(candidate) {
+  const expressions = new Map();
+  const enterprise = candidate.bindings?.find((binding) => binding.role === 'enterprise')?.identifier;
+  for (const field of candidate.definition?.CalculatedFields ?? []) {
+    const match = /^quick_partition_(incumbent|candidate|party|leadership|issue)_(\d+)_(gender|age_band_gender)_count$/.exec(field.Name);
+    if (!match || field.DataSetIdentifier !== enterprise) continue;
+    const partitions = match[3] === 'gender' ? ['gender'] : ['age_band', 'gender'];
+    const expected = uniquePersonWindowExpression(`quick_partition_${match[1]}_${match[2]}_person_key`, partitions);
+    if (field.Expression === expected && candidate.partitionGuards?.some((guard) => guard.datasetIdentifier === enterprise && guard.kinds?.includes(match[1]))) {
+      expressions.set(JSON.stringify([field.DataSetIdentifier, field.Name]), expected);
+    }
+  }
+  return expressions;
+}
+
+function normalizeReviewedServiceDefinition(definition, partitionGenderExpressions = new Map()) {
   if (!definition) return definition;
   const normalized = clone(definition);
   removeExact(normalized, "ParameterDeclarations", []);
   for (const field of normalized.CalculatedFields ?? []) {
-    const reviewed = REVIEWED_GENDER_PARTITION_EXPRESSIONS[field.Name];
+    // The 2026-10-13 service readback also emitted bare gender in these new
+    // whole-partition windows. Accept only the exact reviewed candidate field,
+    // dataset and source with only the gender token changed; never rewrite other
+    // bare columns, changed operands, partitions or evaluation stages.
+    const reviewed = REVIEWED_GENDER_PARTITION_EXPRESSIONS[field.Name]
+      ?? partitionGenderExpressions.get(JSON.stringify([field.DataSetIdentifier, field.Name]));
     if (reviewed && field.Expression === reviewed.replaceAll("{gender}", "gender")) field.Expression = reviewed;
   }
   for (const group of normalized.FilterGroups ?? []) for (const filter of group.Filters ?? []) {
@@ -487,8 +507,9 @@ function normalizeReviewedServiceDefinition(definition) {
  * missing CustomActionDefaults is a meaningful difference, not a default.
  */
 export function validateServiceNormalizedPublicationReadback(readback, candidate) {
-  const expected = normalizeReviewedServiceDefinition(candidate.definition);
-  const actual = normalizeReviewedServiceDefinition(readback?.Definition);
+  const partitionGenderExpressions = reviewedPartitionGenderExpressions(candidate);
+  const expected = normalizeReviewedServiceDefinition(candidate.definition, partitionGenderExpressions);
+  const actual = normalizeReviewedServiceDefinition(readback?.Definition, partitionGenderExpressions);
   const result = validatePublicationReadback({ ...readback, Definition: actual }, { ...candidate, definition: expected });
   if (canonicalJson((actual?.DataSetIdentifierDeclarations ?? []).map(canonicalJson).sort()) !== canonicalJson((expected.DataSetIdentifierDeclarations ?? []).map(canonicalJson).sort())) result.errors.push("Dashboard dataset declaration contents differ from the reviewed candidate");
   // Also retain strict comparison of less common top-level definition fields
