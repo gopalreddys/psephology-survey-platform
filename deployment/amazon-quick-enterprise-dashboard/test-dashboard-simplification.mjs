@@ -37,7 +37,7 @@ const Icon = ({ size = 16, className, ...props }) => React.createElement('svg', 
   ...props, className, width: size, height: size, 'aria-hidden': true
 });
 const mocks = {
-  react: { ...React, useState, useCallback: (callback) => callback, useEffect: () => {} },
+  react: { ...React, useState, useRef: (value) => ({ current: value }), useCallback: (callback) => callback, useEffect: () => {} },
   'lucide-react': new Proxy({}, { get: () => Icon }),
   'next/link': defaultModule(({ children, ...props }) => React.createElement('a', props, children)),
   '@/components/AppShell': defaultModule(({ children }) => React.createElement('div', { className: 'fixtureAppShell' }, children)),
@@ -49,6 +49,9 @@ const mocks = {
   './TelanganaBoundaryMap': defaultModule(() => React.createElement('section', {
     'data-boundary-fixture': true
   }, 'Boundary component placeholder · geographic reference only')),
+  './QuickDashboardEmbed': defaultModule(() => React.createElement('div', {
+    'data-sdk-report-fixture': true
+  }, 'Embedding SDK placeholder · no live report')),
   './quick.module.css': defaultModule(styles)
 };
 const context = { exports: {}, require: (name) => name in mocks ? mocks[name] : require(name) };
@@ -143,10 +146,10 @@ function resolve(element) {
   return React.createElement(element.type, { ...props, key: element.key }, resolve(children));
 }
 function render({ role = 'ADMIN', report = dashboard, evidence = quality, loading = false,
-  sessionError = null, qualityError = null, registryBusy = false } = {}) {
+  sessionError = null, qualityError = null, actorId = 'synthetic-user' } = {}) {
   currentUser = { id: 'synthetic-user', role: { code: role } };
   hookCursor = 0;
-  hookStates = [report, evidence, loading, sessionError, qualityError, registryBusy];
+  hookStates = [report, evidence, loading, sessionError, qualityError, actorId];
   return resolve(Page());
 }
 function flatten(element) {
@@ -178,8 +181,11 @@ function assertClosedDetails(tree) {
 }
 
 const adminTree = render();
+const staleActorTree = render({ actorId: 'another-user' });
+assert.ok(!find(staleActorTree, (element) => element.props['data-sdk-report-fixture']), 'old actor session is hidden synchronously');
+assert.ok(!supportingPanel(staleActorTree, 'Fieldwork summary'), 'old actor quality data is hidden synchronously');
 const nodes = flatten(adminTree);
-const reportIndex = nodes.findIndex((element) => element.type === 'iframe');
+const reportIndex = nodes.findIndex((element) => element.props['data-sdk-report-fixture']);
 assert.ok(reportIndex >= 0, 'successful session renders the report iframe');
 const fieldworkIndex = nodes.findIndex((element) => hasClass(element, 'qualityPanel'));
 assert.ok(fieldworkIndex > reportIndex, 'reports precede the fieldwork summary');
@@ -188,7 +194,7 @@ for (const title of ['Iteration comparisons', 'Research setup', 'Boundary explor
   assert.ok(panel, `${title} is available on demand`);
   assert.ok(nodes.indexOf(panel) > reportIndex, `reports precede ${title}`);
 }
-const registry = find(adminTree, (element) => hasClass(element, 'designRegistry'));
+const registry = supportingPanel(adminTree, 'Research setup');
 const boundary = find(adminTree, (element) => element.props['data-boundary-fixture']);
 assert.ok(nodes.indexOf(registry) > reportIndex, 'reports precede the methodology editor');
 assert.ok(nodes.indexOf(boundary) > reportIndex, 'reports precede the boundary component');
@@ -237,7 +243,7 @@ assert.doesNotMatch(articleText[5], /Not comparable|99|pp/);
 assert.match(textContent(articles[5]), /at least five response records are required in each adjacent wave/);
 
 for (const role of ['SUPER_ADMIN', 'ADMIN']) {
-  assert.ok(find(render({ role }), (element) => hasClass(element, 'designRegistry')), `${role} can open research setup`);
+  assert.ok(supportingPanel(render({ role }), 'Research setup'), `${role} can find canonical research setup links`);
 }
 for (const role of ['CAMPAIGN_MANAGER', 'CAMPAIGNER']) {
   const tree = render({ role });
@@ -254,16 +260,16 @@ assert.match(visibleErrors, /Survey quality unavailable: Synthetic quality failu
 assert.match(visibleErrors, /not a missing survey answer/);
 assert.ok(find(errorTree, (element) => element.props.role === 'alert'
   && textContent(element).includes('Synthetic quality failure')), 'quality failure is an alert');
-assert.ok(!find(errorTree, (element) => element.type === 'iframe'), 'failed session does not render a report iframe');
+assert.ok(!find(errorTree, (element) => element.props['data-sdk-report-fixture']), 'failed session does not render an SDK report');
 const partialTree = render({ evidence: null, qualityError: 'Synthetic quality failure' });
-assert.ok(find(partialTree, (element) => element.type === 'iframe'), 'quality failure does not conceal a successful report session');
+assert.ok(find(partialTree, (element) => element.props['data-sdk-report-fixture']), 'quality failure does not conceal a successful report session');
 assert.match(textContent(partialTree, true), /Synthetic quality failure/);
 
 const loadingTree = render({ loading: true });
 assert.ok(find(loadingTree, (element) => element.props.role === 'status'
   && textContent(element).includes('Loading survey reports')), 'loading state is announced');
-assert.ok(!find(loadingTree, (element) => element.type === 'iframe'), 'old iframe is hidden during session loading');
-for (const options of [{ loading: true }, { registryBusy: true }]) {
+assert.ok(!find(loadingTree, (element) => element.props['data-sdk-report-fixture']), 'old SDK session is hidden during loading');
+for (const options of [{ loading: true }]) {
   const refresh = find(render(options), (element) => element.type === 'button' && textContent(element).trim() === 'Refresh');
   assert.equal(refresh.props.disabled, true, 'refresh respects loading and registry busy state');
 }
@@ -281,7 +287,7 @@ if (previewArgument) {
   function previewTree(element) {
     if (Array.isArray(element)) return element.map(previewTree);
     if (!element || typeof element !== 'object') return element;
-    if (element.type === 'iframe') return React.createElement('div', { key: element.key, className: 'fixtureReportPlaceholder', role: 'note' },
+    if (element.props['data-sdk-report-fixture']) return React.createElement('div', { key: element.key, className: 'fixtureReportPlaceholder', role: 'note' },
       React.createElement('strong', null, 'Survey report iframe placeholder'),
       React.createElement('p', null, 'Live dashboards and survey results are not loaded in this local preview.'));
     const { children, ...props } = element.props;
@@ -289,7 +295,7 @@ if (previewArgument) {
   }
   const markup = renderToStaticMarkup(previewTree(adminTree));
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Local layout preview · synthetic data</title><style>
-    *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.fixtureLabel{padding:12px 20px;background:#392b32;color:white;font-weight:700;font-size:14px}
+    :root{--background:#fff9f5;--platform-ink:#3f2f35;--platform-font:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--background);color:var(--platform-ink);font-family:var(--platform-font)}.fixtureLabel{padding:12px 20px;background:#392b32;color:white;font-weight:700;font-size:14px}
     .fixtureReportPlaceholder{display:grid;align-content:center;justify-items:center;min-height:780px;padding:32px;background:#f8faf9;color:#74656b;text-align:center;border-top:1px dashed #c8d8d3}.fixtureReportPlaceholder p{max-width:480px;line-height:1.5}
     ${css}</style></head><body><div class="fixtureLabel">Local layout preview · synthetic data<br><small>All displayed metrics are synthetic fixture values. No real survey results are loaded.</small></div>${markup}</body></html>`;
   const server = createServer((request, response) => {

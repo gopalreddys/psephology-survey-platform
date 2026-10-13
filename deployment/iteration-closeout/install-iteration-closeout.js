@@ -15,6 +15,12 @@ async function copy(sourceName, destination) {
   await copyFile(path.join(packageRoot, sourceName), destination);
 }
 
+await mkdir(path.join(runtimeRoot, "src/repositories"), { recursive: true });
+for (const sourceName of ["operational-lifecycle-policy.js", "run-lifecycle.repository.js"]) {
+  await copyFile(path.resolve(packageRoot, "../run-lifecycle-automation", sourceName),
+    path.join(runtimeRoot, "src/repositories", sourceName));
+}
+
 await copy(
   "iteration-closeout.repository.js",
   path.join(runtimeRoot, "src/repositories/iteration-closeout.repository.js")

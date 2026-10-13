@@ -333,6 +333,12 @@ export async function updateCampaignIterationStatus(campaignId, iterationId, nex
   const status = String(nextStatus || "").trim().toUpperCase();
   if (!STATUSES.has(status)) throw errorWithStatus("Unsupported iteration status", 400);
   if (actor.role_code === "CAMPAIGNER") throw errorWithStatus("Campaigners cannot change iteration status", 403);
+  if (status === "COMPLETED") {
+    throw errorWithStatus(
+      "Use the assigned Campaign Manager's iteration closeout action. Completion requires the audited three-Run lifecycle checks.",
+      409
+    );
+  }
 
   const db = await getDb();
   const client = await db.connect();
@@ -353,8 +359,8 @@ export async function updateCampaignIterationStatus(campaignId, iterationId, nex
     const current = currentResult.rows[0].status;
     const transitions = {
       PLANNED: ["ACTIVE", "LOCKED"],
-      ACTIVE: ["PAUSED", "COMPLETED", "LOCKED"],
-      PAUSED: ["ACTIVE", "COMPLETED", "LOCKED"],
+      ACTIVE: ["PAUSED", "LOCKED"],
+      PAUSED: ["ACTIVE", "LOCKED"],
       COMPLETED: ["LOCKED"],
       LOCKED: []
     };

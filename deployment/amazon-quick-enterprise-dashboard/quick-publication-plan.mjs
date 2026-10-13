@@ -6,6 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import { ANSWER_STATE_LABELS } from "./quick-insight-catalog.mjs";
+import { reportingCategoryLabels, OUTPUT_KEYS, DISCLOSURE_POLICY_VERSION } from '../output-variable-standardization/output-normalization.repository.js';
 
 export const PARTY_COLORS = Object.freeze({ BRS: "#E91E8F", BJP: "#FF9933", Congress: "#138808" });
 // Sentiment is a separate construct: party hues must never imply polarity.
@@ -241,7 +242,7 @@ export function stagedDatasetRequest({ awsAccountId, dataset, view, columns, new
 }
 
 /** Validate a generated candidate, not the blueprint or a claim of live QA. */
-export function validatePublicationCandidate({ definition, bindings, guards = [], answerStatusFilters = [], percentagePolicies = [], reviewedVisualIds = [] }) {
+export function validatePublicationCandidate({ definition, bindings, guards = [], partitionGuards = [], disclosurePolicy, answerStatusFilters = [], percentagePolicies = [], reviewedVisualIds = [] }) {
   const errors = [];
   const sheets = definition.Sheets ?? [];
   for (const sheet of sheets) {
@@ -294,8 +295,10 @@ export function validatePublicationCandidate({ definition, bindings, guards = []
     });
     const usesEnterprise = JSON.stringify(visual.ChartConfiguration?.FieldWells ?? {}).includes(`"DataSetIdentifier":"${bindings.find((item) => item.role === "enterprise")?.identifier}"`);
     if (usesEnterprise && !guards.some((guard) => guard.visualId === visual.VisualId && hasGuard(definition, guard))) errors.push(`Post-filter cell guard missing: ${visual.VisualId}`);
+    if (usesEnterprise && !validPartitionGuard(definition, visual, guards.find((guard) => guard.visualId === visual.VisualId), partitionGuards.find((guard) => guard.visualId === visual.VisualId))) errors.push(`Whole-partition disclosure guard missing: ${visual.VisualId}`);
   }
   for (const guard of guards) if (!known.has(guard.visualId) || !hasGuard(definition, guard)) errors.push(`Missing/invalid configured guard: ${guard.visualId}`);
+  if (partitionGuards.length && disclosurePolicy !== DISCLOSURE_POLICY_VERSION) errors.push('Unknown disclosure policy');
   for (const guard of answerStatusFilters) {
     const present = (definition.FilterGroups ?? []).some((group) => group.Status === "ENABLED" && group.CrossDataset === "SINGLE_DATASET"
       && group.ScopeConfiguration?.SelectedSheets?.SheetVisualScopingConfigurations?.some((scope) => scope.SheetId === guard.sheetId && scope.Scope === "SELECTED_VISUALS" && scope.VisualIds?.includes(guard.visualId))
@@ -309,6 +312,32 @@ export function validatePublicationCandidate({ definition, bindings, guards = []
     if (!known.has(policy.visualId) || policy.basis !== "ALL_NON_MISSING_RECORDED_ANSWERS" || !policy.answerBaseVisualId || !known.has(policy.answerBaseVisualId) || policy.renormalizeVisibleCells !== false) errors.push(`Percentage basis unsafe: ${policy.visualId}`);
   }
   return { valid: errors.length === 0, errors: [...new Set(errors)] };
+}
+
+function validPartitionGuard(definition, visual, cell, guard) {
+  if (!cell?.sourceKey || !guard || guard.policy !== DISCLOSURE_POLICY_VERSION || guard.aggregation !== 'NONE') return false;
+  const taxonomy = { incumbent: ['respondent_sentiment', ['incumbent_assessment']], candidate: ['candidate_sentiment', OUTPUT_KEYS.candidate],
+    party: ['party_salience', OUTPUT_KEYS.party], leadership: ['party_leadership', OUTPUT_KEYS.leadership], issue: ['issue_priority', OUTPUT_KEYS.issue] };
+  const kind = /^quick_(incumbent|candidate|party|leadership|issue)_/.exec(cell.sourceKey)?.[1];
+  const kinds = kind ? [kind] : Object.keys(taxonomy);
+  if (JSON.stringify(kinds) !== JSON.stringify(guard.kinds)) return false;
+  const field = (name) => definition.CalculatedFields?.find((item) => item.DataSetIdentifier === cell.datasetIdentifier && item.Name === name)?.Expression;
+  const checks = [];
+  for (const selected of kinds) {
+    const [dimension, keys] = taxonomy[selected];
+    const partitions = privacyPartitionColumns(visual, cell.datasetIdentifier).filter((name) => ![dimension, `${dimension}_status`, 'quick_issue_answer_state', 'quick_party_label'].includes(name));
+    for (const [index, label] of [...reportingCategoryLabels(keys), 'No response'].entries()) {
+      const key = `quick_partition_${selected}_${index}_person_key`;
+      const count = `quick_partition_${selected}_${index}_${partitions.join('_') || 'all'}_count`;
+      if (field(key) !== `ifelse({${dimension}} = ${JSON.stringify(label)}, {respondent_key}, NULL)` || field(count) !== uniquePersonWindowExpression(key, partitions)) return false;
+      checks.push(`({${count}} > 0 AND {${count}} < 5)`);
+    }
+  }
+  if (field(guard.column) !== `ifelse(${checks.join(' OR ')}, 0, 5)`) return false;
+  return definition.FilterGroups?.some((group) => group.Status === 'ENABLED' && group.CrossDataset === 'SINGLE_DATASET'
+    && group.ScopeConfiguration?.SelectedSheets?.SheetVisualScopingConfigurations?.some((scope) => scope.SheetId === guard.sheetId && scope.Scope === 'SELECTED_VISUALS' && scope.VisualIds?.includes(guard.visualId))
+    && group.Filters?.some(({ NumericRangeFilter: range }) => range?.Column?.DataSetIdentifier === cell.datasetIdentifier && range.Column.ColumnName === guard.column
+      && range.AggregationFunction === undefined && range.NullOption === 'NON_NULLS_ONLY' && range.IncludeMinimum === true && range.RangeMinimum?.StaticValue === 5));
 }
 
 function hasGuard(definition, guard) {

@@ -3,6 +3,8 @@ import { fixtureState, fixtureDb, iteration, gateRow } from "../campaign-compara
 import { loadTestRepositories } from "../campaign-comparative-analysis/fixtures/load-test-repositories.js";
 
 const state = fixtureState();
+state.iterations[1].retry_eligible_voters = 2;
+state.iterations[1].retry_exhausted_voters = 7;
 const db = fixtureDb(state);
 const { analytics } = await loadTestRepositories(db);
 const actor = { id: "admin", role_code: "ADMIN" };
@@ -10,11 +12,12 @@ const filters = { gender: "Female", ageBand: "30–39", mandal: "North" };
 const getAnalysis = (selection = {}) => analytics.getCampaignStrategicAnalytics("campaign", actor, selection);
 
 const whole = await getAnalysis({ iterationId: "i2" });
+assert.equal(whole.scope.operations.retryEligibleVoters, 2, 'Iteration retry eligibility is not copied from the exhausted-contact count');
 const filtered = await getAnalysis({ iterationId: "i2", ...filters });
-assert.equal(filtered.segment.respondentBase, 6);
+assert.equal(filtered.segment.respondentBase, 10);
 assert.equal(filtered.comparison.status, "COMPARABLE");
 assert.deepEqual(filtered.comparison.filters, filters);
-assert.deepEqual(filtered.comparison.movements[0].respondentBases.map((base) => base.respondents), [6, 6], "identical gender, age and Mandal filters apply to both waves");
+assert.deepEqual(filtered.comparison.movements[0].respondentBases.map((base) => base.respondents), [10, 10], "identical gender, age and Mandal filters apply to both waves");
 assert.equal(filtered.comparison.movements[0].largestShift.previousPercentage, 100);
 assert.equal(filtered.comparison.movements[0].largestShift.latestPercentage, 50);
 assert.notDeepEqual(filtered.comparison.movements, whole.comparison.movements, "unfiltered Campaign comparison data must not appear beside filtered distributions");
@@ -43,12 +46,12 @@ assert.deepEqual(result.comparison.movements, []);
 assert.ok(result.comparison.reasons.includes("Collection mode changed"));
 
 state.gateRows[1] = gateRow(2);
-state.records = state.records.filter((record) => !(record.iteration_id === "i1" && ["female-4", "female-5"].includes(record.voter_id)));
+state.records = state.records.filter((record) => !(record.iteration_id === "i1" && /^female-[4-9]$/.test(record.voter_id)));
 result = await getAnalysis({ iterationId: "i2", ...filters });
 assert.equal(result.segment.suppressed, false, "latest cohort may be reportable while previous wave is too small");
 assert.equal(result.comparison.status, "NOT_COMPARABLE");
 assert.deepEqual(result.comparison.movements, [], "n<5 previous cohort suppresses movement");
-state.records = state.records.filter((record) => !(record.iteration_id === "i2" && ["female-4", "female-5"].includes(record.voter_id)));
+state.records = state.records.filter((record) => !(record.iteration_id === "i2" && /^female-[4-9]$/.test(record.voter_id)));
 result = await getAnalysis({ iterationId: "i2", ...filters });
 assert.equal(result.segment.suppressed, true);
 assert.equal(result.segment.respondentBase, null);

@@ -343,9 +343,9 @@ export default function ProgramDetailPage() {
           />
           <DashboardMetric
             icon={Target}
-            label="Successful surveys"
+            label="Successful call outcomes"
             value={summary.successfulVoters}
-            detail={`${summary.successfulYieldPct}% of ${summary.selectedVoters} selected`}
+            detail={`${summary.successfulYieldPct}% of selected person–Iteration records · not validated interviews`}
           />
           <DashboardMetric
             icon={AlertTriangle}
@@ -470,7 +470,7 @@ export default function ProgramDetailPage() {
                     />
                     <CampaignFact
                       icon={Target}
-                      label="Survey yield"
+                      label="Operational outcome yield"
                       value={`${campaign.successfulVoters}/${campaign.selectedVoters} · ${campaign.successfulYieldPct}%`}
                     />
                   </div>

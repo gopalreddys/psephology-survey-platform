@@ -1,9 +1,9 @@
 export function iteration(number, status = "COMPLETED") {
   return {
     id: `i${number}`, iteration_number: number, iteration_name: `Wave ${number}`,
-    status, questionnaire_id: "unchanged-questionnaire", connected_respondents: 12,
-    target_sample_size: 12, run_count: 2, closed_run_count: 2,
-    call_attempts: 20, transcripts_captured: 12, responses_captured: 12
+    status, questionnaire_id: "unchanged-questionnaire", connected_respondents: 20,
+    target_sample_size: 20, run_count: 2, closed_run_count: 2,
+    call_attempts: 28, transcripts_captured: 20, responses_captured: 20
   };
 }
 
@@ -29,9 +29,11 @@ export function response(iterationId, voterId, value, overrides = {}) {
 
 export function fixtureState() {
   const records = [];
-  for (let index = 0; index < 6; index++) {
+  // Both categories meet n=5 so these fixtures exercise comparison rather than
+  // accidentally asserting disclosure of a 3/3 or 9/3 sparse partition.
+  for (let index = 0; index < 10; index++) {
     records.push(response("i1", `female-${index}`, "jobs"));
-    records.push(response("i2", `female-${index}`, index < 3 ? "jobs" : "roads"));
+    records.push(response("i2", `female-${index}`, index < 5 ? "jobs" : "roads"));
     records.push(response("i1", `male-${index}`, "roads", { gender: "Male", age: 55, mandal_name: "South" }));
     records.push(response("i2", `male-${index}`, "jobs", { gender: "Male", age: 55, mandal_name: "South" }));
   }

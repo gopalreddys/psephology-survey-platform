@@ -158,6 +158,7 @@ async function loadIterations(db, campaignId) {
           contact.voter_id,
           BOOL_OR(contact.final_status = ANY($2::text[])) AS successful,
           BOOL_OR(contact.retry_exhausted = TRUE) AS retry_exhausted,
+          BOOL_OR(contact.retry_eligible = TRUE AND contact.retry_exhausted = FALSE) AS retry_eligible,
           BOOL_OR(contact.attempt_status NOT IN ('COMPLETED', 'FAILED')) AS pending
         FROM campaign_run_contacts contact
         JOIN campaign_runs run
@@ -173,6 +174,7 @@ async function loadIterations(db, campaignId) {
           COUNT(*) FILTER (
             WHERE NOT successful AND retry_exhausted
           )::int AS retry_exhausted_voters,
+          COUNT(*) FILTER (WHERE NOT successful AND retry_eligible AND NOT retry_exhausted)::int AS retry_eligible_voters,
           COUNT(*) FILTER (WHERE pending)::int AS pending_voters
         FROM voter_outcomes
         GROUP BY iteration_id
@@ -238,6 +240,7 @@ async function loadIterations(db, campaignId) {
         COALESCE(contact.selected_voters, 0)::int AS selected_voters,
         COALESCE(contact.successful_voters, 0)::int AS successful_voters,
         COALESCE(contact.retry_exhausted_voters, 0)::int AS retry_exhausted_voters,
+        COALESCE(contact.retry_eligible_voters, 0)::int AS retry_eligible_voters,
         COALESCE(contact.pending_voters, 0)::int AS pending_voters,
         COALESCE(execution.call_attempts, 0)::int AS call_attempts,
         COALESCE(execution.callbacks_received, 0)::int AS callbacks_received,
@@ -287,6 +290,7 @@ async function loadIterations(db, campaignId) {
       selectedVoters: number(row.selected_voters),
       successfulVoters: successful,
       retryExhaustedVoters: number(row.retry_exhausted_voters),
+      retryEligibleVoters: number(row.retry_eligible_voters),
       pendingVoters: number(row.pending_voters),
       callAttempts: number(row.call_attempts),
       callbacksReceived: number(row.callbacks_received),

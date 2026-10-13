@@ -19,7 +19,7 @@ const snapshot = { id: questionnaireId, code: 'SURVEY_1', version: 1, snapshot_s
   content_fingerprint: createHash('sha256').update(JSON.stringify(canonical(questions))).digest('hex') };
 let source = await readFile(new URL('./research-report.repository.js', import.meta.url), 'utf8');
 source = source.replace(/import \{ getDb \} from '[^']+';/, "const getDb = () => { throw new Error('Production DB forbidden'); };")
-  .replace(/import \{ getCampaignStrategicAnalytics \} from '[^']+';/, "const getCampaignStrategicAnalytics = () => { throw new Error('Production analysis forbidden'); };")
+  .replace(/import \{ resolveResearchScope \} from '[^']+';/, "const resolveResearchScope = () => { throw new Error('Tests must inject an authorized scope'); };")
   .replace("'./research-report.js'", JSON.stringify(new URL('./research-report.js', import.meta.url).href))
   .replace("'./report-catalog.js'", JSON.stringify(new URL('./report-catalog.js', import.meta.url).href))
   .replace("'./fieldwork-diagnostics.repository.js'", JSON.stringify(new URL('./fieldwork-diagnostics.repository.js', import.meta.url).href))
@@ -111,7 +111,7 @@ try {
   // It cannot revive an older answer or substitute party_preference.
   await db.query("INSERT INTO calls VALUES ($1, $2, $3, 'connected', $4::jsonb, '2026-10-11T12:00:00Z', '2026-10-11T11:00:00Z')", [uid(402), iterationId, uid(100), JSON.stringify({ party_preference: 'Congress', another_construct: 'jobs' })]);
   report = await load();
-  assert.equal(get(report).answerBase, 9);
+  assert.equal(get(report).answerBase, null, 'Missing-category complements and their denominators are withheld together');
   assert.equal(get(report).captureStatus, 'SMALL_CELLS_WITHHELD');
   assert.deepEqual(get(report).distribution, []);
   assert.equal(report.sources.latestEvidenceAt, '2026-10-11T12:00:00.000Z');
@@ -119,8 +119,8 @@ try {
   await db.query("UPDATE voter_master SET mandal_name_source = 'Another Mandal' WHERE id = $1", [uid(109)]);
   const filtered = analysis(); filtered.segment.respondentBase = 9;
   report = await loadResearchReport(campaignId, {}, {}, { analyze: async () => filtered, getDb: async () => db });
-  assert.equal(get(report).respondentBase, 9);
-  assert.equal(get(report).answerBase, 8);
+  assert.equal(get(report).respondentBase, null);
+  assert.equal(get(report).answerBase, null);
   assert.deepEqual(report.scope.filters, filtered.scope.insightScope.filters);
   // Missing old registry relation must not be a successful declaration.
   await db.exec('DROP TABLE analytics_research_design_registry_v2');

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardList,
-  ChevronDown, Clock3, ExternalLink, FileText, Info, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
+  ChevronDown, Clock3, FileText, Info, LoaderCircle, Megaphone, PhoneCall, RefreshCw,
   ShieldCheck, Users
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -43,14 +43,12 @@ type Campaign = {
 };
 type Distribution = { value: string; respondents: number; percentage: number | null };
 type MeasureSummary = {
-  respondentBase: number; answerBase: number; missingCount: number; cantSayCount: number;
-  refusedCount: number; uncodedCount: number; coveragePct: number; suppressed: boolean;
+  respondentBase: number | null; answerBase: number | null; missingCount: number | null; cantSayCount: number | null;
+  refusedCount: number | null; uncodedCount: number | null; coveragePct: number | null; suppressed: boolean;
   normalizationVersion: string;
 };
-type Segment = {
-  label: string; base: number; suppressed: boolean;
-  answerBase: number; respondentBase: number; missingCount: number; cantSayCount: number;
-  refusedCount: number; uncodedCount: number; coveragePct: number;
+type Segment = MeasureSummary & {
+  label: string; base: number | null;
   sentiment: Distribution[]; positivePct: number | null;
 };
 type SentimentConstruct = {
@@ -75,7 +73,7 @@ type DashboardIntelligence = {
   };
   minimumBase: number; respondentBase: number | null; suppressed: boolean; scopeLabel: string;
   sentimentConstruct: SentimentConstruct; sentimentValidation: SentimentValidation;
-  rating: { value: number | null; scale: number; confidence: string; basis: string; answeredBase: number };
+  rating: { value: number | null; scale: number; confidence: string; basis: string; answeredBase: number | null };
   measures: Record<"sentiment" | "issues" | "party" | "candidate" | "leadership", MeasureSummary>;
   sentiment: Distribution[];
   issues: Distribution[];
@@ -106,6 +104,8 @@ type Metric = {
 };
 
 function count(value: number) { return Number(value || 0).toLocaleString(); }
+function reportCount(value: number | null) { return value === null ? "Withheld" : value.toLocaleString(); }
+function reportPercent(value: number | null) { return value === null ? "Withheld" : `${value.toFixed(1)}%`; }
 
 function titleFor(role: PlatformRole) {
   switch (role) {
@@ -208,17 +208,17 @@ function ReportCard({ eyebrow, title, subtitle, children, footer }: {
 
 function BaseCaption({ summary, children }: { summary: MeasureSummary; children: ReactNode }) {
   return <div className={styles.baseCaption}>
-    <small>{summary.answerBase} answered / {summary.respondentBase} respondents · {summary.coveragePct.toFixed(1)}% coverage{summary.suppressed ? " · Withheld" : ""}</small>
+    <small>{reportCount(summary.answerBase)} answered / {reportCount(summary.respondentBase)} respondents · {reportPercent(summary.coveragePct)} coverage{summary.suppressed ? " · Withheld" : ""}</small>
     <ReportNote><p>{children}</p><p>Coverage = answered responses ÷ respondent observations × 100. Percentages use all answered responses, including Can&apos;t say, Refused and Uncoded.</p>
-      <p>Missing {summary.missingCount} · Can&apos;t say {summary.cantSayCount} · Refused {summary.refusedCount} · Uncoded {summary.uncodedCount}</p>
-      <p>{summary.suppressed ? "Percentages withheld: fewer than 5 answers." : "The minimum answered base has been met."} Missing answers are not counted as negative or zero.</p>
+      <p>Missing {reportCount(summary.missingCount)} · Can&apos;t say {reportCount(summary.cantSayCount)} · Refused {reportCount(summary.refusedCount)} · Uncoded {reportCount(summary.uncodedCount)}</p>
+      <p>{summary.suppressed ? "This answer partition and linked totals are withheld: the cohort, answered base or a category cell is below the reporting minimum." : "The reporting minimum has been met for this answer partition."} Missing answers are not counted as negative or zero.</p>
     </ReportNote>
   </div>;
 }
 
 function SegmentNote({ items, children }: { items: Segment[]; children: ReactNode }) {
-  return <ReportNote><p>{children}</p><p>Each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded. Percentages are withheld below five answers; missing answers are not negative responses.</p>
-    <div className={styles.noteTable}><table><caption>Answer coverage by segment</caption><thead><tr><th>Segment</th><th>Answered / respondents</th><th>Coverage</th><th>Missing</th><th>Can&apos;t say</th><th>Refused</th><th>Uncoded</th></tr></thead><tbody>{items.map((item) => <tr key={item.label}><th scope="row">{item.label}</th><td>{item.answerBase} / {item.respondentBase}</td><td>{item.coveragePct.toFixed(1)}%</td><td>{item.missingCount}</td><td>{item.cantSayCount}</td><td>{item.refusedCount}</td><td>{item.uncodedCount}</td></tr>)}</tbody></table></div>
+  return <ReportNote><p>{children}</p><p>Each percentage uses its own answered base, including Mixed, Can&apos;t say, Refused and Uncoded. A sparse answer partition is withheld with its linked totals; missing answers are not negative responses. Profile segments use current voter-master demographics, not frozen interview-time profiles.</p>
+    <div className={styles.noteTable}><table><caption>Answer coverage by segment</caption><thead><tr><th>Segment</th><th>Answered / respondents</th><th>Coverage</th><th>Missing</th><th>Can&apos;t say</th><th>Refused</th><th>Uncoded</th></tr></thead><tbody>{items.map((item) => <tr key={item.label}><th scope="row">{item.label}</th><td>{reportCount(item.answerBase)} / {reportCount(item.respondentBase)}</td><td>{reportPercent(item.coveragePct)}</td><td>{reportCount(item.missingCount)}</td><td>{reportCount(item.cantSayCount)}</td><td>{reportCount(item.refusedCount)}</td><td>{reportCount(item.uncodedCount)}</td></tr>)}</tbody></table></div>
   </ReportNote>;
 }
 
@@ -242,7 +242,7 @@ function LandscapeBars({ items, empty }: { items: Distribution[]; empty: string 
 
 function SegmentBars({ items }: { items: Segment[] }) {
   if (!items.length) return <div className={styles.chartEmpty}>No demographic evidence is available.</div>;
-  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><strong>{item.positivePct === null ? "Withheld" : `${item.positivePct.toFixed(1)}% positive`}</strong><small>{item.answerBase} answered / {item.respondentBase} respondents</small></div><div><i style={{ width: `${item.positivePct || 0}%` }} /></div></div>)}</div>;
+  return <div className={styles.segmentBars}>{items.map((item) => <div key={item.label} className={styles.segmentRow}><div><span>{item.label}</span><strong>{item.positivePct === null ? "Withheld" : `${item.positivePct.toFixed(1)}% positive`}</strong><small>{reportCount(item.answerBase)} answered / {reportCount(item.respondentBase)} respondents</small></div><div><i style={{ width: `${item.positivePct ?? 0}%` }} /></div></div>)}</div>;
 }
 
 function MandalHeatmap({ items }: { items: Segment[] }) {
@@ -250,7 +250,7 @@ function MandalHeatmap({ items }: { items: Segment[] }) {
   if (!items.length) return <div className={styles.chartEmpty}>No Mandal evidence is available.</div>;
   return <div className={styles.heatmap}>
     <div className={styles.heatmapHeader}><span>Mandal</span>{labels.map((label) => <strong key={label}>{label}</strong>)}</div>
-    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{item.answerBase} answered / {item.respondentBase} respondents{item.suppressed ? " · Withheld" : ""}</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage || 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
+    {items.map((item) => <div className={styles.heatmapRow} key={item.label}><span>{item.label}<small>{reportCount(item.answerBase)} answered / {reportCount(item.respondentBase)} respondents{item.suppressed ? " · Withheld" : ""}</small></span>{labels.map((label) => { const value = item.sentiment.find((entry) => entry.value === label)?.percentage ?? 0; return <i key={label} data-suppressed={item.suppressed} style={{ backgroundColor: item.suppressed ? "#f4eeee" : `rgba(22, 139, 125, ${Math.max(value / 100, .06)})` }}>{item.suppressed ? "—" : `${value.toFixed(0)}%`}</i>; })}</div>)}
   </div>;
 }
 
@@ -330,7 +330,7 @@ export default function Home() {
     <header className={styles.hero}>
       <div><span>RESEARCH COMMAND CENTER</span><h1>{role ? titleFor(role) : "Dashboard"}</h1></div>
       <div className={styles.heroActions}>
-        {(role === "SUPER_ADMIN" || role === "ADMIN") && <Link href="/enterprise-dashboard"><BarChart3 size={16} />Amazon Quick preview <ExternalLink size={14} /></Link>}
+        {(role === "SUPER_ADMIN" || role === "ADMIN") && <Link href="/enterprise-dashboard"><BarChart3 size={16} />Leadership reports <ArrowRight size={14} /></Link>}
         <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
     </header>
@@ -352,7 +352,7 @@ export default function Home() {
       </section>
       <div className={styles.operationalNote}><ReportNote label="How operational totals are calculated">
         <p>Counts use role-visible records and are independent of the research filters. Active Runs and execution queue = ready Runs + running Runs. Iterations complete is shown as completed / visible Iterations: a count ratio, not a percentage.</p>
-        <p>Closed Runs have status Completed, Failed, Cancelled or Archived. Completed Iterations have status Completed or Locked, or contain at least three Runs that are all closed. Ownership gaps count non-completed Campaigns without a manager.</p>
+        <p>Closed Runs have status Completed, Failed, Cancelled or Archived. Completed Iteration counts use recorded Completed or Locked statuses, not a second calculation from Run totals. Operational closeout requires Runs 1, 2 and 3 to be closed and no unresolved contacts, active executions or remaining eligible retries. Ownership gaps count non-completed Campaigns without a manager.</p>
         <p>Pending, retry-eligible and successful contacts count Run-contact rows, not unique voters across Runs. Awaiting callbacks counts active executions without a callback; delayed callbacks are older than 30 minutes.</p>
         <p>Evidence gaps count missing transcripts + missing structured responses. Admin and Super Admin evidence exceptions also include stale callbacks. These are exception counts, not counts of distinct affected calls; Campaign-card exceptions exclude stale callbacks.</p>
         <p>Campaign connection rate = connected call records ÷ execution records × 100. Evidence ready measures captured evidence slots: (2 × connected calls − missing transcripts − missing responses) ÷ (2 × connected calls) × 100, limited to 0–100%. Both are zero when their denominator is zero. Evidence ready does not mean every call has both records or that survey findings are validated.</p>
@@ -371,7 +371,7 @@ export default function Home() {
         {data.intelligence.suppressed ? <div className={styles.intelligenceSuppressed}><ShieldCheck size={21} /><div><strong>Research result withheld</strong><p>Below {data.intelligence.minimumBase} respondent observations.</p><ReportNote label="Why it’s withheld"><p>This selected scope has fewer than {data.intelligence.minimumBase} respondent observations. More responses or a broader research scope are required. Withheld values are unavailable, not zero.</p></ReportNote></div></div> : <>
           <div className={styles.reportGrid}>
             <ReportCard eyebrow="DESCRIPTIVE RATING" title={data.intelligence.sentimentConstruct.label} footer={<div className={styles.baseCaption}>
-              <small>{data.intelligence.rating.confidence} · {data.intelligence.rating.answeredBase} coded / {data.intelligence.respondentBase || 0} observations</small>
+              <small>{data.intelligence.rating.confidence} · {reportCount(data.intelligence.rating.answeredBase)} coded / {reportCount(data.intelligence.respondentBase)} observations</small>
               <ReportNote><p>{data.intelligence.rating.basis}</p><p>The rating uses polarity-coded assessments of {data.intelligence.sentimentConstruct.label.toLowerCase()}. It is a descriptive score, not a probability or voting prediction. Missing and unavailable values are not zero.</p><p>Scope: {data.intelligence.scopeLabel}</p></ReportNote>
             </div>}>
               <div className={styles.ratingSummary}><strong>{data.intelligence.rating.value === null ? "Not measured" : `${data.intelligence.rating.value.toFixed(1)}/5`}</strong><div>{Array.from({ length: 5 }, (_, index) => <i key={index} data-filled={index + 1 <= Math.round(data.intelligence?.rating.value || 0)}>★</i>)}</div></div>

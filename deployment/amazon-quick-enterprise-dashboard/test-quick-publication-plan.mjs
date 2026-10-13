@@ -8,6 +8,7 @@ import {
   executePublication, quickInputColumns, stagedDatasetRequest
 } from "./quick-publication-plan.mjs";
 import { buildGovernedDefinition, quickTextBoxContent } from "./quick-publication-definition.mjs";
+import { reportingCategoryLabels, OUTPUT_KEYS, DISCLOSURE_POLICY_VERSION } from '../output-variable-standardization/output-normalization.repository.js';
 
 const bindings = Object.entries(REPORTING_VIEWS).map(([role, view]) => ({ role, view, identifier: role, arn: `arn:aws:quicksight:ap-south-1:123456789012:dataset/${role}` }));
 function fixture() {
@@ -24,7 +25,20 @@ function fixture() {
   } });
   const guard = { datasetIdentifier: "enterprise", sheetId: "sheet-0", visualId: "party-count", id: "party-count-min5", column: "fixture_person_count", aggregation: "NONE", sourceKey: "respondent_key", partitions: ["party_salience"] };
   definition.FilterGroups.push(minimumCellFilter(guard));
-  return { definition, bindings, guards: [guard], reviewedVisualIds: ["party-count"] };
+  const taxonomy = { incumbent: ['respondent_sentiment', ['incumbent_assessment']], candidate: ['candidate_sentiment', OUTPUT_KEYS.candidate],
+    party: ['party_salience', OUTPUT_KEYS.party], leadership: ['party_leadership', OUTPUT_KEYS.leadership], issue: ['issue_priority', OUTPUT_KEYS.issue] };
+  const checks = [];
+  for (const [kind, [dimension, keys]] of Object.entries(taxonomy)) for (const [index, label] of [...reportingCategoryLabels(keys), 'No response'].entries()) {
+    const partitions = dimension === 'party_salience' ? [] : ['party_salience'];
+    const key = `quick_partition_${kind}_${index}_person_key`, count = `quick_partition_${kind}_${index}_${partitions.join('_') || 'all'}_count`;
+    definition.CalculatedFields.push({ DataSetIdentifier: 'enterprise', Name: key, Expression: `ifelse({${dimension}} = ${JSON.stringify(label)}, {respondent_key}, NULL)` },
+      { DataSetIdentifier: 'enterprise', Name: count, Expression: uniquePersonWindowExpression(key, partitions) });
+    checks.push(`({${count}} > 0 AND {${count}} < 5)`);
+  }
+  const partitionGuard = { datasetIdentifier: 'enterprise', sheetId: 'sheet-0', visualId: 'party-count', id: 'fixture-partition', column: 'fixture_partition_safe', aggregation: 'NONE', policy: DISCLOSURE_POLICY_VERSION, kinds: Object.keys(taxonomy) };
+  definition.CalculatedFields.push({ DataSetIdentifier: 'enterprise', Name: partitionGuard.column, Expression: `ifelse(${checks.join(' OR ')}, 0, 5)` });
+  definition.FilterGroups.push(minimumCellFilter(partitionGuard));
+  return { definition, bindings, guards: [guard], partitionGuards: [partitionGuard], disclosurePolicy: DISCLOSURE_POLICY_VERSION, reviewedVisualIds: ["party-count"] };
 }
 
 assert.deepEqual(PARTY_COLORS, { BRS: "#E91E8F", BJP: "#FF9933", Congress: "#138808" });
@@ -190,7 +204,7 @@ assert.deepEqual(optionsFixture.Options, savedOptions, "Saved backup options are
 const serviceReadback = { ResourceStatus: "UPDATE_SUCCESSFUL", Errors: [], Definition: structuredClone(optionsCandidate.definition) };
 serviceReadback.Definition.ParameterDeclarations = [];
 for (const field of serviceReadback.Definition.CalculatedFields) {
-  if (field.Expression.startsWith("distinctCountOver(") && field.Expression.endsWith(", PRE_AGG)")) field.Expression = field.Expression.replaceAll("{gender}", "gender");
+  if (!field.Name.startsWith('quick_partition_') && field.Expression.startsWith("distinctCountOver(") && field.Expression.endsWith(", PRE_AGG)")) field.Expression = field.Expression.replaceAll("{gender}", "gender");
 }
 for (const group of serviceReadback.Definition.FilterGroups) for (const filter of group.Filters) {
   if (filter.NumericRangeFilter) filter.NumericRangeFilter.IncludeMaximum = false;
@@ -396,12 +410,12 @@ for (const sheet of generated.definition.Sheets) {
   const layout = sheet.Layouts[0].Configuration.GridLayout.Elements;
   for (const [index, control] of sheet.FilterControls.entries()) {
     const element = layout.find((item) => item.ElementId === control.Dropdown.FilterControlId);
-    assert.deepEqual([element.ColumnIndex, element.ColumnSpan, element.RowIndex, element.RowSpan], [(index % 3) * 12, 12, Math.floor(index / 3) * 4, 4], "Three full-height controls per row avoid ContainerTooSmall");
+    assert.deepEqual([element.ColumnIndex, element.ColumnSpan, element.RowIndex, element.RowSpan], [(index % 4) * 9, 9, Math.floor(index / 4) * 4, 4], "Four compact controls retain full label/dropdown height; AWS validation remains required");
   }
   const disclosureLayout = layout.find((item) => item.ElementType === "TEXT_BOX");
   assert.equal(disclosureLayout.ColumnSpan, 36);
   assert.ok(disclosureLayout.RowSpan >= (sheet.Name === "Measurement guide" ? 12 : 4), "Compact context and on-demand definitions both need legible space");
-  assert.equal(disclosureLayout.RowIndex, Math.ceil(sheet.FilterControls.length / 3) * 4);
+  assert.equal(disclosureLayout.RowIndex, Math.ceil(sheet.FilterControls.length / 4) * 4);
   for (const union of sheet.Visuals) {
     const kind = Object.keys(union)[0], visual = union[kind];
     const element = layout.find((item) => item.ElementId === visual.VisualId);
@@ -467,14 +481,15 @@ if (existsSync(reviewedBundleFile) && existsSync(reviewedReadbackFile)) {
   const bundle = JSON.parse(readFileSync(reviewedBundleFile, "utf8"));
   const reviewedCandidate = { ...bundle.manifest, definition: bundle.analysisRequest.Definition };
   const originalReadback = JSON.parse(readFileSync(reviewedReadbackFile, "utf8"));
-  assert.deepEqual(validateServiceNormalizedPublicationReadback(originalReadback, reviewedCandidate), {
-    valid: false, errors: ["Dashboard options differ from the reviewed candidate"]
-  }, "The original live export is blocked solely by meaningful missing click highlighting after narrow normalization");
+  const originalGate = validateServiceNormalizedPublicationReadback(originalReadback, reviewedCandidate);
+  assert.equal(originalGate.valid, false);
+  assert.ok(originalGate.errors.includes('Dashboard options differ from the reviewed candidate'));
+  assert.ok(originalGate.errors.some((error) => error.includes('Whole-partition disclosure guard missing')), 'Historical exports do not satisfy the upgraded disclosure policy');
   // Synthetic test setup only, not evidence of a downloaded cloud correction.
   const syntheticRestoredReadback = structuredClone(originalReadback);
   syntheticRestoredReadback.Definition.Options.CustomActionDefaults = structuredClone(reviewedCandidate.definition.Options.CustomActionDefaults);
-  assert.equal(validateServiceNormalizedPublicationReadback(syntheticRestoredReadback, reviewedCandidate).valid, true,
-    JSON.stringify(validateServiceNormalizedPublicationReadback(syntheticRestoredReadback, reviewedCandidate).errors));
+  assert.equal(validateServiceNormalizedPublicationReadback(syntheticRestoredReadback, reviewedCandidate).valid, false,
+    'Restoring highlighting cannot substitute for the new whole-partition guards');
   assert.equal(validatePublicationReadback(syntheticRestoredReadback, reviewedCandidate).valid, false, "The original executor gate remains strict even for a semantically matching service export");
   console.log("Original cloud export regression passed; restored highlighting fixture is synthetic (offline only).");
 }
@@ -484,9 +499,10 @@ if (existsSync(friendlyBundleFile) && existsSync(finalReadbackFile)) {
   const bundle = JSON.parse(readFileSync(friendlyBundleFile, "utf8"));
   const finalReadback = JSON.parse(readFileSync(finalReadbackFile, "utf8"));
   const approvedUiCandidate = { ...bundle.manifest, definition: structuredClone(bundle.analysisRequest.Definition) };
-  assert.deepEqual(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate), {
-    valid: false, errors: ["Dashboard Sheets contents differ from the reviewed candidate", "Dashboard AnalysisDefaults contents differ from the reviewed candidate", "Dashboard QueryExecutionOptions contents differ from the reviewed candidate"]
-  }, "UI-generated settings are not silently treated as normalizing defaults");
+  const finalGate = validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate);
+  assert.equal(finalGate.valid, false);
+  for (const error of ["Dashboard Sheets contents differ from the reviewed candidate", "Dashboard AnalysisDefaults contents differ from the reviewed candidate", "Dashboard QueryExecutionOptions contents differ from the reviewed candidate"])
+    assert.ok(finalGate.errors.includes(error), 'UI-generated settings are not silently treated as normalizing defaults');
   // Individually reviewed settings are explicit expected values, not removals
   // from the comparator. AUTO is analysis-only, never a dashboard API field.
   const responsiveCanvas = { ScreenCanvasSizeOptions: { ResizeOption: "RESPONSIVE" } };
@@ -495,8 +511,8 @@ if (existsSync(friendlyBundleFile) && existsSync(finalReadbackFile)) {
   } };
   approvedUiCandidate.definition.QueryExecutionOptions = { QueryExecutionMode: "AUTO" };
   approvedUiCandidate.definition.Sheets.find((sheet) => sheet.Name === "Demographic pulse").Layouts[0].Configuration.GridLayout.CanvasSizeOptions = structuredClone(responsiveCanvas);
-  assert.equal(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate).valid, true,
-    JSON.stringify(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate).errors));
+  assert.equal(validateServiceNormalizedPublicationReadback(finalReadback, approvedUiCandidate).valid, false,
+    'Previously approved UI settings remain insufficient for the new disclosure policy');
   for (const mutate of [
     (definition) => { definition.QueryExecutionOptions.QueryExecutionMode = "MANUAL"; },
     (definition) => { definition.AnalysisDefaults.DefaultNewSheetConfiguration.SheetContentType = "PAGINATED"; },

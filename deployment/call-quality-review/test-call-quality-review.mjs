@@ -32,7 +32,7 @@ export async function isolatedRepository() {
   let code = await readFile(new URL('./call-quality-review.repository.js', import.meta.url), 'utf8');
   code = code.replace("'./call-quality-review.js'", JSON.stringify(new URL('./call-quality-review.js', import.meta.url).href))
     .replace("'./campaign-visibility.repository.js'", JSON.stringify(new URL('../campaign-draft-privacy/campaign-visibility.repository.js', import.meta.url).href))
-    .replace(/import \{ getCampaignStrategicAnalytics \} from '[^']+';/, "const getCampaignStrategicAnalytics = () => { throw new Error('Production analysis forbidden'); };");
+    .replace(/import \{ resolveResearchScope \} from '[^']+';/, "const resolveResearchScope = () => { throw new Error('Tests must inject an authorized scope'); };");
   return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
 

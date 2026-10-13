@@ -16,6 +16,8 @@ if (!server.includes(marker) && (!importAnchor.test(server) || !mountAnchor.test
 
 await mkdir(path.join(runtimeRoot, "src/repositories"), { recursive: true });
 await mkdir(path.join(runtimeRoot, "src/routes"), { recursive: true });
+await copyFile(path.resolve(packageRoot, "../run-lifecycle-automation/operational-lifecycle-policy.js"),
+  path.join(runtimeRoot, "src/repositories/operational-lifecycle-policy.js"));
 await copyFile(path.join(packageRoot, "pipeline.repository.js"), path.join(runtimeRoot, "src/repositories/pipeline.repository.js"));
 await copyFile(path.join(packageRoot, "pipeline.routes.js"), path.join(runtimeRoot, "src/routes/pipeline.routes.js"));
 

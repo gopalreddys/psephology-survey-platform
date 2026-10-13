@@ -138,7 +138,7 @@ try {
   };
   const routeSource = await readFile(new URL('../amazon-quick-enterprise-dashboard/amazon-quick-dashboard.routes.js', import.meta.url), 'utf8');
   const routeExecutable = 'const { express, requireAuth, requireRole, getDb, campaignReviewVisibilitySql, saveResearchDesign, researchDesignHistory, ResearchDesignError, getSentimentValidation } = globalThis.__methodologyRouteBindings;\n'
-    + routeSource.replace(/^import .*;\n/gm, '');
+    + routeSource.replace(/^import [\s\S]*? from ["'][^"']+["'];\n/gm, '');
   await import(`data:text/javascript;base64,${Buffer.from(routeExecutable).toString('base64')}`);
   delete globalThis.__methodologyRouteBindings;
   const qualityRoute = routes.find((route) => route.route === '/enterprise-dashboard/research-quality');

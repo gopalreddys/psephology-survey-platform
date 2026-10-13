@@ -3,7 +3,7 @@ import { campaignReviewVisibilitySql } from "./campaign-visibility.repository.js
 import { getCampaignAnalysis, latestStructuredRespondents, buildResponseDistributions,
   selectConsecutiveComparisonIterations, evaluateCompletedIterationComparison } from "./campaign-analysis.repository.js";
 import { loadIterationComparability } from "./research-comparability.repository.js";
-import { normalizeOutputValue, normalizedLabel, summarizeOutput, summarizeLabels, NORMALIZATION_VERSION, OUTPUT_KEYS, SENTIMENT_CONSTRUCTS, getSentimentValidation } from "./output-normalization.repository.js";
+import { normalizeOutputValue, normalizedLabel, summarizeOutput, summarizeLabels, summarizeDirectRatings, selectStructuredOutput, NORMALIZATION_VERSION, OUTPUT_KEYS, SENTIMENT_CONSTRUCTS, getSentimentValidation } from "./output-normalization.repository.js";
 
 const ANALYTICS_ROLES = new Set([
   "SUPER_ADMIN",
@@ -151,6 +151,7 @@ function mapIteration(row) {
     selectedVoters,
     successfulVoters,
     retryExhaustedVoters: number(row.retry_exhausted_voters),
+    retryEligibleVoters: number(row.retry_eligible_voters),
     pendingVoters: number(row.pending_voters),
     callAttempts: attempts,
     callbacksReceived: callbacks,
@@ -258,6 +259,7 @@ export async function getAnalyticsWorkspace(actor) {
       SELECT selected.campaign_id, run.iteration_id, contact.voter_id,
         BOOL_OR(contact.final_status = ANY($${scope.values.length + 2}::text[])) AS successful,
         BOOL_OR(contact.retry_exhausted = TRUE) AS retry_exhausted,
+        BOOL_OR(contact.retry_eligible = TRUE AND contact.retry_exhausted = FALSE) AS retry_eligible,
         BOOL_OR(contact.attempt_status NOT IN ('COMPLETED', 'FAILED')) AS pending
       FROM iteration_set selected
       JOIN campaign_runs run ON run.iteration_id = selected.iteration_id
@@ -268,6 +270,7 @@ export async function getAnalyticsWorkspace(actor) {
         COUNT(*)::int AS selected_voters,
         COUNT(*) FILTER (WHERE successful)::int AS successful_voters,
         COUNT(*) FILTER (WHERE NOT successful AND retry_exhausted)::int AS retry_exhausted_voters,
+        COUNT(*) FILTER (WHERE NOT successful AND retry_eligible AND NOT retry_exhausted)::int AS retry_eligible_voters,
         COUNT(*) FILTER (WHERE pending)::int AS pending_voters
       FROM contact_outcomes
       GROUP BY campaign_id, iteration_id
@@ -313,6 +316,7 @@ export async function getAnalyticsWorkspace(actor) {
       COALESCE(contact.selected_voters, 0)::int AS selected_voters,
       COALESCE(contact.successful_voters, 0)::int AS successful_voters,
       COALESCE(contact.retry_exhausted_voters, 0)::int AS retry_exhausted_voters,
+      COALESCE(contact.retry_eligible_voters, 0)::int AS retry_eligible_voters,
       COALESCE(contact.pending_voters, 0)::int AS pending_voters,
       COALESCE(execution.call_attempts, 0)::int AS call_attempts,
       COALESCE(execution.callbacks_received, 0)::int AS callbacks_received,
@@ -430,27 +434,7 @@ function firstAvailableDistribution(records, keys, classifier = null) {
 }
 
 function directFivePointIndex(records) {
-  const keys = ["brs_lean_rating", "party_lean_rating", "party_lean_strength"];
-  const ratings = [];
-  for (const record of records) {
-    const variables = record.response_variables || {};
-    for (const key of keys) {
-      const raw = variables[key];
-      const value = typeof raw === "number" || (typeof raw === "string" && /^[1-5]$/.test(raw.trim())) ? Number(raw) : NaN;
-      if (Number.isInteger(value) && value >= 1 && value <= 5) {
-        ratings.push(value);
-        break;
-      }
-    }
-  }
-  return {
-    value: ratings.length >= MINIMUM_SEGMENT_BASE
-      ? Number((ratings.reduce((total, value) => total + value, 0) / ratings.length).toFixed(1))
-      : null,
-    answered: ratings.length,
-    scale: 5,
-    basis: "Direct respondent rating only"
-  };
+  return summarizeDirectRatings(records);
 }
 
 function classifySentiment(value) {
@@ -458,7 +442,7 @@ function classifySentiment(value) {
 }
 
 function candidateSentiment(record) {
-  return summarizeOutput([record], OUTPUT_KEYS.candidate).values[0]?.value || null;
+  return selectStructuredOutput(record, OUTPUT_KEYS.candidate).label;
 }
 
 function buildSentimentAnalysis(records, constructKey = "candidate_impression") {
@@ -536,7 +520,7 @@ function aggregateCampaignRating(records, iterationCount) {
   if (direct.value !== null) {
     components.push({
       key: "DIRECT_RATING",
-      label: "Direct neutral party-strength rating",
+      label: "Explicit respondent 1–5 rating",
       variables: ["brs_lean_rating", "party_lean_rating", "party_lean_strength"],
       value: direct.value,
       weight: 4,
@@ -621,7 +605,8 @@ function aggregateCampaignRating(records, iterationCount) {
     respondentObservations: records.length,
     iterationCount,
     components,
-    basis: "Aggregate output-variable composite; not individual vote intention"
+    measureId: "DESCRIPTIVE_OUTPUT_COMPOSITE_V1",
+    basis: "Hand-weighted descriptive composite of separate constructs; not a direct rating, validated forecast or individual vote intention"
   };
 }
 
@@ -750,9 +735,9 @@ function buildIterationDashboard(records, {
         detail: "Respondents explicitly reporting group influence"
       },
       {
-        label: "Answer completeness",
+        label: "Recorded question coverage",
         value: averageAnswerCoveragePct,
-        detail: "Average coverage across answered questionnaire variables"
+        detail: "Coverage needs the frozen questionnaire denominator; observed answer keys cannot establish complete interviews"
       }
     ],
     leadingSignals: {
@@ -1208,10 +1193,10 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   );
   const themes = transcriptThemes(selectedRecords);
   const demoRespondents = selectedRecords.filter((record) => record.is_demo_contact).length;
-  const answeredQuestions = performance.filter((question) => question.answered > 0);
-  const averageAnswerCoveragePct = answeredQuestions.length
-    ? Number((answeredQuestions.reduce((total, question) => total + question.answeredPct, 0) / answeredQuestions.length).toFixed(1))
-    : 0;
+  // Legacy observed-key catalogues omit wholly missing questions. The separate
+  // exact-attempt interview-completion service owns frozen required coverage.
+  // Do not manufacture a percentage from answers that happen to be present.
+  const averageAnswerCoveragePct = null;
   const iterationDashboard = buildIterationDashboard(selectedRecords, {
     issuePriority,
     partySalience,
@@ -1296,7 +1281,7 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
   const scopeOperations = selectedRun || (selectedIteration ? {
     selectedVoters: selectedIteration.selectedVoters,
     successfulVoters: selectedIteration.successfulVoters,
-    retryEligibleVoters: selectedIteration.retryExhaustedVoters,
+    retryEligibleVoters: selectedIteration.retryEligibleVoters,
     callAttempts: selectedIteration.callAttempts,
     callbacksReceived: selectedIteration.callbacksReceived,
     connectedCalls: selectedIteration.connectedRespondents,
@@ -1372,6 +1357,8 @@ export async function getCampaignStrategicAnalytics(campaignId, actor, selection
     comparison,
     outputMeasures,
     normalizationVersion: NORMALIZATION_VERSION,
+    demographicProvenance: { source: "CURRENT_MASTER_DATA", historicalSnapshotRecorded: false,
+      message: "Age, gender and Mandal reflect current master data, not selection-time historical snapshots." },
     sentimentValidation: getSentimentValidation(),
     questionPerformance: performance,
     issueAnalysis: {

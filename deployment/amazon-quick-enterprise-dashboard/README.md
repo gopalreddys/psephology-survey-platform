@@ -7,6 +7,8 @@ the enterprise dashboard is authored and published in AWS.
 
 ## What leadership will see
 
+The October 13 consolidation replaces raw-iframe embedding with the official SDK and moves the methodology editor to Iteration operations. See [SDK embedding and access requirements](SDK-EMBEDDING.md). Use the [controlled release package](../platform-consolidation/README.md) for this release; the legacy installer below is retained for compatibility, not the recommended consolidation procedure. Source changes do not republish the live Quick dashboard.
+
 For this demo, sparse test responses and unavailable values are acceptable;
 technical dataset/session failures are not. The report-to-source coverage and
 remaining collection contracts are documented in
@@ -165,9 +167,7 @@ QUICKSIGHT_READER_USER_ARN=arn:aws:quicksight:ap-south-1:123456789012:user/defau
 QUICKSIGHT_ALLOWED_DOMAINS=https://your-platform.example.com
 ```
 
-For an authenticated internal-only preview, a one-click embed can be used
-instead by setting `QUICKSIGHT_ONE_CLICK_EMBED_URL`. Do not use public
-embedding.
+One-click URLs are retired by the consolidation. Use API-generated registered-user sessions. The portfolio Reader above is Super Admin-only; restricted Admin access requires unique Reader mappings and reviewed UserARN/campaign RLS on every dataset, as documented in [SDK-EMBEDDING.md](SDK-EMBEDDING.md). Do not use public embedding.
 
 ## Governed authoring and publication
 
@@ -191,7 +191,7 @@ These are party-category colors; sentiment colors remain a separate convention.
 An absent party is not populated with a dummy respondent or synthetic zero.
 Sparse results must remain empty/withheld with an explanation.
 
-Enterprise suppression targets numeric `distinctCountOver` calculated fields at
+Prepared consolidation suppression adds whole-construct partition guards, including missing responses and linked totals, to numeric `distinctCountOver` calculated fields at
 `PRE_AGG`, partitioned by each visual's exact category/color or heat-map cells.
 The source is the conditional unique-person key, not the observation key.
 Normal controls apply before these windows; the numeric range filter then

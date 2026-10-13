@@ -107,6 +107,7 @@ function ratedSentiment(summary) {
 }
 
 function ratedBase(summary) {
+  if (summary.suppressed) return null;
   return ratedSentiment(summary).reduce((total, item) => total + item.respondents, 0);
 }
 
@@ -124,7 +125,7 @@ function segmentedSentiment(records, deriveSegment, outputKeys, order = []) {
       const sentiment = chartValues(summary);
       return {
         label,
-        base: items.length,
+        base: summary.respondentBase,
         answerBase: summary.answerBase,
         respondentBase: summary.respondentBase,
         missingCount: summary.missingCount,
@@ -156,7 +157,7 @@ function iterationRating(records, outputKeys) {
   const summary = summarizeOutput(records, outputKeys);
   const sentiment = ratedSentiment(summary);
   const answered = ratedBase(summary);
-  if (answered < MINIMUM_REPORTING_BASE) return null;
+  if (answered === null || answered < MINIMUM_REPORTING_BASE) return null;
   const score = sentiment.reduce((total, item) => {
     const value = item.value === "Positive" ? 5
       : item.value === "Negative" ? 1
@@ -258,20 +259,23 @@ function buildComparableTrend(availableIterations, evidenceRows, selectedCampaig
   }
   const wavePoints = campaignIterations.map((iteration) => {
     const records = evidenceByIteration.get(iteration.id) || [];
+    const measure = summarizeOutput(records, outputKeys);
     return {
       iterationId: iteration.id,
       iterationNumber: count(iteration.iteration_number),
       iterationName: iteration.iteration_name,
       campaignName: iteration.campaign_name,
-      base: records.length,
-      answeredBase: ratedBase(summarizeOutput(records, outputKeys)),
+      empty: records.length === 0,
+      base: measure.respondentBase,
+      answeredBase: ratedBase(measure),
       value: iterationRating(records, outputKeys)
     };
   });
   const latestPoint = wavePoints.at(-1);
-  if (!latestPoint || latestPoint.answeredBase === 0) {
+  if (!latestPoint || latestPoint.empty || latestPoint.answeredBase === 0) {
     return emptyTrend("NO_HISTORY", "Trend unavailable—this Iteration has no rated responses for the selected scope.", ["No rated responses are available for the selected scope."]);
   }
+  if (latestPoint.answeredBase === null) return emptyTrend('SUPPRESSED', 'Trend withheld—the selected construct has insufficient or sparse answer categories.', ['The entire answer partition, including missing responses, must meet the reporting minimum.']);
   if (latestPoint.answeredBase < MINIMUM_REPORTING_BASE) {
     return emptyTrend("SUPPRESSED", `Trend withheld—this Iteration has fewer than ${MINIMUM_REPORTING_BASE} rated respondents for the selected scope.`, [`Fewer than ${MINIMUM_REPORTING_BASE} rated respondents are available for the selected scope.`]);
   }
@@ -288,8 +292,12 @@ function buildComparableTrend(availableIterations, evidenceRows, selectedCampaig
       stopped = { status: "NOT_COMPARABLE", reasons: comparison.reasons };
       break;
     }
-    if (previous.answeredBase === 0) {
+    if (previous.empty || previous.answeredBase === 0) {
       stopped = { status: "NO_HISTORY", reasons: ["No rated responses are available for the selected scope."] };
+      break;
+    }
+    if (previous.answeredBase === null) {
+      stopped = { status: 'SUPPRESSED', reasons: ['The previous construct has insufficient or sparse answer categories.'] };
       break;
     }
     if (previous.answeredBase < MINIMUM_REPORTING_BASE) {
@@ -501,7 +509,9 @@ export function buildDashboardIntelligence(actor, campaigns, iterationRows, evid
     suppressed,
     sentimentConstruct,
     sentimentValidation: getSentimentValidation(),
+    demographicProvenance: 'CURRENT_MASTER_DATA',
     rating: {
+      measureId: 'EXPLICIT_POLARITY_INDEX_V1',
       value: rating,
       scale: 5,
       confidence,
@@ -622,8 +632,9 @@ function buildDashboard(actor, campaignRows, iterationRows, runRows, evidenceRow
   });
 
   const completedIterations = iterations.filter((iteration) =>
-    ["COMPLETED", "LOCKED"].includes(String(iteration.status).toUpperCase()) ||
-    (iteration.runs.length >= 3 && iteration.runs.every((run) => CLOSED_RUNS.has(run.status)))
+    // Completion is written by the audited lifecycle reconciler. A read-only
+    // dashboard must not independently declare completion from Run counts.
+    ["COMPLETED", "LOCKED"].includes(String(iteration.status).toUpperCase())
   );
   const summary = {
     campaignsVisible: campaigns.length,

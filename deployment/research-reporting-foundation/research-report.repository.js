@@ -1,7 +1,7 @@
 import { getDb } from '../db/postgres.js';
-import { getCampaignStrategicAnalytics } from './analytics-workspace.repository.js';
+import { resolveResearchScope } from './research-scope.repository.js';
 import { buildResearchReport, resolveFrozenReportDefinitions } from './research-report.js';
-import { summarizeOutput } from './output-normalization.repository.js';
+import { summarizeOutput, canonicalOutputKeySql } from './output-normalization.repository.js';
 import { REPORT_CATALOG } from './report-catalog.js';
 import { loadFieldworkDiagnostics } from './fieldwork-diagnostics.repository.js';
 import { unavailableFieldworkDiagnostics } from './fieldwork-diagnostics.js';
@@ -9,10 +9,22 @@ import { unavailableFieldworkDiagnostics } from './fieldwork-diagnostics.js';
 // Exposed dependency seam supports isolated tests without contacting AWS/RDS.
 // Authorization and scope resolution always precede metadata/database loading.
 export async function loadResearchReport(campaignId, actor, selection = {}, dependencies = {}) {
-  const analyze = dependencies.analyze || getCampaignStrategicAnalytics;
   const database = dependencies.getDb || getDb;
   const diagnose = dependencies.loadFieldworkDiagnostics || loadFieldworkDiagnostics;
-  const analysis = await analyze(campaignId, actor, selection);
+  if (!dependencies.analyze) {
+    const client = await (await database()).connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const resolved = await (dependencies.resolveScope || resolveResearchScope)(client, campaignId, actor, selection);
+      const report = await loadResearchReport(campaignId, actor, selection, { ...dependencies,
+        analyze: async () => resolved, getDb: async () => client });
+      await client.query('COMMIT'); return report;
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
+  // The injected analysis seam is for isolated fixtures only; production uses
+  // the bounded hierarchy resolver instead of rerunning strategic analytics.
+  const analysis = await dependencies.analyze(campaignId, actor, selection);
   const iterationId = analysis.scope?.insightScope?.iterationId;
   if (analysis.campaign?.id !== campaignId || (!iterationId && analysis.scope?.iteration?.id)) {
     const error = new Error('Authorized research scope is inconsistent');
@@ -109,7 +121,7 @@ export async function loadResearchReport(campaignId, actor, selection = {}, depe
       SELECT COALESCE((
         SELECT jsonb_object_agg(output.key, output.value)
         FROM jsonb_each(selected.response_variables) output
-        WHERE LOWER(TRIM(output.key)) = ANY($6::text[])
+        WHERE ${canonicalOutputKeySql('output.key')} = ANY($6::text[])
       ), '{}'::jsonb) AS response_variables,
         MAX(selected.evidence_at) OVER () AS latest_evidence_at
       FROM authorized_rows selected

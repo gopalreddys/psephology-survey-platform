@@ -14,6 +14,10 @@ async function copy(sourceName, destination) {
 }
 
 await copy(
+  "operational-lifecycle-policy.js",
+  path.join(runtimeRoot, "src/repositories/operational-lifecycle-policy.js")
+);
+await copy(
   "run-lifecycle.repository.js",
   path.join(runtimeRoot, "src/repositories/run-lifecycle.repository.js")
 );

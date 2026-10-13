@@ -5,9 +5,9 @@ import { runInNewContext } from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
-const source = await readFile(new URL('../../src/app/enterprise-dashboard/page.tsx', import.meta.url), 'utf8');
-const code = source.slice(source.indexOf('type DesignForm ='), source.indexOf('export default function EnterpriseDashboardPage'));
-const compiled = ts.transpileModule(`${code}\nexport { ResearchDesignRegistry };`, {
+const source = await readFile(new URL('../../src/components/IterationResearchSetup.tsx', import.meta.url), 'utf8');
+const code = source.slice(source.indexOf('type DesignForm ='), source.indexOf('/** One editor'));
+const compiled = ts.transpileModule(code, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX }
 }).outputText;
 const states = [];
@@ -45,8 +45,8 @@ const apiFetch = async (url, options) => {
 const context = { exports: {}, require, useState, apiFetch,
   styles: new Proxy({}, { get: (_, key) => key }) };
 runInNewContext(compiled, context);
-const Registry = context.exports.ResearchDesignRegistry;
-const props = () => ({ data, onSaved: async () => {}, onBusy: () => {} });
+const Registry = context.exports.ResearchDesignEditor;
+const props = () => ({ data, onSaved: async () => {} });
 function render() { cursor = 0; return Registry(props()); }
 function flatten(element) {
   if (!element || typeof element !== 'object') return [];

@@ -14,7 +14,7 @@ app.listen(3000);
 `;
 const dependencies = [
   'src/db/postgres.js', 'src/middleware/auth.middleware.js', 'src/middleware/role.middleware.js',
-  'src/repositories/analytics-workspace.repository.js', 'src/repositories/output-normalization.repository.js',
+  'src/repositories/campaign-visibility.repository.js', 'src/repositories/output-normalization.repository.js',
   'src/repositories/normalization-rules.json'
 ];
 async function fixture(name, server = original, skip = null) {
@@ -32,7 +32,7 @@ try {
   const dry = await installResearchReporting(root, { dryRun: true });
   assert.equal(dry.dryRun, true);
   assert.equal(dry.serverChanged, true);
-  assert.equal(dry.files.length, 9);
+  assert.equal(dry.files.length, 10);
   assert.equal(await readFile(path.join(root, 'src/server.js'), 'utf8'), original);
   assert.ok(!(await readdir(path.join(root, 'src/repositories'))).includes('research-report.js'));
   const first = await installResearchReporting(root);

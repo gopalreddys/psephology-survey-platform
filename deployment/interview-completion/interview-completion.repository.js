@@ -1,5 +1,5 @@
 import { campaignReviewVisibilitySql } from './campaign-visibility.repository.js';
-import { getCampaignStrategicAnalytics } from './analytics-workspace.repository.js';
+import { resolveResearchScope } from './research-scope.repository.js';
 import { authorize, validId, UUID, InterviewCompletionError, buildInterviewCompletion, buildInterviewSummary, unavailableSummary } from './interview-completion.js';
 
 async function verifyActor(db, actor) {
@@ -68,7 +68,8 @@ export async function getCampaignInterviewCompletion(db, actor, campaignId, sele
     throw new InterviewCompletionError('Interview completion covers the entire Iteration; demographic and Run filters are unsupported');
   }
   if (selection.iterationId !== undefined) selection = { iterationId: validId(selection.iterationId) };
-  const analysis = await (dependencies.analyze || getCampaignStrategicAnalytics)(campaignId, actor, selection);
+  const analysis = dependencies.analyze ? await dependencies.analyze(campaignId, actor, selection)
+    : await (dependencies.resolveScope || resolveResearchScope)(db, campaignId, actor, selection);
   const iterationId = analysis.scope?.insightScope?.iterationId || null;
   if (analysis.campaign?.id !== campaignId || (iterationId && analysis.scope?.iteration?.id !== iterationId)
     || (!iterationId && analysis.scope?.iteration?.id) || (selection.iterationId && iterationId !== selection.iterationId)) {

@@ -1,18 +1,14 @@
 import { getDb } from "../db/postgres.js";
 import { assertIterationAccess } from "./iteration-access.repository.js";
+import { loadIterationLifecycleState, reconcileIterationLifecycle } from "./run-lifecycle.repository.js";
+import { CLOSED_RUN_STATUSES, terminalAttemptSql, evaluateIterationLifecycle }
+  from "./operational-lifecycle-policy.js";
 
 const SUCCESS_STATUSES = [
   "SUCCESS_PULSE",
   "SUCCESS_COMPLETE",
   "SUCCESS_SUBSTANTIAL"
 ];
-
-const CLOSED_RUN_STATUSES = new Set([
-  "COMPLETED",
-  "FAILED",
-  "CANCELLED",
-  "ARCHIVED"
-]);
 
 function errorWithStatus(message, statusCode) {
   const error = new Error(message);
@@ -30,6 +26,8 @@ async function loadCloseout(client, iterationId) {
         link.campaign_id,
         campaign.campaign_name,
         campaign.campaign_manager_user_id,
+        iteration.status AS program_status,
+        link.status AS link_status,
         COALESCE(link.status, iteration.status) AS status
       FROM program_iterations iteration
       JOIN campaign_iteration_links link
@@ -66,7 +64,7 @@ async function loadCloseout(client, iterationId) {
             WHERE contact.retry_exhausted = TRUE
           )::int AS retry_exhausted_contacts,
           COUNT(*) FILTER (
-            WHERE contact.attempt_status NOT IN ('COMPLETED', 'FAILED')
+            WHERE NOT (${terminalAttemptSql()})
           )::int AS pending_contacts
         FROM campaign_run_contacts contact
         JOIN campaign_runs selected_run
@@ -136,7 +134,7 @@ async function loadCloseout(client, iterationId) {
           contact.retry_exhausted,
           contact.final_status,
           BOOL_OR(
-            contact.final_status = ANY($2::text[])
+            COALESCE(contact.final_status = ANY($2::text[]), FALSE)
           ) OVER (PARTITION BY contact.voter_id) AS successful,
           ROW_NUMBER() OVER (
             PARTITION BY contact.voter_id
@@ -184,37 +182,15 @@ async function loadCloseout(client, iterationId) {
     transcripts_captured: Number(run.transcripts_captured)
   }));
   const outcomes = outcomesResult.rows[0] || {};
-  const latestRun = runs.at(-1) || null;
   const openRuns = runs.filter(
-    (run) => !CLOSED_RUN_STATUSES.has(String(run.status).toUpperCase())
+    (run) => !CLOSED_RUN_STATUSES.includes(String(run.status).toUpperCase())
   );
-  const pendingContacts = runs.reduce(
-    (total, run) => total + run.pending_contacts,
-    0
-  );
-  const blockers = [];
-
-  if (!runs.length) {
-    blockers.push("Create and complete at least one Run before closing this iteration.");
-  }
-  if (openRuns.length) {
-    blockers.push(
-      `${openRuns.length} Run${openRuns.length === 1 ? " is" : "s are"} still open.`
-    );
-  }
-  if (pendingContacts) {
-    blockers.push(
-      `${pendingContacts} voter callback${pendingContacts === 1 ? " is" : "s are"} still pending.`
-    );
-  }
-  if (
-    latestRun?.retry_eligible_contacts > 0 &&
-    runs.length < 3
-  ) {
-    blockers.push(
-      `${latestRun.retry_eligible_contacts} voter${latestRun.retry_eligible_contacts === 1 ? " is" : "s are"} eligible for Run ${latestRun.run_number + 1}.`
-    );
-  }
+  const lifecycleState = await loadIterationLifecycleState(client, iterationId);
+  const policy = evaluateIterationLifecycle(lifecycleState);
+  const protectedStatus = [iteration.program_status, iteration.link_status]
+    .some((status) => ["LOCKED", "ARCHIVED", "CANCELLED"].includes(String(status || "").toUpperCase()));
+  const blockers = protectedStatus
+    ? ["Locked, archived or cancelled iterations cannot be completed."] : policy.blockers;
 
   return {
     iteration,
@@ -222,7 +198,7 @@ async function loadCloseout(client, iterationId) {
     summary: {
       runCount: runs.length,
       completedRuns: runs.filter((run) =>
-        CLOSED_RUN_STATUSES.has(String(run.status).toUpperCase())
+        CLOSED_RUN_STATUSES.includes(String(run.status).toUpperCase())
       ).length,
       openRuns: openRuns.length,
       uniqueVoters: Number(outcomes.unique_voters || 0),
@@ -239,9 +215,7 @@ async function loadCloseout(client, iterationId) {
         0
       )
     },
-    readyToComplete:
-      String(iteration.status).toUpperCase() === "COMPLETED" ||
-      blockers.length === 0,
+    readyToComplete: policy.readyToComplete && !protectedStatus,
     blockers
   };
 }
@@ -286,16 +260,23 @@ export async function completeIteration(iterationId, actor) {
       "SELECT pg_advisory_xact_lock(hashtext($1))",
       [String(iterationId)]
     );
+    // Prevent concurrent manager reassignment from authorizing a stale actor.
+    await client.query(`
+      SELECT campaign.id FROM campaigns campaign
+      JOIN campaign_iteration_links link ON link.campaign_id = campaign.id
+      WHERE link.iteration_id = $1 FOR UPDATE OF campaign
+    `, [iterationId]);
 
     const lockedResult = await client.query(
       `
         SELECT link.status, link.campaign_id,
           campaign.campaign_manager_user_id
         FROM campaign_iteration_links link
+        JOIN program_iterations iteration ON iteration.id = link.iteration_id
         JOIN campaigns campaign
           ON campaign.id = link.campaign_id
         WHERE link.iteration_id = $1
-        FOR UPDATE OF link
+        FOR UPDATE OF iteration, link
       `,
       [iterationId]
     );
@@ -311,57 +292,14 @@ export async function completeIteration(iterationId, actor) {
     }
 
     const closeout = await loadCloseout(client, iterationId);
-    if (String(closeout.iteration.status).toUpperCase() === "COMPLETED") {
-      await client.query("COMMIT");
-      return closeout;
-    }
     if (!closeout.readyToComplete) {
       throw errorWithStatus(closeout.blockers.join(" "), 409);
     }
 
-    const latestRun = closeout.runs.at(-1);
-    if (
-      closeout.runs.length >= 3 &&
-      latestRun?.retry_eligible_contacts > 0
-    ) {
-      await client.query(
-        `
-          UPDATE campaign_run_contacts
-          SET retry_eligible = FALSE,
-              retry_exhausted = TRUE,
-              final_status = CASE
-                WHEN COALESCE(final_status, 'PENDING') = 'PENDING'
-                  THEN 'RETRY_EXHAUSTED'
-                ELSE final_status
-              END,
-              completion_reason = COALESCE(
-                completion_reason,
-                'Three-Run retry policy completed'
-              )
-          WHERE run_id = $1
-            AND retry_eligible = TRUE
-            AND retry_exhausted = FALSE
-        `,
-        [latestRun.id]
-      );
-    }
-
-    await client.query(
-      `
-        UPDATE campaign_iteration_links
-        SET status = 'COMPLETED', updated_at = now()
-        WHERE iteration_id = $1
-      `,
-      [iterationId]
-    );
-    await client.query(
-      `
-        UPDATE program_iterations
-        SET status = 'COMPLETED', updated_at = now()
-        WHERE id = $1
-      `,
-      [iterationId]
-    );
+    const result = await reconcileIterationLifecycle(client, iterationId, {
+      source: "MANUAL_ITERATION_COMPLETION", actorId: actor.id
+    });
+    if (!result.iterationResolved) throw errorWithStatus(result.blockers.join(" "), 409);
 
     await client.query("COMMIT");
     return getIterationCloseout(iterationId, actor);

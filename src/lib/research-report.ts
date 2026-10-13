@@ -57,6 +57,7 @@ export type ResearchReport = {
     questionnaire: { id: string | null; code: string | null; version: number | string | null; contentFingerprint: string | null; frozenQuestionCount: number | null; definitionSource: string; status: string };
     voiceAgent: { id: string | null; code: string | null; appId: string | null; version: number | string | null; basis: "ITERATION_ASSIGNMENT_SNAPSHOT" } | null;
     normalizationVersion: string | null;
+    demographicProvenance: "CURRENT_MASTER_DATA";
     normalizationRuleHash: string | null;
     frozenInstrumentHash: string | null;
   };
@@ -132,8 +133,9 @@ export function parseResearchReport(value: unknown, campaignId: string, query: s
     const run = object(scope.run, ["id", "number", "status"]);
     if (!string(run.id, 160) || !number(run.number) || !nullableString(run.status, 30) || run.id !== requested.get("runId")) fail();
   } else if (requested.get("runId")) fail();
-  const sources = object(root.sources, ["analysisGeneratedAt", "latestEvidenceAt", "questionnaire", "voiceAgent", "normalizationVersion", "normalizationRuleHash", "frozenInstrumentHash"]);
+  const sources = object(root.sources, ["analysisGeneratedAt", "latestEvidenceAt", "questionnaire", "voiceAgent", "normalizationVersion", "demographicProvenance", "normalizationRuleHash", "frozenInstrumentHash"]);
   if (!date(sources.analysisGeneratedAt) || !date(sources.latestEvidenceAt) || !nullableString(sources.normalizationVersion, 160)
+    || sources.demographicProvenance !== "CURRENT_MASTER_DATA"
     || (sources.normalizationRuleHash !== null && !sha(sources.normalizationRuleHash))
     || (sources.frozenInstrumentHash !== null && !sha(sources.frozenInstrumentHash))) fail();
   const instrument = object(sources.questionnaire, ["id", "code", "version", "contentFingerprint", "frozenQuestionCount", "definitionSource", "status"]);

@@ -39,6 +39,11 @@ await copy(
   "finalize-resolved-runs.js",
   path.join(runtimeRoot, "src/db/finalize-resolved-runs.js")
 );
+await copyFile(path.resolve(packageRoot, "../run-lifecycle-automation/reconcile-open-runs.js"),
+  path.join(runtimeRoot, "src/db/reconcile-open-runs.js"));
+await mkdir(path.join(runtimeRoot, "src/repositories"), { recursive: true });
+await copyFile(path.resolve(packageRoot, "../run-lifecycle-automation/operational-lifecycle-policy.js"),
+  path.join(runtimeRoot, "src/repositories/operational-lifecycle-policy.js"));
 await copy(
   "reclassify-connected-incomplete-call.js",
   path.join(runtimeRoot, "src/db/reclassify-connected-incomplete-call.js")

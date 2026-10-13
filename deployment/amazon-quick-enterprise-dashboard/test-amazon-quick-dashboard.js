@@ -23,6 +23,7 @@ const routes = readFileSync(path.join(here, "amazon-quick-dashboard.routes.js"),
 const installer = readFileSync(path.join(here, "install-amazon-quick-dashboard.js"), "utf8");
 const blueprint = JSON.parse(readFileSync(path.join(here, "quick-dashboard-blueprint.json"), "utf8"));
 const enterpriseUi = readFileSync(path.join(here, "../../src/app/enterprise-dashboard/page.tsx"), "utf8");
+const setupUi = readFileSync(path.join(here, "../../src/components/IterationResearchSetup.tsx"), "utf8");
 
 assert.match(sql, /analytics_research_enterprise_v1/);
 for (const dimension of [
@@ -98,12 +99,14 @@ for (const state of ["Not recorded", "Withheld", "Not comparable", "Technical er
 }
 assert.match(enterpriseUi, /A chart design alone does not confirm that collection contract/);
 assert.doesNotMatch(enterpriseUi, /Age histogram/);
-assert.match(enterpriseUi, /quality\.sentimentValidation\.ruleHash/);
+assert.match(enterpriseUi, /shownQuality\.sentimentValidation\.ruleHash/);
 assert.doesNotMatch(enterpriseUi, /This is operational research confidence/);
 assert.match(routes, /campaignReviewVisibilitySql/);
 assert.match(routes, /declarationComplete/);
-assert.match(enterpriseUi, /expectedRevision: editingRevision/);
-assert.match(enterpriseUi, /I confirm these entries describe the actual fieldwork/);
+assert.match(setupUi, /expectedRevision: editingRevision/);
+assert.match(setupUi, /I confirm these entries describe the actual fieldwork/);
+assert.doesNotMatch(enterpriseUi, /function ResearchDesignRegistry|expectedRevision: editingRevision|<iframe/);
+assert.match(enterpriseUi, /QuickDashboardEmbed/);
 assert.match(routes, /independent of embedded Amazon Quick filters/);
 assert.match(routes, /positive_sentiment_pct === null \? null/);
 assert.equal(blueprint.sheets.length, 6);
@@ -141,10 +144,10 @@ assert.match(normalizedSql, /Raw answers remain only in privileged call records/
 assert.match(normalizedSql, /respondent_sentiment_status/);
 assert.match(normalizedSql, /No response/);
 assert.doesNotMatch(normalizedSql, /CREATE OR REPLACE VIEW analytics_research_enterprise_v1/);
-assert.match(routes, /sentimentAnswerBase: numeric\(row\.sentiment_answer_base\)/);
-assert.match(routes, /candidateMissingCount: numeric\(row\.candidate_missing_count\)/);
+assert.match(routes, /sentimentAnswerBase: nullableNumeric\(row\.sentiment_answer_base\)/);
+assert.match(routes, /candidateMissingCount: nullableNumeric\(row\.candidate_missing_count\)/);
 assert.match(routes, /demographicFieldBase: totals\.respondentBase \* 3/);
-assert.match(enterpriseUi, /answer base n=\{item\.sentimentAnswerBase\}/);
+assert.match(enterpriseUi, /answer base n=\{countLabel\(item\.sentimentAnswerBase\)\}/);
 assert.match(enterpriseUi, /item\.sentimentMissingCount/);
 assert.match(enterpriseUi, /item\.sentimentCantSayCount/);
 assert.match(enterpriseUi, /item\.sentimentConstruct/);
@@ -230,10 +233,11 @@ try {
     async end() { ended = true; }
   };
   await import(pathToFileURL(path.join(runtime, "src/db/migrate-amazon-quick-dashboard.js")).href);
-  assert.equal(queries.length, 10, "nine ordered migrations plus shared normalizer definition are executed");
+  assert.equal(queries.length, 11, "ten ordered migrations plus shared normalizer definition are executed");
   assert.match(queries[6], /CREATE OR REPLACE FUNCTION analytics_normalize_output_v1/);
-  assert.equal(queries.at(-2), await readFile(path.join(here, "031_audited_research_methodology.sql"), "utf8"));
-  assert.equal(queries.at(-1), sentimentSql, "the sentiment correction always follows the audited methodology gate");
+  assert.equal(queries.at(-3), await readFile(path.join(here, "031_audited_research_methodology.sql"), "utf8"));
+  assert.equal(queries.at(-2), sentimentSql, "the sentiment correction follows the audited methodology gate");
+  assert.equal(queries.at(-1), await readFile(path.join(here, "034_reporting_consistency.sql"), "utf8"), "privacy consistency follows corrected constructs");
   assert.equal(ended, true);
 } finally {
   delete globalThis.quickMigrationTestDb;

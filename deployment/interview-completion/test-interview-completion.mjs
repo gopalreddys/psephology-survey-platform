@@ -36,7 +36,7 @@ export async function isolatedRepository() {
     }
     await writeFile(path.join(directory, 'package.json'), '{"type":"module"}');
     await writeFile(path.join(directory, 'campaign-visibility.repository.js'), await readFile(new URL('../campaign-draft-privacy/campaign-visibility.repository.js', import.meta.url)));
-    await writeFile(path.join(directory, 'analytics-workspace.repository.js'), "export function getCampaignStrategicAnalytics() { throw new Error('Synthetic tests must inject authorized analysis'); }");
+    await writeFile(path.join(directory, 'research-scope.repository.js'), "export function resolveResearchScope() { throw new Error('Synthetic tests must inject authorized scope'); }");
     const repository = await import(pathToFileURL(path.join(directory, 'interview-completion.repository.js')).href);
     return { ...repository, cleanup: () => rm(directory, { recursive: true, force: true }) };
   } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }

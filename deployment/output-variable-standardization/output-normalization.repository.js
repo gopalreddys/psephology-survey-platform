@@ -11,6 +11,78 @@ for (const domain of rules.domains) {
   if (domain.categoryDomain) domain.categories = [...rules.domains.find((item) => item.name === domain.categoryDomain).categories, ...domain.categories];
 }
 export const NORMALIZATION_VERSION = rules.version;
+export const DISCLOSURE_POLICY_VERSION = "WHOLE_PARTITION_V1";
+export const MINIMUM_REPORTING_BASE = rules.minimumAnswerBase;
+export const DIRECT_RATING_KEYS = Object.freeze(["brs_lean_rating", "party_lean_rating", "party_lean_strength"]);
+// Exact ECMAScript trim set: PostgreSQL's default btrim omits tabs, NBSP and BOM.
+const SQL_TRIM_CHARACTERS = String.raw`U&'\0009\000A\000B\000C\000D\0020\00A0\1680\2000\2001\2002\2003\2004\2005\2006\2007\2008\2009\200A\2028\2029\202F\205F\3000\FEFF'`;
+export function canonicalOutputKeySql(expression) {
+  // Only trusted static SQL identifiers may be interpolated, never request text.
+  if (!/^[a-z_][a-z_0-9]*(\.[a-z_][a-z_0-9]*)?$/.test(expression)) throw new Error("Invalid output-key SQL identifier");
+  return `lower(btrim(${expression}, ${SQL_TRIM_CHARACTERS}))`;
+}
+// Describes a recorded numeric response only. Aliases are not permission to
+// infer support from party attention, suitability, or a different construct.
+export function selectDirectRating(record) {
+  const variables = record?.response_variables || {};
+  const values = [];
+  for (const [key, raw] of Object.entries(variables)) {
+    if (!DIRECT_RATING_KEYS.includes(key.trim().toLowerCase())) continue;
+    if (raw === null || raw === undefined || (typeof raw === "string" && !raw.trim())) continue;
+    const value = typeof raw === "number" || (typeof raw === "string" && /^[1-5]$/.test(raw.trim())) ? Number(raw) : NaN;
+    if (!Number.isInteger(value) || value < 1 || value > 5) return { status: "UNRESOLVED", value: null };
+    values.push(value);
+  }
+  if (!values.length) return { status: "MISSING", value: null };
+  if (new Set(values).size !== 1) return { status: "UNRESOLVED", value: null };
+  return { status: "RECORDED", value: values[0] };
+}
+export function summarizeDirectRatings(records) {
+  const selected = records.map(selectDirectRating);
+  const counts = new Map();
+  for (const item of selected) counts.set(item.status === "RECORDED" ? String(item.value) : item.status, (counts.get(item.status === "RECORDED" ? String(item.value) : item.status) || 0) + 1);
+  const ratings = selected.filter((item) => item.status === "RECORDED").map((item) => item.value);
+  const suppressed = ratings.length < MINIMUM_REPORTING_BASE || [...counts.values()].some((value) => value > 0 && value < MINIMUM_REPORTING_BASE);
+  return { value: suppressed ? null : Number((ratings.reduce((total, value) => total + value, 0) / ratings.length).toFixed(1)),
+    answered: suppressed ? null : ratings.length, scale: 5, suppressed, measureId: "DIRECT_RECORDED_FIVE_POINT_V1",
+    disclosurePolicy: DISCLOSURE_POLICY_VERSION, basis: "Recorded explicit 1–5 answers; contradictory aliases withheld, not inferred party alignment" };
+}
+export function buildDirectRatingSqlFunction() {
+  return `CREATE OR REPLACE FUNCTION analytics_direct_rating_v1(response_values jsonb)
+RETURNS numeric LANGUAGE plpgsql IMMUTABLE AS $direct_rating$
+DECLARE item record; current_value numeric; selected_value numeric;
+BEGIN
+ IF jsonb_typeof(response_values) IS DISTINCT FROM 'object' THEN RETURN NULL; END IF;
+ FOR item IN SELECT key, value FROM jsonb_each(response_values)
+   WHERE lower(btrim(key, ${SQL_TRIM_CHARACTERS})) = ANY(ARRAY[${DIRECT_RATING_KEYS.map((key) => `'${key}'`).join(",")}]) LOOP
+   IF item.value = 'null'::jsonb OR (jsonb_typeof(item.value) = 'string' AND btrim(item.value #>> '{}', ${SQL_TRIM_CHARACTERS}) = '') THEN CONTINUE; END IF;
+   IF jsonb_typeof(item.value) = 'string' AND btrim(item.value #>> '{}', ${SQL_TRIM_CHARACTERS}) !~ '^[1-5]$' THEN RETURN NULL; END IF;
+   IF jsonb_typeof(item.value) NOT IN ('string','number') THEN RETURN NULL; END IF;
+   current_value := btrim(item.value #>> '{}', ${SQL_TRIM_CHARACTERS})::numeric;
+   IF current_value <> trunc(current_value) OR current_value < 1 OR current_value > 5 THEN RETURN NULL; END IF;
+   IF selected_value IS NOT NULL AND selected_value <> current_value THEN RETURN NULL; END IF;
+   selected_value := current_value;
+ END LOOP;
+ RETURN selected_value;
+END;
+$direct_rating$;
+CREATE OR REPLACE FUNCTION analytics_direct_rating_status_v1(response_values jsonb)
+RETURNS text LANGUAGE sql IMMUTABLE AS $direct_status$
+ SELECT CASE WHEN analytics_direct_rating_v1(response_values) IS NOT NULL THEN 'RECORDED'
+   WHEN EXISTS (SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(response_values)='object' THEN response_values ELSE '{}'::jsonb END) item
+     WHERE lower(btrim(item.key, ${SQL_TRIM_CHARACTERS}))=ANY(ARRAY[${DIRECT_RATING_KEYS.map((key) => `'${key}'`).join(",")}])
+       AND item.value <> 'null'::jsonb
+       AND NOT (jsonb_typeof(item.value)='string' AND btrim(item.value #>> '{}', ${SQL_TRIM_CHARACTERS})='')) THEN 'UNRESOLVED'
+   ELSE 'MISSING' END;
+$direct_status$;`;
+}
+export function reportingCategoryLabels(keys) {
+  const requested = Array.isArray(keys) ? keys : [keys];
+  const selected = rules.domains.find((domain) => domain.keys.some((key) => requested.includes(key)));
+  if (!selected) return [];
+  return [...new Set([...selected.categories.map((category) => category.label), selected.multipleLabel,
+    "Can't say", "Declined to answer", "Uncoded response", ...(!["assessment", "suitability"].includes(selected.name) ? ["None"] : [])])];
+}
 export const OUTPUT_KEYS = {
   party: ["party_salience_unaided", "party_salience", "party_attention", "party_preference"],
   leadership: ["perceived_issue_leader_aided", "perceived_issue_leader", "leadership_preference", "party_leadership"],
@@ -87,15 +159,20 @@ function summary(results, respondentBase) {
   }
   counts.missingCount += Math.max(0, respondentBase - results.length);
   const answerBase = results.filter((result) => result.status !== "MISSING").length;
-  const suppressed = answerBase < rules.minimumAnswerBase;
+  // Do not publish a large complement beside a withheld small category. The
+  // complete construct partition includes missing answers and its denominators.
+  const suppressed = answerBase < rules.minimumAnswerBase || [...labels.values()].some((entry) => entry.respondents < rules.minimumAnswerBase)
+    || (counts.missingCount > 0 && counts.missingCount < rules.minimumAnswerBase);
   const metadata = {
-    answerBase, respondentBase, ...counts, suppressed,
-    codedCount: answerBase - counts.cantSayCount - counts.refusedCount - counts.uncodedCount,
-    coveragePct: respondentBase ? Number((100 * answerBase / respondentBase).toFixed(1)) : 0,
+    answerBase: suppressed ? null : answerBase, respondentBase: suppressed ? null : respondentBase,
+    ...Object.fromEntries(Object.entries(counts).map(([key, value]) => [key, suppressed ? null : value])), suppressed,
+    codedCount: suppressed ? null : answerBase - counts.cantSayCount - counts.refusedCount - counts.uncodedCount,
+    coveragePct: suppressed ? null : respondentBase ? Number((100 * answerBase / respondentBase).toFixed(1)) : 0,
     normalizationVersion: rules.version,
+    disclosurePolicy: DISCLOSURE_POLICY_VERSION,
     denominatorLabel: "Recorded non-missing answers, including explicit uncertainty, refusals and uncoded responses"
   };
-  return { ...metadata, values: [...labels.values()].sort((a, b) => b.respondents - a.respondents || a.value.localeCompare(b.value)).map((entry) => ({
+  return { ...metadata, values: suppressed ? [] : [...labels.values()].sort((a, b) => b.respondents - a.respondents || a.value.localeCompare(b.value)).map((entry) => ({
     ...entry, ...metadata,
     percentage: suppressed ? null : Number((100 * entry.respondents / answerBase).toFixed(1))
   })) };

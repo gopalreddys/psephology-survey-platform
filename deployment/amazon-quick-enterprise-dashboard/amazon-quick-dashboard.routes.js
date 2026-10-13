@@ -5,6 +5,8 @@ import { getDb } from "../db/postgres.js";
 import { campaignReviewVisibilitySql } from "../repositories/campaign-visibility.repository.js";
 import { saveResearchDesign, researchDesignHistory, ResearchDesignError } from "../repositories/research-methodology.repository.js";
 import { getSentimentValidation } from "../repositories/output-normalization.repository.js";
+import { resolveEmbedIdentity, verifyRestrictedEmbed, quickDataFreshness, validateEmbedDomains,
+  QuickEmbedAccessError } from "../repositories/quick-embed-access.js";
 
 const router = express.Router();
 const permittedRoles = ["SUPER_ADMIN", "ADMIN"];
@@ -17,13 +19,16 @@ function dashboardConfiguration() {
   const allowedDomains = String(process.env.QUICKSIGHT_ALLOWED_DOMAINS || "")
     .split(",")
     .map((value) => value.trim())
-    .filter(Boolean)
-    .slice(0, 3);
+    .filter(Boolean);
   return {
     region: process.env.QUICKSIGHT_REGION || process.env.AWS_REGION || "ap-south-1",
     accountId: process.env.QUICKSIGHT_AWS_ACCOUNT_ID || "",
     dashboardId: process.env.QUICKSIGHT_DASHBOARD_ID || "",
     userArn: process.env.QUICKSIGHT_READER_USER_ARN || "",
+    userArnMap: process.env.QUICKSIGHT_USER_ARN_MAP || "{}",
+    rlsDataSetArns: String(process.env.QUICKSIGHT_RLS_DATASET_ARNS || "")
+      .split(",").map((value) => value.trim()).filter(Boolean),
+    rlsRulesMap: process.env.QUICKSIGHT_RLS_RULES_MAP || "{}",
     allowedDomains,
     staticEmbedUrl: process.env.QUICKSIGHT_ONE_CLICK_EMBED_URL || ""
   };
@@ -34,13 +39,17 @@ function missingConfiguration(config) {
   return [
     ["QUICKSIGHT_AWS_ACCOUNT_ID", config.accountId],
     ["QUICKSIGHT_DASHBOARD_ID", config.dashboardId],
-    ["QUICKSIGHT_READER_USER_ARN", config.userArn],
     ["QUICKSIGHT_ALLOWED_DOMAINS", config.allowedDomains.length]
   ].filter(([, value]) => !value).map(([name]) => name);
 }
 
 function numeric(value) {
   return Number(value || 0);
+}
+
+function nullableNumeric(value) {
+  if (value === null || value === undefined) return null;
+  return Number.isFinite(Number(value)) ? Number(value) : null;
 }
 
 function percentage(value, total) {
@@ -87,23 +96,23 @@ function mapMovement(row) {
     iterationId: row.iteration_id,
     iterationNumber: numeric(row.iteration_number),
     iterationName: row.iteration_name,
-    respondentBase: numeric(row.respondent_base),
+    respondentBase: nullableNumeric(row.respondent_base),
     averageDirectPartyStrength: row.average_direct_party_strength === null
       ? null : numeric(row.average_direct_party_strength),
-    directMeasureBase: numeric(row.direct_measure_base),
+    directMeasureBase: nullableNumeric(row.direct_measure_base),
     positiveSentimentPct: row.positive_sentiment_pct === null ? null : numeric(row.positive_sentiment_pct),
     negativeSentimentPct: row.negative_sentiment_pct === null ? null : numeric(row.negative_sentiment_pct),
     candidatePositivePct: row.candidate_positive_pct === null ? null : numeric(row.candidate_positive_pct),
-    sentimentAnswerBase: numeric(row.sentiment_answer_base),
-    sentimentMissingCount: numeric(row.sentiment_missing_count),
-    sentimentUncodedCount: numeric(row.sentiment_uncoded_count),
-    sentimentCantSayCount: numeric(row.sentiment_cant_say_count),
-    sentimentRefusedCount: numeric(row.sentiment_refused_count),
-    candidateAnswerBase: numeric(row.candidate_answer_base),
-    candidateMissingCount: numeric(row.candidate_missing_count),
-    candidateUncodedCount: numeric(row.candidate_uncoded_count),
-    candidateCantSayCount: numeric(row.candidate_cant_say_count),
-    candidateRefusedCount: numeric(row.candidate_refused_count),
+    sentimentAnswerBase: nullableNumeric(row.sentiment_answer_base),
+    sentimentMissingCount: nullableNumeric(row.sentiment_missing_count),
+    sentimentUncodedCount: nullableNumeric(row.sentiment_uncoded_count),
+    sentimentCantSayCount: nullableNumeric(row.sentiment_cant_say_count),
+    sentimentRefusedCount: nullableNumeric(row.sentiment_refused_count),
+    candidateAnswerBase: nullableNumeric(row.candidate_answer_base),
+    candidateMissingCount: nullableNumeric(row.candidate_missing_count),
+    candidateUncodedCount: nullableNumeric(row.candidate_uncoded_count),
+    candidateCantSayCount: nullableNumeric(row.candidate_cant_say_count),
+    candidateRefusedCount: nullableNumeric(row.candidate_refused_count),
     previousSentimentAnswerBase: row.previous_sentiment_answer_base === null
       ? null : numeric(row.previous_sentiment_answer_base),
     previousCandidateAnswerBase: row.previous_candidate_answer_base === null
@@ -111,7 +120,7 @@ function mapMovement(row) {
     percentageBasis: row.percentage_basis,
     sentimentConstruct: row.sentiment_construct,
     candidateConstruct: row.candidate_construct,
-    issueResponseBase: numeric(row.issue_response_base),
+    issueResponseBase: nullableNumeric(row.issue_response_base),
     partyStrengthChange: row.party_strength_change === null
       ? null : numeric(row.party_strength_change),
     positiveSentimentChangePct: row.positive_sentiment_change_pct === null
@@ -162,6 +171,7 @@ router.put(
   requireAuth,
   requireRole(permittedRoles),
   async function (req, res) {
+    res.set("Cache-Control", "no-store");
     try {
       const db = await getDb();
       const row = await saveResearchDesign(db, req.platformUser, req.params.iterationId, req.body);
@@ -421,6 +431,8 @@ router.get(
   requireAuth,
   requireRole(permittedRoles),
   async function (req, res) {
+    res.set("Cache-Control", "no-store");
+    res.vary("Authorization");
     try {
       const config = dashboardConfiguration();
       const missing = missingConfiguration(config);
@@ -431,23 +443,55 @@ router.get(
           missing
         });
       }
-      if (config.staticEmbedUrl) {
-        return res.json({
-          provider: "AMAZON_QUICK_SIGHT",
-          mode: "ONE_CLICK",
-          embedUrl: config.staticEmbedUrl
-        });
-      }
+      const identity = resolveEmbedIdentity(config, req.platformUser);
+      validateEmbedDomains(config.allowedDomains);
 
       const {
         QuickSightClient,
-        GenerateEmbedUrlForRegisteredUserCommand
+        GenerateEmbedUrlForRegisteredUserCommand,
+        DescribeUserCommand, DescribeDashboardCommand,
+        DescribeDataSetCommand, DescribeDataSetPermissionsCommand,
+        ListUserGroupsCommand, ListIngestionsCommand
       } = await import("@aws-sdk/client-quicksight");
       const client = new QuickSightClient({ region: config.region });
-      const response = await client.send(
+      const awsDeadline = AbortSignal.timeout(35_000);
+      const send = (command) => client.send(command, { abortSignal: awsDeadline });
+      const datasetId = (arn) => arn.split(":dataset/")[1];
+      const metadata = {
+        describeUser: async (Namespace, UserName) => (await send(
+          new DescribeUserCommand({ AwsAccountId: config.accountId, Namespace, UserName })
+        )).User,
+        describeDashboard: async () => (await send(new DescribeDashboardCommand({
+          AwsAccountId: config.accountId, DashboardId: config.dashboardId
+        }))).Dashboard,
+        describeDataSet: async (arn) => (await send(new DescribeDataSetCommand({
+          AwsAccountId: config.accountId, DataSetId: datasetId(arn)
+        }))).DataSet,
+        describeDataSetPermissions: async (arn) => (await send(new DescribeDataSetPermissionsCommand({
+          AwsAccountId: config.accountId, DataSetId: datasetId(arn)
+        }))).Permissions,
+        listUserGroups: async (Namespace, UserName) => {
+          const groups = [];
+          let NextToken;
+          do {
+            const page = await send(new ListUserGroupsCommand({
+              AwsAccountId: config.accountId, Namespace, UserName, NextToken, MaxResults: 100
+            }));
+            groups.push(...(page.GroupList || []));
+            NextToken = page.NextToken;
+          } while (NextToken);
+          return groups;
+        },
+        listIngestions: async (arn) => (await send(new ListIngestionsCommand({
+          AwsAccountId: config.accountId, DataSetId: datasetId(arn), MaxResults: 20
+        }))).Ingestions || []
+      };
+      const securedDashboard = await verifyRestrictedEmbed(metadata, config, identity);
+      const freshness = await quickDataFreshness(metadata, securedDashboard);
+      const response = await send(
         new GenerateEmbedUrlForRegisteredUserCommand({
           AwsAccountId: config.accountId,
-          UserArn: config.userArn,
+          UserArn: identity.userArn,
           AllowedDomains: config.allowedDomains,
           SessionLifetimeInMinutes: 120,
           ExperienceConfiguration: {
@@ -460,10 +504,17 @@ router.get(
         mode: "REGISTERED_USER_API",
         dashboardId: config.dashboardId,
         requestId: response.RequestId || null,
+        issuedAt: new Date().toISOString(),
+        sessionLifetimeMinutes: 120,
+        accessScope: identity.accessScope,
+        freshness,
         embedUrl: response.EmbedUrl
       });
     } catch (error) {
-      console.error("Unable to create Amazon Quick Sight embed session:", error);
+      if (error instanceof QuickEmbedAccessError) return res.status(error.status).json({
+        error: error.message, code: error.code
+      });
+      console.error("Unable to create Amazon Quick Sight embed session:", { code: error.code || error.name || null });
       const dependencyMissing = error?.code === "ERR_MODULE_NOT_FOUND";
       return res.status(503).json({
         error: dependencyMissing

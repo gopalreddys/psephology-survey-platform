@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { normalizeOutputValue, summarizeOutput, summarizeLabels, selectStructuredOutput, getSentimentValidation, OUTPUT_KEYS } from "./output-normalization.repository.js";
+import { normalizeOutputValue, summarizeOutput, summarizeLabels, selectStructuredOutput, selectDirectRating, summarizeDirectRatings, getSentimentValidation, OUTPUT_KEYS } from "./output-normalization.repository.js";
 import { fixtureState, fixtureDb, response } from "../campaign-comparative-analysis/fixtures/analysis-fixtures.js";
 import { loadTestRepositories } from "../campaign-comparative-analysis/fixtures/load-test-repositories.js";
 
@@ -35,19 +35,29 @@ const records = ["BRS", "TRS", "Can't say", "not recorded", "prefer not to answe
   .map((value) => ({ response_variables: { party_salience_unaided: value } }));
 const before = JSON.stringify(records);
 const summary = summarizeOutput(records, OUTPUT_KEYS.party);
-assert.equal(summary.answerBase, 6);
-assert.equal(summary.respondentBase, 8);
-assert.equal(summary.missingCount, 2);
-assert.equal(summary.cantSayCount, 1);
-assert.equal(summary.refusedCount, 1);
-assert.equal(summary.uncodedCount, 1);
-assert.equal(summary.values.find((item) => item.value === "BRS").percentage, 33.3);
+assert.equal(summary.suppressed, true);
+for (const key of ['answerBase','respondentBase','missingCount','cantSayCount','refusedCount','uncodedCount']) assert.equal(summary[key], null);
+assert.deepEqual(summary.values, [], 'A sparse partition cannot expose its large complement');
 assert.equal(JSON.stringify(records), before, "Original responses are unchanged");
-assert.equal(summarizeOutput(records.slice(0, 2), OUTPUT_KEYS.party).values[0].percentage, null);
-assert.equal(summarizeOutput(Array.from({ length: 8 }, () => ({ response_variables: {} })), OUTPUT_KEYS.party).missingCount, 8);
-assert.equal(summarizeOutput([{ response_variables: { " Party_Salience_Unaided ": "TRS" } }], OUTPUT_KEYS.party).values[0].value, "BRS");
-assert.equal(summarizeOutput([{ response_variables: { party_salience: "BJP" } }], OUTPUT_KEYS.party).values[0].value, "BJP");
-assert.equal(summarizeLabels(["Multiple parties mentioned"]).uncodedCount, 1);
+assert.deepEqual(summarizeOutput(records.slice(0, 2), OUTPUT_KEYS.party).values, []);
+assert.equal(summarizeOutput(Array.from({ length: 8 }, () => ({ response_variables: {} })), OUTPUT_KEYS.party).missingCount, null);
+assert.equal(selectStructuredOutput({ response_variables: { " Party_Salience_Unaided ": "TRS" } }, OUTPUT_KEYS.party).label, "BRS");
+assert.equal(selectStructuredOutput({ response_variables: { party_salience: "BJP" } }, OUTPUT_KEYS.party).label, "BJP");
+assert.equal(summarizeLabels(["Multiple parties mentioned"]).uncodedCount, null);
+for (const values of [Array(9).fill('BRS').concat('BJP'), Array(9).fill('BRS').concat(null)]) {
+  const partition = summarizeOutput(values.map((value) => ({ response_variables: { party_salience_unaided: value } })), OUTPUT_KEYS.party);
+  assert.equal(partition.suppressed, true);
+  assert.deepEqual(partition.values, [], 'A large category cannot disclose its sparse or missing complement');
+  for (const key of ['answerBase', 'respondentBase', 'missingCount', 'coveragePct']) assert.equal(partition[key], null);
+}
+const safePartition = summarizeOutput(Array(5).fill('BRS').concat(Array(5).fill('BJP')).map((value) => ({ response_variables: { party_salience_unaided: value } })), OUTPUT_KEYS.party);
+assert.equal(safePartition.suppressed, false);
+assert.equal(safePartition.answerBase, 10);
+assert.equal(selectDirectRating({ response_variables: { brs_lean_rating: 5, party_lean_rating: 1 } }).status, 'UNRESOLVED');
+assert.equal(selectDirectRating({ response_variables: { '\tPARTY_LEAN_RATING\u00a0': '\ufeff4\t' } }).value, 4);
+const ratingRows = Array.from({ length: 10 }, (_, index) => ({ response_variables: index < 5 ? { party_lean_rating: 4 } : index === 5 ? { party_lean_rating: 4, brs_lean_rating: 1 } : {} }));
+assert.equal(summarizeDirectRatings(ratingRows).value, null, 'Missing and contradictory alias categories remain separately protected');
+assert.equal(summarizeDirectRatings(ratingRows).answered, null);
 
 const state = fixtureState();
 const { analytics, campaign } = await loadTestRepositories(fixtureDb(state));
@@ -56,19 +66,19 @@ state.records = Array.from({ length: 10 }, (_, index) => response("i2", `r-${ind
   response_variables: index === 0 ? Object.fromEntries(["veeresh_impression", "veeresh_criterion_fit", "incumbent_assessment", "issue_sentiment", "development_sentiment", "change_sentiment"].map((key) => [key, "good"])) : { graduate_issue_priority: "jobs" }
 }));
 let result = await analytics.getCampaignStrategicAnalytics("campaign", actor, { iterationId: "i2" });
-assert.equal(result.sentimentAnalysis.assessedRespondents, 1);
+assert.equal(result.sentimentAnalysis.assessedRespondents, null);
 assert.equal(result.sentimentAnalysis.measure.suppressed, true, "One person's six answers cannot bypass a five-person minimum");
 assert.deepEqual(result.sentimentAnalysis.distribution, []);
 assert.equal(result.partyStrengthAnalysis.estimate.value, null);
 assert.equal(result.iterationDashboard.headlineMetrics[0].value, null);
-assert.equal(result.outputMeasures.candidate_assessment.answerBase, 1);
+assert.equal(result.outputMeasures.candidate_assessment.answerBase, null);
 assert.equal(result.sentimentAnalysis.construct, "candidate_impression");
 assert.equal(result.sentimentAnalysis.validation.status, "HUMAN_REVIEW_PENDING");
 state.records = Array.from({ length: 10 }, (_, index) => response("i2", `r-${index}`, "jobs", {
   response_variables: { candidate_criterion_fit: "good fit", incumbent_assessment: "good", issue_sentiment: "bad" }
 }));
 result = await analytics.getCampaignStrategicAnalytics("campaign", actor, { iterationId: "i2" });
-assert.equal(result.sentimentAnalysis.codedAnswers, 0, "Fit, incumbent and issue answers never substitute for candidate impression");
+assert.equal(result.sentimentAnalysis.codedAnswers, null, "Fit, incumbent and issue answers never substitute for candidate impression");
 assert.deepEqual(result.sentimentAnalysis.distribution, []);
 let incumbent = await analytics.getCampaignStrategicAnalytics("campaign", actor, { iterationId: "i2", sentimentConstruct: "incumbent_assessment" });
 assert.equal(incumbent.sentimentAnalysis.codedAnswers, 10);
@@ -95,8 +105,8 @@ assert.equal(result.candidateAnalysis.criterionFit[0].value, "Uncoded response")
 assert.ok(result.sentimentAnalysis.measure.values.every((item) => item.suppressed && item.percentage === null), "Suppressed measure values cannot retain reportable percentages");
 state.records.forEach((record, index) => { record.response_variables = { candidate_impression: index < 4 ? "good" : "Can't say" }; });
 result = await analytics.getCampaignStrategicAnalytics("campaign", actor, { iterationId: "i2" });
-assert.equal(result.sentimentAnalysis.codedAnswers, 4);
-assert.equal(result.sentimentAnalysis.measure.answerBase, 10);
+assert.equal(result.sentimentAnalysis.codedAnswers, null);
+assert.equal(result.sentimentAnalysis.measure.answerBase, null);
 assert.equal(result.sentimentAnalysis.measure.suppressed, true);
 assert.deepEqual(result.sentimentAnalysis.distribution, []);
 assert.ok(result.sentimentAnalysis.measure.values.every((item) => item.suppressed && item.percentage === null), "Four coded and six uncertain answers cannot supply a five-assessed-person judgment");
@@ -105,7 +115,7 @@ state.records = Array.from({ length: 10 }, (_, index) => response("i2", `r-${ind
 }));
 result = await analytics.getCampaignStrategicAnalytics("campaign", actor, { iterationId: "i2" });
 assert.equal(result.partyLeanIndex.value, null, "Boolean values are not direct ratings");
-assert.equal(result.outputMeasures.candidate_assessment.answerBase, 0, "Awareness is not an assessment");
+assert.equal(result.outputMeasures.candidate_assessment.answerBase, null, "Awareness is not an assessment");
 assert.ok(result.nextIterationPlan.every((item) => !/uncoded.*diagnosis/i.test(item.title)));
 state.records = ["i1", "i2"].flatMap((id) => Array.from({ length: 10 }, (_, index) => response(id, `r-${index}`, "story", { response_variables: { party_salience_unaided: "opaque story" } })));
 const comparison = await campaign.getCampaignAnalysis("campaign", actor);

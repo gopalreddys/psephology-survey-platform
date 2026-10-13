@@ -100,7 +100,7 @@ await app.flush();
 assert.equal(requests.length, 1);
 assert.equal(requests[0].options, undefined, 'research checks are read-only GET requests');
 assert.ok(app.body().includes('Methodology and report checks'));
-assert.ok(app.body().includes('Display threshold met · not validation'));
+assert.ok(app.body().includes('Display threshold met · not validation'), app.body());
 assert.ok(app.body().includes('8/10'));
 assert.ok(app.body().includes('No automatic research sign-off'));
 assert.equal(app.button('Report JSON').props.disabled, false);

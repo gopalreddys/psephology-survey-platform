@@ -121,9 +121,20 @@ const intelligence = {
   },
   methodology: { sampleType: 'Synthetic convenience fixture', weighted: false, analysisUnit: 'Synthetic respondent observations', disclosure: 'Synthetic methodology explanation' }
 };
-const fixtureVariants = ['default', 'sparse', 'populated'];
+const fixtureVariants = ['default', 'sparse', 'populated', 'withheld-partitions'];
 function fixtureIntelligence(variant) {
   if (variant === 'default') return intelligence;
+  if (variant === 'withheld-partitions') {
+    const withheld = measure({ respondentBase: null, answerBase: null, missingCount: null,
+      cantSayCount: null, refusedCount: null, uncodedCount: null, coveragePct: null, suppressed: true });
+    return { ...intelligence,
+      rating: { ...intelligence.rating, value: null, answeredBase: null },
+      measures: Object.fromEntries(Object.keys(intelligence.measures).map((key) => [key, withheld])),
+      sentiment: [], issues: [], landscape: { party: [], candidate: [], leadership: [] },
+      age: [segment('18–29', { ...withheld, base: null, positivePct: null, sentiment: [] })],
+      gender: [], mandalHeatmap: [], predictive: { ...intelligence.predictive, points: [] }
+    };
+  }
   if (variant === 'sparse') return {
     ...intelligence,
     rating: { ...intelligence.rating, value: null, answeredBase: 0 },
@@ -305,7 +316,7 @@ assert.doesNotMatch(textContent(baseTree, true), /Coverage =|Missing 2|not count
 assert.match(textContent(baseTree), /Missing 2 · Can't say 1 · Refused 1 · Uncoded 1/);
 const sparseBase = resolve(BaseCaption({ summary: measure({ answerBase: 3, coveragePct: 30, suppressed: true }), children: 'Synthetic sparse base detail' }));
 assert.match(textContent(sparseBase, true), /3 answered \/ 10 respondents · 30\.0% coverage · Withheld/);
-assert.match(textContent(sparseBase), /Percentages withheld: fewer than 5 answers/);
+assert.match(textContent(sparseBase), /answer partition and linked totals are withheld/);
 const segmentTree = resolve(SegmentNote({ items: [segment('Synthetic segment')], children: 'Synthetic segment explanation' }));
 const table = find(segmentTree, (element) => element.type === 'table');
 assert.ok(table, 'segment denominator details remain available on demand');
@@ -384,13 +395,17 @@ assert.match(textContent(suppressedTree), /Withheld values are unavailable, not 
 assert.ok(!find(suppressedTree, (element) => hasClass(element, 'reportGrid') || hasClass(element, 'reportCard')),
   'Withheld overall research result does not render individual report cards');
 
-for (const variant of ['sparse', 'populated']) {
+for (const variant of ['sparse', 'populated', 'withheld-partitions']) {
   const tree = render({ data: dashboard('SUPER_ADMIN', { intelligence: fixtureIntelligence(variant) }) });
   assertReportCardStructure(tree, `${variant} synthetic fixture`);
   assertClosedDetails(tree);
   if (variant === 'sparse') {
     assert.match(textContent(tree, true), /No reportable sentiment distribution|No demographic evidence/);
     assert.match(textContent(tree, true), /0 answered \/ 10 respondents · 0\.0% coverage · Withheld/);
+  } else if (variant === 'withheld-partitions') {
+    assert.match(textContent(tree, true), /Withheld answered \/ Withheld respondents · Withheld coverage/);
+    assert.match(textContent(tree, true), /Withheld coded \/ 10 observations/);
+    assert.doesNotMatch(textContent(tree, true), /0 answered|0 coded|NaN|null/);
   } else {
     assert.match(textContent(tree, true), /Synthetic candidate impression and recorded expectations/);
     assert.match(textContent(tree, true), /Indicative next-Iteration 3\.2\/5/);

@@ -7,10 +7,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const routes = readFileSync(path.join(here, "pipeline.routes.js"), "utf8");
 const installer = readFileSync(path.join(here, "install-pipeline.js"), "utf8");
 const repository = readFileSync(path.join(here, "pipeline.repository.js"), "utf8");
+const policy = readFileSync(path.join(here, "../run-lifecycle-automation/operational-lifecycle-policy.js"), "utf8");
 const testableRepository = repository.replace(
   'import { getDb } from "../db/postgres.js";',
   "const getDb = async () => { throw new Error('Unexpected database access'); };"
-);
+).replace('"./operational-lifecycle-policy.js"', JSON.stringify(`data:text/javascript,${encodeURIComponent(policy)}`));
 const { buildCallIssueTrace, evaluatePlatformHealth, getPipelineOverview } = await import(
   `data:text/javascript,${encodeURIComponent(testableRepository)}`
 );
@@ -55,6 +56,18 @@ const db = { query: async (sql) => {
     enabled_agents: 2, invalid_enabled_agents: 0,
     open_iterations: 1, iteration_configuration_gaps: 0
   }] };
+  if (sql.includes("WITH selected_deployments AS")) return { rows: [{
+    app_id: "Political-A-test", app_version: "5", connection_id: "connection",
+    proof_app_id: "Political-A-test", proof_app_version: "5", proof_connection_id: "connection",
+    execution_id: "matching-canary", execution_status: "COMPLETED", callback_received_at: "2026-09-27T08:10:00.000Z",
+    created_at: "2026-09-27T08:00:00.000Z", normalized_status: "SUCCESS_COMPLETE",
+    transcript_turns: 39, response_variables: 44, interaction_transcript: [
+      { role: "agent", text: "Hello, can we talk briefly?" },
+      { role: "user", text: "Yes" },
+      { role: "agent", text: "What issue matters most?" },
+      { role: "user", text: "Education" }
+    ]
+  }] };
   if (sql.includes("AS submitted_app_id")) return { rows: [{
     execution_id: "trace", run_contact_id: "contact",
     provider_attempt_id: "provider", execution_status: "COMPLETED",
@@ -88,7 +101,7 @@ const db = { query: async (sql) => {
 } };
 
 const result = await getPipelineOverview({ db });
-assert.equal(calls.length, 10);
+assert.equal(calls.length, 11);
 assert.equal(result.summary.delayed_callbacks, 1);
 assert.equal(result.summary.unresolved_total, 1);
 assert.equal(result.summary.missing_transcripts, 1);
@@ -208,6 +221,7 @@ assert.equal(overlappingStarts.runtime.incidents.some((item) =>
 
 const readyOverview = {
   ...result,
+  issueTrace: { runtime: { showstoppers: 0 }, history: result.issueTrace.history },
   summary: {
     ...result.summary,
     delayed_callbacks: 0,
@@ -223,16 +237,24 @@ const health = evaluatePlatformHealth({
 });
 assert.equal(health.status, "READY");
 assert.equal(health.blocking, 0);
-assert.equal(health.checks.length, 8);
+assert.equal(health.checks.length, 9);
+assert.equal(health.diagnosticOnly, true);
 assert.equal(health.checks.find((item) => item.id === "conversation-canary").status, "PASS");
+assert.equal(result.deploymentCanaries[0].opening_repeats, 1);
+assert.equal("interaction_transcript" in result.deploymentCanaries[0], false);
+assert.match(calls.find((sql) => sql.includes("AS resolved_contacts")),
+  /UPPER\(COALESCE\(contact\.attempt_status, 'PENDING'\)\) IN \('COMPLETED', 'FAILED'\)/);
+assert.doesNotMatch(calls.find((sql) => sql.includes("AS resolved_contacts")),
+  /contact\.final_status <> 'PENDING'/);
+assert.doesNotMatch(calls.find((sql) => sql.includes("WITH selected_deployments AS")),
+  /COALESCE\(execution\.request_payload/);
 
 const completedCanaryHealth = evaluatePlatformHealth({
   overview: {
     ...readyOverview,
-    latestConversation: {
-      ...readyOverview.latestConversation,
-      normalized_status: "COMPLETED"
-    }
+    deploymentCanaries: readyOverview.deploymentCanaries.map((proof) => ({
+      ...proof, normalized_status: "COMPLETED"
+    }))
   },
   timer: { status: "waiting", lastResult: "success" },
   now: new Date("2026-09-28T08:00:00.000Z")
@@ -252,4 +274,39 @@ const blocked = evaluatePlatformHealth({
 });
 assert.equal(blocked.status, "ATTENTION_REQUIRED");
 assert.equal(blocked.checks.find((item) => item.id === "iteration-config").blocking, true);
+
+const healthFor = (changes) => evaluatePlatformHealth({
+  overview: { ...readyOverview, ...changes },
+  timer: { status: "waiting", lastResult: "success" },
+  now: new Date("2026-09-28T08:00:00.000Z")
+});
+assert.equal(healthFor({ issueTrace: { runtime: { showstoppers: 1 } } }).status,
+  "ATTENTION_REQUIRED", "Healthy core must not hide a critical runtime incident");
+assert.equal(healthFor({ issueTrace: { history: { resolvedObservations: 99 },
+  runtime: { showstoppers: 0 } } }).status, "READY", "History is not a current blocker");
+assert.equal(healthFor({ issueTrace: undefined }).status, "ATTENTION_REQUIRED");
+assert.equal(healthFor({ issueTrace: { runtime: { showstoppers: false } } }).status, "ATTENTION_REQUIRED");
+assert.equal(healthFor({ diagnosticsTruncated: true }).status, "ATTENTION_REQUIRED");
+assert.equal(healthFor({ issueTrace: { runtime: { showstoppers: 0, warnings: 1 } } }).status,
+  "READY_WITH_WARNINGS");
+for (const field of ["proof_app_id", "proof_app_version", "proof_connection_id"]) {
+  const proof = { ...readyOverview.deploymentCanaries[0], [field]: field === "proof_app_version" ? "6" : "different" };
+  assert.equal(healthFor({ deploymentCanaries: [proof] }).checks.find((item) =>
+    item.id === "conversation-canary").status, "FAIL", `${field} must match selected frozen deployment`);
+}
+assert.equal(healthFor({ deploymentCanaries: [] }).checks.find((item) =>
+  item.id === "conversation-canary").status, "FAIL", "Global proof cannot qualify a selected deployment");
+for (const changes of [
+  { callback_received_at: "2026-09-01T08:10:00.000Z" },
+  { callback_received_at: "2026-09-29T08:10:00.000Z" },
+  { response_variables: 0 }, { transcript_turns: 3 },
+  { normalized_status: "FAILED" }, { opening_repeats: 2 },
+  { execution_status: "SUBMITTED" },
+  { execution_id: null }, { proof_app_version: null }
+]) {
+  assert.equal(healthFor({ deploymentCanaries: [{ ...readyOverview.deploymentCanaries[0], ...changes }] })
+    .status, "ATTENTION_REQUIRED");
+}
+assert.equal(healthFor({ integration: { ...readyOverview.integration, open_iterations: 0 },
+  deploymentCanaries: [] }).checks.find((item) => item.id === "conversation-canary").status, "PASS");
 console.log("Pipeline scope, diagnostics and install checks passed.");

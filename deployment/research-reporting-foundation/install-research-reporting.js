@@ -8,7 +8,7 @@ const marker = "RESEARCH_REPORTING_FOUNDATION_V1";
 const repositoryFiles = [
   "reporting-contract.validation.js", "reporting-contract.repository.js",
   "report-catalog.js", "research-report.js", "research-report.repository.js",
-  "fieldwork-diagnostics.js", "fieldwork-diagnostics.repository.js"
+  "fieldwork-diagnostics.js", "fieldwork-diagnostics.repository.js", "research-scope.repository.js"
 ];
 const routeFiles = ["reporting-contract.routes.js", "research-report.routes.js"];
 
@@ -29,7 +29,7 @@ export async function installResearchReporting(runtimeRoot, { dryRun = false } =
   }
   for (const relative of [
     "src/db/postgres.js", "src/middleware/auth.middleware.js", "src/middleware/role.middleware.js",
-    "src/repositories/analytics-workspace.repository.js",
+    "src/repositories/campaign-visibility.repository.js",
     "src/repositories/output-normalization.repository.js", "src/repositories/normalization-rules.json"
   ]) await readFile(path.join(root, relative));
 

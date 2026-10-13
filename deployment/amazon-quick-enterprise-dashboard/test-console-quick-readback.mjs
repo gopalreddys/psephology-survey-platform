@@ -72,12 +72,11 @@ const savedReadback = artifact("quick-insights-published-v7-readback-20261010.js
 if (existsSync(savedCandidate) && existsSync(savedReadback)) {
   const bundle = JSON.parse(readFileSync(savedCandidate));
   const cloud = JSON.parse(readFileSync(savedReadback));
-  const expected = prepareConsoleNamespacedCandidate({ ...bundle.manifest, definition: bundle.dashboardRequest.Definition }, bundle.dashboardRequest.DashboardId);
+  assert.throws(() => prepareConsoleNamespacedCandidate({ ...bundle.manifest, definition: bundle.dashboardRequest.Definition }, bundle.dashboardRequest.DashboardId), /Whole-partition disclosure guard missing/,
+    "Saved version 7 remains historical evidence, not a candidate satisfying the new disclosure policy");
   assert.equal(cloud.summary.Dashboard.Version.VersionNumber, 7);
   assert.equal(cloud.accessUnchanged, true);
   assert.deepEqual(cloud.definition.Errors ?? [], []);
-  const gate = validateServiceNormalizedPublicationReadback(cloud.definition, expected.candidate);
-  assert.equal(gate.valid, true, gate.errors.join("; "));
-  console.log("Saved live version 7: six bindings, 41 visuals, exact reviewed semantics and unchanged access verified.");
+  console.log("Saved version 7 evidence retained with unchanged access; historical disclosure policy is blocked from new promotion.");
 }
 console.log("Console Quick readback regression checks passed: reversible typed identity mapping and fail-closed content safeguards.");

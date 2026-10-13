@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "PLATFORM_CONSOLIDATION_20261013_V1",
+  "requiredPackages": ["@aws-sdk/client-quicksight"],
+  "requiredFiles": [
+    "sql/024_amazon_quick_research_reporting.sql",
+    "sql/025_amazon_quick_geographic_heatmap.sql",
+    "sql/026_telangana_administrative_boundaries.sql",
+    "sql/027_psephology_decision_reporting.sql",
+    "sql/028_research_design_comparability.sql",
+    "sql/029_shared_comparison_gate.sql",
+    "sql/030_normalized_output_reporting.sql",
+    "sql/031_audited_research_methodology.sql",
+    "sql/032_sentiment_construct_reporting.sql"
+  ],
+  "requiredMounts": [
+    { "module": "./routes/campaign-iterations.routes.js", "binding": "campaignIterationsRoutes", "prefix": "/api" },
+    { "module": "./routes/iteration-closeout.routes.js", "binding": "iterationCloseoutRoutes", "prefix": "/api" },
+    { "module": "./routes/run-lifecycle.routes.js", "binding": "runLifecycleRoutes", "prefix": "/api" },
+    { "module": "./routes/campaign-lifecycle.routes.js", "binding": "campaignLifecycleRoutes", "prefix": "/api" },
+    { "module": "./routes/pipeline.routes.js", "binding": "pipelineRoutes", "prefix": "/api" },
+    { "module": "./routes/analytics-workspace.routes.js", "binding": "analyticsWorkspaceRoutes", "prefix": "/api" },
+    { "module": "./routes/campaign-analysis.routes.js", "binding": "campaignAnalysisRoutes", "prefix": "/api" },
+    { "module": "./routes/research-report.routes.js", "binding": "researchReportRoutes", "prefix": "/api" },
+    { "module": "./routes/call-quality-review.routes.js", "binding": "callQualityReviewRoutes", "prefix": "/api" },
+    { "module": "./routes/interview-completion.routes.js", "binding": "interviewCompletionRoutes", "prefix": "/api" },
+    { "module": "./routes/amazon-quick-dashboard.routes.js", "binding": "amazonQuickDashboardRoutes", "prefix": "/api" },
+    { "module": "./routes/dashboard.routes.js", "binding": "roleDashboardRoutes", "prefix": "/api" }
+  ],
+  "files": [
+    { "source": "deployment/campaign-workspace/campaign-iterations.repository.js", "target": "src/repositories/campaign-iterations.repository.js" },
+    { "source": "deployment/iteration-closeout/iteration-closeout.repository.js", "target": "src/repositories/iteration-closeout.repository.js" },
+    { "source": "deployment/run-lifecycle-automation/run-lifecycle.repository.js", "target": "src/repositories/run-lifecycle.repository.js" },
+    { "source": "deployment/run-lifecycle-automation/operational-lifecycle-policy.js", "target": "src/repositories/operational-lifecycle-policy.js", "allowNew": true },
+    { "source": "deployment/run-lifecycle-automation/reconcile-open-runs.js", "target": "src/db/reconcile-open-runs.js" },
+    { "source": "deployment/sarvam-outbound-webhook/finalize-resolved-runs.js", "target": "src/db/finalize-resolved-runs.js" },
+    { "source": "deployment/pipeline-operations/pipeline.repository.js", "target": "src/repositories/pipeline.repository.js" },
+    { "source": "deployment/campaign-lifecycle-governance/campaign-lifecycle.repository.js", "target": "src/repositories/campaign-lifecycle.repository.js" },
+    { "source": "deployment/output-variable-standardization/output-normalization.repository.js", "target": "src/repositories/output-normalization.repository.js" },
+    { "source": "deployment/output-variable-standardization/normalization-rules.json", "target": "src/repositories/normalization-rules.json" },
+    { "source": "deployment/analytics-workspace/analytics-workspace.repository.js", "target": "src/repositories/analytics-workspace.repository.js" },
+    { "source": "deployment/campaign-comparative-analysis/campaign-analysis.repository.js", "target": "src/repositories/campaign-analysis.repository.js" },
+    { "source": "deployment/research-reporting-foundation/research-report.js", "target": "src/repositories/research-report.js" },
+    { "source": "deployment/research-reporting-foundation/research-report.repository.js", "target": "src/repositories/research-report.repository.js" },
+    { "source": "deployment/research-reporting-foundation/research-scope.repository.js", "target": "src/repositories/research-scope.repository.js", "allowNew": true },
+    { "source": "deployment/call-quality-review/call-quality-review.repository.js", "target": "src/repositories/call-quality-review.repository.js" },
+    { "source": "deployment/interview-completion/interview-completion.repository.js", "target": "src/repositories/interview-completion.repository.js" },
+    { "source": "deployment/role-dashboard/dashboard.repository.js", "target": "src/repositories/dashboard.repository.js" },
+    { "source": "deployment/amazon-quick-enterprise-dashboard/amazon-quick-dashboard.routes.js", "target": "src/routes/amazon-quick-dashboard.routes.js" },
+    { "source": "deployment/amazon-quick-enterprise-dashboard/quick-embed-access.js", "target": "src/repositories/quick-embed-access.js", "allowNew": true },
+    { "source": "deployment/amazon-quick-enterprise-dashboard/034_reporting_consistency.sql", "target": "sql/034_reporting_consistency.sql", "allowNew": true },
+    { "source": "deployment/amazon-quick-enterprise-dashboard/migrate-amazon-quick-dashboard.js", "target": "src/db/migrate-amazon-quick-dashboard.js" }
+  ],
+  "separateApprovedSteps": [
+    "Stop the API and other deployment tools before multi-file promotion; this installer does not stop or restart services.",
+    "Apply reviewed SQL migrations separately using the approved database release procedure; no SQL is executed by this installer.",
+    "Deploy the matching frontend separately. Existing Amazon Quick publication and SPICE refresh are not changed.",
+    "Provision unique non-owner Reader identities and reviewed GRANT_ACCESS UserARN/campaign RLS rules separately before allowing restricted Admin embedding."
+  ]
+}

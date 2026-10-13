@@ -9,7 +9,7 @@ const marker = 'CALL_QUALITY_REVIEW_V1';
 export const runtimeDependencies = [
   'src/db/postgres.js', 'src/middleware/auth.middleware.js', 'src/middleware/role.middleware.js',
   'src/repositories/campaign-visibility.repository.js',
-  'src/repositories/analytics-workspace.repository.js',
+  'src/repositories/research-scope.repository.js',
   'src/repositories/output-normalization.repository.js',
   'src/repositories/normalization-rules.json'
 ];

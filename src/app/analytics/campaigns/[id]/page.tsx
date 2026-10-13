@@ -175,6 +175,7 @@ export default function StrategicCampaignAnalyticsPage() {
   const [mandal, setMandal] = useState("");
   const [sentimentConstruct, setSentimentConstruct] = useState("candidate_impression");
   const [scopeInitialized, setScopeInitialized] = useState(false);
+  const [initializedCampaignId, setInitializedCampaignId] = useState("");
   const [loadedScopeKey, setLoadedScopeKey] = useState("");
   const requestGeneration = useRef(0);
   const scopeKey = JSON.stringify([campaignId, iterationId, runId, gender, ageBand, mandal, sentimentConstruct]);
@@ -191,10 +192,11 @@ export default function StrategicCampaignAnalyticsPage() {
       setAgeBand(query.get("ageBand") || "");
       setMandal(query.get("mandal") || "");
       setSentimentConstruct(query.get("sentimentConstruct") || "candidate_impression");
+      setInitializedCampaignId(campaignId);
       setScopeInitialized(true);
     }, 0);
     return function () { window.clearTimeout(timer); };
-  }, []);
+  }, [campaignId]);
 
   const loadStrategic = useCallback(async function (refresh = false) {
     if (!campaignId) return;
@@ -282,10 +284,27 @@ export default function StrategicCampaignAnalyticsPage() {
     finally { if (generation === requestGeneration.current) { setLoading(false); setRefreshing(false); } }
   }, [ageBand, campaignId, gender, iterationId, mandal, runId, scopeKey, sentimentConstruct]);
 
-  useEffect(function () { if (!user || !campaignId || !scopeInitialized) return; const timer = window.setTimeout(function () { void loadStrategic(); }, 0); return function () { window.clearTimeout(timer); requestGeneration.current += 1; }; }, [campaignId, loadStrategic, scopeInitialized, user]);
+  useEffect(function () { if (!user || !campaignId || !scopeInitialized || initializedCampaignId !== campaignId) return; const timer = window.setTimeout(function () { void loadStrategic(); }, 0); return function () { window.clearTimeout(timer); requestGeneration.current += 1; }; }, [campaignId, initializedCampaignId, loadStrategic, scopeInitialized, user]);
   useEffect(function () { if (!user) return; void apiFetch("/api/analytics").then(function (workspace) { const result = workspace as { campaigns: CampaignOption[] }; setCampaigns(result.campaigns.map((campaign) => ({ id: campaign.id, code: campaign.code, name: campaign.name }))); }).catch(function () { setCampaigns([]); }); }, [user]);
 
   function resetSegments() { setGender(""); setAgeBand(""); setMandal(""); }
+
+  function switchCampaign(nextCampaignId: string) {
+    if (!nextCampaignId || nextCampaignId === campaignId) return;
+    // Never send a previous Campaign's Iteration/Run IDs to the next Campaign.
+    requestGeneration.current += 1;
+    setScopeInitialized(false);
+    setInitializedCampaignId("");
+    setIterationId("");
+    setRunId("");
+    resetSegments();
+    setSentimentConstruct("candidate_impression");
+    setData(null);
+    setLoadedScopeKey("");
+    setError(null);
+    setLoading(true);
+    router.push(`/analytics/campaigns/${encodeURIComponent(nextCampaignId)}`);
+  }
 
   const researchReportQuery = new URLSearchParams();
   if (iterationId) researchReportQuery.set("iterationId", iterationId);
@@ -295,7 +314,7 @@ export default function StrategicCampaignAnalyticsPage() {
   if (mandal) researchReportQuery.set("mandal", mandal);
   researchReportQuery.set("sentimentConstruct", sentimentConstruct);
 
-  if (loading || (data && loadedScopeKey !== scopeKey && !error)) return <AppShell><main className={styles.loading}><LoaderCircle className={styles.spin} />Preparing decision analysis…</main></AppShell>;
+  if (loading || !scopeInitialized || initializedCampaignId !== campaignId || (data && loadedScopeKey !== scopeKey && !error)) return <AppShell><main className={styles.loading}><LoaderCircle className={styles.spin} />Preparing decision analysis…</main></AppShell>;
 
   return (
     <AppShell><main className={styles.page}>
@@ -305,7 +324,7 @@ export default function StrategicCampaignAnalyticsPage() {
         <header className={styles.hero}><div><span>PSEPHOLOGY ANALYSIS</span><h1>{data.campaign.name}</h1><p>{data.campaign.code} · {data.campaign.targetName} · {data.campaign.surveyStage} survey</p></div><div className={styles.heroActions}><button type="button" disabled={refreshing} onClick={function () { void loadStrategic(true); }}><RefreshCw size={15} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button></div></header>
 
         <section className={scopeStyles.scopeSelector}><div className={scopeStyles.scopeIntro}><span>ANALYSIS SCOPE</span><h2>Iteration insights · Run operations</h2><p>{data.scope.interpretation}</p></div><div className={scopeStyles.scopeControls}>
-          <label><span>Campaign</span><select value={campaignId} onChange={(event) => router.push(`/analytics/campaigns/${event.target.value}`)}>{campaigns.length === 0 && <option value={campaignId}>{data.campaign.name}</option>}{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.code}</option>)}</select></label>
+          <label><span>Campaign</span><select value={campaignId} onChange={(event) => switchCampaign(event.target.value)}>{campaigns.length === 0 && <option value={campaignId}>{data.campaign.name}</option>}{campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.code}</option>)}</select></label>
           <label><span>Iteration · insight scope</span><select value={iterationId} onChange={function (event) { setIterationId(event.target.value); setRunId(""); resetSegments(); }}><option value="">{!iterationId && data.scope.iteration ? `Latest completed · Iteration ${data.scope.iteration.number}` : "Latest completed Iteration"}</option>{data.options.iterations.map((iteration) => <option key={iteration.id} value={iteration.id}>Iteration {iteration.number} · {iteration.name}</option>)}</select></label>
           <label><span>Run · operations only</span><select value={runId} disabled={!iterationId} onChange={function (event) { setRunId(event.target.value); }}><option value="">All Run operations</option>{(data.options.iterations.find((iteration) => iteration.id === iterationId)?.runs || []).map((run) => <option key={run.id} value={run.id}>Run {run.number} · {run.status}</option>)}</select></label>
         </div></section>

@@ -154,6 +154,8 @@ function capturedReport(report, definition, analysis, exactMeasures) {
   if (selected.status === 'MAPPING_PENDING') return { ...initial, captureStatus: 'MAPPING_PENDING', message: 'Definition recorded; an audited aggregate calculation for this output and target is not implemented yet.' };
   if (analysis.segment?.suppressed || base === null || base < MINIMUM_RESEARCH_REPORT_BASE) return { ...initial, respondentBase: null, captureStatus: 'INSUFFICIENT_BASE', message: 'The selected cohort is below the disclosure minimum; counts and findings are withheld.' };
   const measure = selected.measure;
+  if (measure.suppressed) return { ...initial, respondentBase: null, answerBase: null, codedBase: null,
+    captureStatus: 'SMALL_CELLS_WITHHELD', message: 'The complete construct partition and linked denominators are withheld under the shared disclosure policy.' };
   const answerBase = count(measure.answerBase);
   const codedBase = count(measure.codedCount);
   if (answerBase === null || answerBase > base || codedBase === null || codedBase > answerBase || count(measure.respondentBase) !== base) return { ...initial, captureStatus: 'MAPPING_PENDING', message: 'Aggregate denominators are unavailable or inconsistent; refresh the report and review the reporting calculation.' };
@@ -172,7 +174,7 @@ function capturedReport(report, definition, analysis, exactMeasures) {
     || rows.filter((row) => !EXPLICIT_STATES.includes(row.value) && !row.value.startsWith('Multiple ')).reduce((total, row) => total + count(row.respondents), 0) !== codedBase) return { ...initial, answerBase, codedBase, captureStatus: 'MAPPING_PENDING', message: 'Recorded category labels or denominator totals do not match the audited reporting taxonomy.' };
   // Suppress the complete distribution if even one reported category is small.
   // This also avoids reconstructing withheld cells from totals or complements.
-  if (rows.some((row) => count(row.respondents) < MINIMUM_RESEARCH_REPORT_BASE)) return { ...initial, answerBase, codedBase, captureStatus: 'SMALL_CELLS_WITHHELD', message: 'One or more category cells are below the disclosure minimum; the complete distribution is withheld.' };
+  if (rows.some((row) => count(row.respondents) < MINIMUM_RESEARCH_REPORT_BASE)) return { ...initial, respondentBase: null, answerBase: null, codedBase: null, captureStatus: 'SMALL_CELLS_WITHHELD', message: 'One or more category cells are below the disclosure minimum; the complete distribution and linked totals are withheld.' };
   return { ...initial, answerBase, codedBase, captureStatus: 'DESCRIPTIVE_AVAILABLE', suppressed: false,
     distribution: rows.map((row) => ({ value: row.value, respondents: count(row.respondents), percentage: Number((100 * count(row.respondents) / answerBase).toFixed(1)) })),
     message: 'Unweighted descriptive distribution of recorded answers. Human-review sign-off remains pending.' };
@@ -237,6 +239,7 @@ export function buildResearchReport({ analysis, snapshot = null, questionnaireId
     sources: { analysisGeneratedAt: date(analysis.generatedAt), latestEvidenceAt: date(latestEvidenceAt), questionnaire: instrument.source,
       voiceAgent: Object.keys(agent).length ? { id: identifier(agent.catalog_id || agent.id), code: identifier(agent.agent_code), appId: identifier(agent.app_id), version: count(agent.app_version), basis: 'ITERATION_ASSIGNMENT_SNAPSHOT' } : null,
       normalizationVersion: identifier(analysis.normalizationVersion),
+      demographicProvenance: 'CURRENT_MASTER_DATA',
       normalizationRuleHash: typeof analysis.sentimentValidation?.ruleHash === 'string' && /^[a-f0-9]{64}$/.test(analysis.sentimentValidation.ruleHash) ? analysis.sentimentValidation.ruleHash : null,
       frozenInstrumentHash: instrument.frozen ? instrument.fingerprint : null },
     methodology: { declarationStatus: declarationRecorded ? 'DECLARED' : 'NOT_DECLARED', revision: declarationRecorded ? count(declarations.revision) : null,

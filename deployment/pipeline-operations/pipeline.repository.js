@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getDb } from "../db/postgres.js";
+import { terminalAttemptSql, activeExecutionSql, sameDeployment }
+  from "./operational-lifecycle-policy.js";
 
 const runFile = promisify(execFile);
 const RECOVERY_TIMER = "psephology-lifecycle-recovery.timer";
@@ -235,11 +237,11 @@ const TRACE_DEFINITIONS = {
     involved: [
       ["src/repositories/sarvam-outbound-webhook.repository.js", "recordSarvamOutboundResult"],
       ["src/repositories/run-lifecycle.repository.js", "reconcileRunLifecycle"],
-      ["deployment/sarvam-outbound-webhook/finalize-resolved-runs.js", "finalize resolved Runs"]
+      ["src/db/reconcile-open-runs.js", "audited lifecycle reconciliation"]
     ],
     fixes: [
       "Run the lifecycle reconciliation in dry-run mode and inspect the candidate.",
-      "Verify every selected contact has a terminal final status.",
+      "Verify every selected contact has a terminal attempt status, including retryable failed attempts.",
       "Apply closeout only when there are no active executions."
     ]
   },
@@ -533,7 +535,7 @@ export function buildCallIssueTrace({ executions = [], webhooks = [], lifecycleD
 export async function getPipelineOverview(options = {}) {
   const db = options.db || await getDb();
   const [executions, webhooks, recentWebhooks, evidence, recoveryEvents,
-    integrationConfiguration, latestConversation] = await Promise.all([
+    integrationConfiguration, latestConversation, deploymentCanaries] = await Promise.all([
     db.query(`
       SELECT COUNT(*) FILTER (WHERE callback_received_at IS NULL
           AND status IN ('PENDING', 'SUBMITTED', 'RUNNING'))::int AS awaiting_callbacks,
@@ -610,12 +612,12 @@ export async function getPipelineOverview(options = {}) {
           FROM campaign_iteration_links link
           JOIN program_iterations iteration ON iteration.id = link.iteration_id
           WHERE UPPER(COALESCE(link.status, iteration.status, 'PLANNED'))
-            NOT IN ('COMPLETED', 'CANCELLED', 'ARCHIVED')) AS open_iterations,
+            NOT IN ('COMPLETED', 'LOCKED', 'CANCELLED', 'ARCHIVED')) AS open_iterations,
         (SELECT COUNT(*)::int
           FROM campaign_iteration_links link
           JOIN program_iterations iteration ON iteration.id = link.iteration_id
           WHERE UPPER(COALESCE(link.status, iteration.status, 'PLANNED'))
-              NOT IN ('COMPLETED', 'CANCELLED', 'ARCHIVED')
+              NOT IN ('COMPLETED', 'LOCKED', 'CANCELLED', 'ARCHIVED')
             AND (iteration.questionnaire_id IS NULL
               OR iteration.voice_agent_id IS NULL
               OR NULLIF(TRIM(iteration.voice_agent_snapshot ->> 'app_id'), '') IS NULL
@@ -638,17 +640,13 @@ export async function getPipelineOverview(options = {}) {
         CASE WHEN jsonb_typeof(call_record.response_variables) = 'object'
           THEN (SELECT COUNT(*) FROM jsonb_object_keys(call_record.response_variables))
           ELSE 0 END AS response_variables,
-        COALESCE(execution.request_payload #>> '{providerDeployment,app_id}',
-          iteration.voice_agent_snapshot ->> 'app_id') AS app_id,
+        execution.request_payload #>> '{providerDeployment,app_id}' AS app_id,
         CASE
           WHEN COALESCE(execution.request_payload #>> '{providerDeployment,app_version}', '') ~ '^[0-9]+$'
             THEN (execution.request_payload #>> '{providerDeployment,app_version}')::int
-          WHEN COALESCE(iteration.voice_agent_snapshot ->> 'app_version', '') ~ '^[0-9]+$'
-            THEN (iteration.voice_agent_snapshot ->> 'app_version')::int
           ELSE NULL
         END AS app_version,
-        COALESCE(execution.request_payload #>> '{providerDeployment,connection_id}',
-          iteration.voice_agent_snapshot ->> 'connection_id') AS connection_id,
+        execution.request_payload #>> '{providerDeployment,connection_id}' AS connection_id,
         campaign.campaign_name, iteration.iteration_number, run.run_number
       FROM call_executions execution
       JOIN campaign_runs run ON run.id = execution.run_id
@@ -666,6 +664,50 @@ export async function getPipelineOverview(options = {}) {
       ORDER BY execution.callback_received_at DESC NULLS LAST,
         execution.created_at DESC
       LIMIT 1
+    `),
+    db.query(`
+      WITH selected_deployments AS (
+        SELECT DISTINCT
+          iteration.voice_agent_snapshot ->> 'app_id' AS app_id,
+          iteration.voice_agent_snapshot ->> 'app_version' AS app_version,
+          iteration.voice_agent_snapshot ->> 'connection_id' AS connection_id
+        FROM campaign_iteration_links link
+        JOIN program_iterations iteration ON iteration.id = link.iteration_id
+        WHERE UPPER(COALESCE(link.status, iteration.status, 'PLANNED'))
+          NOT IN ('COMPLETED', 'LOCKED', 'CANCELLED', 'ARCHIVED')
+      )
+      SELECT selected.*, proof.execution_id, proof.callback_received_at,
+        proof.created_at, proof.execution_status, proof.normalized_status, proof.transcript_turns,
+        proof.response_variables, proof.interaction_transcript,
+        proof.proof_app_id, proof.proof_app_version, proof.proof_connection_id
+      FROM selected_deployments selected
+      LEFT JOIN LATERAL (
+        SELECT execution.id AS execution_id, execution.callback_received_at,
+          execution.created_at, execution.status AS execution_status, call_record.normalized_status,
+          call_record.interaction_transcript,
+          CASE WHEN jsonb_typeof(call_record.interaction_transcript) = 'array'
+            THEN jsonb_array_length(call_record.interaction_transcript) ELSE 0 END AS transcript_turns,
+          CASE WHEN jsonb_typeof(call_record.response_variables) = 'object'
+            THEN (SELECT COUNT(*) FROM jsonb_object_keys(call_record.response_variables))
+            ELSE 0 END AS response_variables,
+          execution.request_payload #>> '{providerDeployment,app_id}' AS proof_app_id,
+          execution.request_payload #>> '{providerDeployment,app_version}' AS proof_app_version,
+          execution.request_payload #>> '{providerDeployment,connection_id}' AS proof_connection_id
+        FROM call_executions execution
+        JOIN LATERAL (
+          SELECT item.* FROM calls item
+          WHERE item.attempt_id = execution.provider_attempt_id
+          ORDER BY item.updated_at DESC NULLS LAST LIMIT 1
+        ) call_record ON TRUE
+        WHERE execution.request_payload #>> '{providerDeployment,app_id}' = selected.app_id
+          AND execution.request_payload #>> '{providerDeployment,app_version}' = selected.app_version
+          AND execution.request_payload #>> '{providerDeployment,connection_id}' = selected.connection_id
+          AND execution.callback_received_at IS NOT NULL
+          AND LOWER(COALESCE(call_record.connectivity_status, '')) = 'connected'
+        ORDER BY execution.created_at DESC, execution.id DESC
+        LIMIT 1
+      ) proof ON TRUE
+      ORDER BY selected.app_id, selected.app_version, selected.connection_id
     `)
   ]);
 
@@ -733,27 +775,24 @@ export async function getPipelineOverview(options = {}) {
     SELECT run.id AS run_id, run.status AS run_status, run.run_number,
       iteration.iteration_number, campaign.campaign_name,
       COUNT(contact.id)::int AS selected_contacts,
-      COUNT(contact.id) FILTER (WHERE contact.final_status <> 'PENDING')::int AS resolved_contacts,
+      COUNT(contact.id) FILTER (WHERE ${terminalAttemptSql()})::int AS resolved_contacts,
       (SELECT COUNT(*)::int FROM call_executions active
         WHERE active.run_id = run.id
-          AND active.callback_received_at IS NULL
-          AND active.status IN ('PENDING', 'SUBMITTED', 'RUNNING')) AS active_executions,
+          AND ${activeExecutionSql("active.status")}) AS active_executions,
       MAX(run.updated_at) AS updated_at
     FROM campaign_runs run
     JOIN program_iterations iteration ON iteration.id = run.iteration_id
     LEFT JOIN campaign_iteration_links link ON link.iteration_id = iteration.id
     LEFT JOIN campaigns campaign ON campaign.id = link.campaign_id
     JOIN campaign_run_contacts contact ON contact.run_id = run.id
-      AND contact.selection_status = 'SELECTED'
     WHERE run.status IN ('READY', 'RUNNING')
     GROUP BY run.id, run.status, run.run_number,
       iteration.iteration_number, campaign.campaign_name
     HAVING COUNT(contact.id) > 0
-      AND COUNT(contact.id) FILTER (WHERE contact.final_status <> 'PENDING') = COUNT(contact.id)
+      AND COUNT(contact.id) FILTER (WHERE ${terminalAttemptSql()}) = COUNT(contact.id)
       AND (SELECT COUNT(*) FROM call_executions active
         WHERE active.run_id = run.id
-          AND active.callback_received_at IS NULL
-          AND active.status IN ('PENDING', 'SUBMITTED', 'RUNNING')) = 0
+          AND ${activeExecutionSql("active.status")}) = 0
     ORDER BY MAX(run.updated_at) DESC
     LIMIT 20
   `)]);
@@ -772,9 +811,15 @@ export async function getPipelineOverview(options = {}) {
     },
     integration: integrationConfiguration.rows[0],
     latestConversation: latestConversation.rows[0] || null,
+    // Submitted request identity is authoritative. Never infer a past version
+    // from today's mutable Iteration snapshot, or return transcript text here.
+    deploymentCanaries: deploymentCanaries.rows.map(({ interaction_transcript, ...proof }) => ({
+      ...proof, opening_repeats: repeatedOpeningTurns(interaction_transcript)
+    })),
     delayedCalls: delayed.rows,
     unresolvedWebhooks: recentWebhooks.rows,
     issueTrace,
+    diagnosticsTruncated: traceExecutions.rows.length >= 2000,
     generatedAt: new Date().toISOString()
   };
 }
@@ -790,7 +835,6 @@ function check(id, area, label, status, message, blocking = false) {
 export function evaluatePlatformHealth({ overview, timer, now = new Date() }) {
   const summary = overview.summary || {};
   const integration = overview.integration || {};
-  const latest = overview.latestConversation;
   const checks = [];
 
   checks.push(check(
@@ -856,6 +900,25 @@ export function evaluatePlatformHealth({ overview, timer, now = new Date() }) {
     delayed > 0 || unresolved > 0
   ));
 
+  const critical = overview.issueTrace?.runtime?.showstoppers;
+  const runtimeWarnings = numeric(overview.issueTrace?.runtime?.warnings);
+  const runtimeKnown = (typeof critical === "number" ||
+    (typeof critical === "string" && /^\d+$/.test(critical))) &&
+    Number.isSafeInteger(Number(critical)) && Number(critical) >= 0 &&
+    overview.diagnosticsTruncated !== true;
+  checks.push(check(
+    "runtime-incidents", "CORE", "Unresolved runtime incidents",
+    runtimeKnown && Number(critical) === 0 ? runtimeWarnings > 0 ? "WARN" : "PASS" : "FAIL",
+    !runtimeKnown
+      ? "Runtime incident diagnostics are unavailable or truncated; readiness cannot be confirmed."
+      : Number(critical) > 0
+        ? `${critical} critical runtime incident(s) require resolution before launch.`
+        : runtimeWarnings > 0
+          ? `${runtimeWarnings} runtime warning(s) require review; no critical incident is recorded.`
+          : "No unresolved critical runtime incident is recorded. Historical issues do not block readiness.",
+    !runtimeKnown || Number(critical) > 0
+  ));
+
   const evidenceGaps = numeric(summary.missing_transcripts) +
     numeric(summary.missing_responses);
   checks.push(check(
@@ -866,22 +929,33 @@ export function evaluatePlatformHealth({ overview, timer, now = new Date() }) {
       : `${evidenceGaps} historical connected-call evidence gap(s) need reconciliation.`
   ));
 
-  let canaryStatus = "FAIL";
-  let canaryMessage = "No connected conversation with transcript evidence is available.";
-  let canaryBlocking = true;
-  if (latest) {
-    const observedAt = new Date(latest.callback_received_at || latest.created_at);
-    const ageMs = now.getTime() - observedAt.getTime();
-    const stale = !Number.isFinite(ageMs) || ageMs > 7 * 24 * 60 * 60 * 1000;
-    const progressed = numeric(latest.transcript_turns) >= 4 &&
-      numeric(latest.response_variables) > 0 &&
-      isSuccessfulConversationOutcome(latest.normalized_status);
-    canaryStatus = progressed ? stale ? "WARN" : "PASS" : "FAIL";
-    canaryBlocking = !progressed || stale;
-    canaryMessage = progressed
-      ? `${latest.transcript_turns} turns and ${latest.response_variables} response variables were retained${stale ? ", but the proof is older than seven days" : " in the latest successful conversation"}.`
-      : `Latest connected evidence has ${numeric(latest.transcript_turns)} turns, ${numeric(latest.response_variables)} response variables and outcome ${latest.normalized_status || "unknown"}.`;
-  }
+  const canaries = openIterations > 0 && Array.isArray(overview.deploymentCanaries)
+    ? overview.deploymentCanaries : [];
+  const proofs = canaries.map((proof) => {
+    const matched = sameDeployment(proof, {
+      app_id: proof.proof_app_id, app_version: proof.proof_app_version,
+      connection_id: proof.proof_connection_id
+    });
+    const ageMs = now.getTime() - new Date(proof.callback_received_at).getTime();
+    const stale = !Number.isFinite(ageMs) || ageMs < 0 || ageMs > 7 * 24 * 60 * 60 * 1000;
+    const progressed = matched && Boolean(proof.execution_id && proof.callback_received_at) &&
+      String(proof.execution_status || "").toUpperCase() === "COMPLETED" &&
+      numeric(proof.transcript_turns) >= 4 && numeric(proof.response_variables) > 0 &&
+      numeric(proof.opening_repeats) <= 1 && isSuccessfulConversationOutcome(proof.normalized_status);
+    return { progressed, stale };
+  });
+  const missingProofs = proofs.filter((proof) => !proof.progressed).length;
+  const staleProofs = proofs.filter((proof) => proof.progressed && proof.stale).length;
+  const proofUnavailable = openIterations > 0 && !canaries.length;
+  const canaryBlocking = proofUnavailable || missingProofs > 0 || staleProofs > 0;
+  const canaryStatus = proofUnavailable || missingProofs ? "FAIL" : staleProofs ? "WARN" : "PASS";
+  const canaryMessage = !openIterations
+    ? "No open Iteration requires a deployment canary."
+    : proofUnavailable
+      ? "Selected deployment proof is unavailable; a global or different-version call cannot qualify."
+      : canaryBlocking
+        ? `${missingProofs} deployment(s) lack progressed matching proof; ${staleProofs} have proof older than seven days.`
+        : `${proofs.length} selected deployment(s) have recent conversation proof matching the frozen app, version and connection.`;
   checks.push(check(
     "conversation-canary", "PRE-LAUNCH", "End-to-end conversation canary",
     canaryStatus, canaryMessage, canaryBlocking
@@ -897,6 +971,7 @@ export function evaluatePlatformHealth({ overview, timer, now = new Date() }) {
     status: totals.blocking > 0 ? "ATTENTION_REQUIRED"
       : totals.warn > 0 ? "READY_WITH_WARNINGS" : "READY",
     ...totals,
-    checks
+    checks,
+    diagnosticOnly: true
   };
 }

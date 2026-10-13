@@ -243,7 +243,7 @@ assert.match(report.scope.description, /operations only/);
 const repositoryUrl = new URL('./research-report.repository.js', import.meta.url);
 let repositorySource = await readFile(repositoryUrl, 'utf8');
 repositorySource = repositorySource.replace(/import \{ getDb \} from '[^']+';/, "const getDb = () => { throw new Error('Production DB forbidden in isolated test'); };")
-  .replace(/import \{ getCampaignStrategicAnalytics \} from '[^']+';/, "const getCampaignStrategicAnalytics = () => { throw new Error('Production analysis forbidden in isolated test'); };")
+  .replace(/import \{ resolveResearchScope \} from '[^']+';/, "const resolveResearchScope = () => { throw new Error('Tests must inject an authorized scope'); };")
   .replace("'./research-report.js'", JSON.stringify(pathToFileURL(fileURLToPath(new URL('./research-report.js', import.meta.url))).href))
   .replace("'./report-catalog.js'", JSON.stringify(new URL('./report-catalog.js', import.meta.url).href))
   .replace(/import \{ loadFieldworkDiagnostics \} from '[^']+';/, "const loadFieldworkDiagnostics = async () => unavailableFieldworkDiagnostics('NOT_LOADED');")
@@ -271,7 +271,7 @@ assert.equal(diagnosticCalls, 1);
 assert.deepEqual(queries[0].values, [uid(1), uid(2), 'Female', '30–39', 'Serilingampally']);
 assert.deepEqual(queries[1].values, [uid(1), uid(2), 'Female', '30–39', 'Serilingampally', ['party_salience_unaided']]);
 assert.match(queries[1].sql, /SELECT DISTINCT ON \(call_record.voter_id\)/);
-assert.match(queries[1].sql, /LOWER\(TRIM\(output.key\)\) = ANY\(\$6::text\[\]\)/);
+assert.match(queries[1].sql, /lower\(btrim\(output.key, U&'[^']+'\)\) = ANY\(\$6::text\[\]\)/);
 assert.deepEqual(get(report, 'party_salience').distribution, [{ value: 'BJP', respondents: 5, percentage: 50 }, { value: 'BRS', respondents: 5, percentage: 50 }], 'Undeclared Congress alias is not included');
 assert.match(queries[0].sql, /campaign\.id = \$1::uuid AND iteration\.id = \$2::uuid/);
 assert.ok(!queries[0].sql.includes('run.id ='), 'Run selection cannot truncate Iteration insight evidence');

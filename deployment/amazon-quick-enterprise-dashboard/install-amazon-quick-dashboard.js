@@ -52,12 +52,20 @@ await copyFile(
   path.join(runtimeRoot, "sql/032_sentiment_construct_reporting.sql")
 );
 await copyFile(
+  path.join(packageRoot, "034_reporting_consistency.sql"),
+  path.join(runtimeRoot, "sql/034_reporting_consistency.sql")
+);
+await copyFile(
   path.join(packageRoot, "migrate-amazon-quick-dashboard.js"),
   path.join(runtimeRoot, "src/db/migrate-amazon-quick-dashboard.js")
 );
 await copyFile(
   path.join(packageRoot, "amazon-quick-dashboard.routes.js"),
   path.join(runtimeRoot, "src/routes/amazon-quick-dashboard.routes.js")
+);
+await copyFile(
+  path.join(packageRoot, "quick-embed-access.js"),
+  path.join(runtimeRoot, "src/repositories/quick-embed-access.js")
 );
 await copyFile(
   path.join(packageRoot, "sync-telangana-boundaries.js"),

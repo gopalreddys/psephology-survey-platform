@@ -1,8 +1,8 @@
 import { getDb } from "../db/postgres.js";
 import { canReviewCampaign } from "./campaign-visibility.repository.js";
 import { recordLifecycleEvent } from "./lifecycle-audit.repository.js";
-
-const CLOSED_RUN_STATUSES = ["COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"];
+import { CLOSED_RUN_STATUSES, terminalAttemptSql, activeExecutionSql, evaluateIterationLifecycle }
+  from "./operational-lifecycle-policy.js";
 
 function forbidden(message) {
   const error = new Error(message);
@@ -16,7 +16,7 @@ function notFound() {
   return error;
 }
 
-async function loadCampaignState(db, campaignId) {
+async function loadCampaignState(db, campaignId, lock = false) {
   const campaignResult = await db.query(
     `
       SELECT
@@ -30,6 +30,7 @@ async function loadCampaignState(db, campaignId) {
       FROM campaigns campaign
       LEFT JOIN users manager ON manager.id = campaign.campaign_manager_user_id
       WHERE campaign.id = $1
+      ${lock ? "FOR UPDATE OF campaign" : ""}
     `,
     [campaignId]
   );
@@ -42,23 +43,40 @@ async function loadCampaignState(db, campaignId) {
         SELECT
           link.iteration_id,
           link.status,
+          iteration.status AS program_status,
+          COUNT(DISTINCT run.id)::int AS total_runs,
           COUNT(DISTINCT run.run_number) FILTER (
             WHERE run.run_number BETWEEN 1 AND 3
               AND UPPER(run.status) = ANY($2::text[])
-          )::int AS closed_policy_runs
+          )::int AS closed_policy_runs,
+          COUNT(DISTINCT run.id) FILTER (
+            WHERE UPPER(COALESCE(run.status, 'PENDING')) <> ALL($2::text[])
+          )::int AS open_runs,
+          (SELECT COUNT(*)::int FROM campaign_run_contacts contact
+            JOIN campaign_runs contact_run ON contact_run.id = contact.run_id
+            WHERE contact_run.iteration_id = link.iteration_id
+              AND NOT (${terminalAttemptSql()})) AS pending_contacts,
+          (SELECT COUNT(*)::int FROM call_executions execution
+            JOIN campaign_runs execution_run ON execution_run.id = execution.run_id
+            WHERE execution_run.iteration_id = link.iteration_id
+              AND ${activeExecutionSql()}) AS active_executions
         FROM campaign_iteration_links link
+        JOIN program_iterations iteration ON iteration.id = link.iteration_id
         LEFT JOIN campaign_runs run ON run.iteration_id = link.iteration_id
         WHERE link.campaign_id = $1
-        GROUP BY link.iteration_id, link.status
+        GROUP BY link.iteration_id, link.status, iteration.status
       ), iteration_summary AS (
         SELECT
           COUNT(*)::int AS iterations,
           COUNT(*) FILTER (
             WHERE UPPER(status) IN ('COMPLETED', 'LOCKED')
+              AND UPPER(program_status) IN ('COMPLETED', 'LOCKED')
           )::int AS completed_iterations,
-          COUNT(*) FILTER (
-            WHERE closed_policy_runs = 3
-          )::int AS policy_complete_iterations
+          COALESCE(jsonb_agg(jsonb_build_object(
+            'total_runs', total_runs, 'closed_policy_runs', closed_policy_runs,
+            'open_runs', open_runs, 'pending_contacts', pending_contacts,
+            'active_executions', active_executions
+          )), '[]'::jsonb) AS iteration_policy_states
         FROM iteration_run_summary
       ), run_summary AS (
         SELECT
@@ -89,20 +107,18 @@ async function loadCampaignState(db, campaignId) {
       ), contact_summary AS (
         SELECT
           COUNT(DISTINCT contact_history.id) FILTER (
-            WHERE COALESCE(contact_history.attempt_status, 'PENDING')
-              NOT IN ('COMPLETED', 'FAILED')
+            WHERE NOT (${terminalAttemptSql("contact_history.attempt_status")})
           )::int AS pending_contacts,
           COUNT(DISTINCT contact_history.id) FILTER (
             WHERE contact_history.retry_eligible = TRUE
               AND contact_history.retry_exhausted = FALSE
+              AND contact_history.latest_position = 1
           )::int AS retry_eligible_contacts
         FROM contact_history
-        WHERE contact_history.latest_position = 1
       ), execution_summary AS (
         SELECT
           COUNT(DISTINCT execution.id) FILTER (
-            WHERE COALESCE(execution.status, 'PENDING')
-              NOT IN ('COMPLETED', 'FAILED', 'CANCELLED')
+            WHERE ${activeExecutionSql()}
           )::int AS active_executions
         FROM campaign_iteration_links link
         JOIN campaign_runs run ON run.iteration_id = link.iteration_id
@@ -112,7 +128,7 @@ async function loadCampaignState(db, campaignId) {
       SELECT
         COALESCE(iteration_summary.iterations, 0)::int AS iterations,
         COALESCE(iteration_summary.completed_iterations, 0)::int AS completed_iterations,
-        COALESCE(iteration_summary.policy_complete_iterations, 0)::int AS policy_complete_iterations,
+        iteration_summary.iteration_policy_states,
         COALESCE(run_summary.runs, 0)::int AS runs,
         COALESCE(run_summary.closed_runs, 0)::int AS closed_runs,
         COALESCE(run_summary.open_runs, 0)::int AS open_runs,
@@ -129,6 +145,9 @@ async function loadCampaignState(db, campaignId) {
 
   const campaign = campaignResult.rows[0];
   const summary = summaryResult.rows[0];
+  const states = Array.isArray(summary.iteration_policy_states) ? summary.iteration_policy_states : [];
+  summary.policy_complete_iterations = states.filter((state) => evaluateIterationLifecycle(state).readyToComplete).length;
+  delete summary.iteration_policy_states;
   const blockers = [];
 
   if (!summary.iterations) blockers.push("Create at least one Iteration");
@@ -257,8 +276,16 @@ export async function completeCampaign(campaignId, actor) {
   try {
     await db.query("BEGIN");
     await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [String(campaignId)]);
-    const state = await loadCampaignState(db, campaignId);
+    const state = await loadCampaignState(db, campaignId, true);
     assertVisibility(state, actor);
+    if (state.campaign.campaign_manager_user_id !== actor.id) {
+      throw forbidden("Campaign Manager can complete only assigned Campaigns");
+    }
+    if (state.blockers.length > 0) {
+      const error = new Error(`Campaign is not ready to complete: ${state.blockers.join("; ")}`);
+      error.statusCode = 409;
+      throw error;
+    }
 
     if (state.campaign.status === "COMPLETED") {
       const history = await loadCampaignHistory(db, campaignId);

@@ -16,7 +16,8 @@ for (const migration of [
   "029_shared_comparison_gate.sql",
   "030_normalized_output_reporting.sql",
   "031_audited_research_methodology.sql",
-  "032_sentiment_construct_reporting.sql"
+  "032_sentiment_construct_reporting.sql",
+  "034_reporting_consistency.sql"
 ]) {
   const sql = await readFile(path.resolve(here, "../../sql", migration), "utf8");
   if (migration.startsWith("030_")) await db.query(buildNormalizationSqlFunction());

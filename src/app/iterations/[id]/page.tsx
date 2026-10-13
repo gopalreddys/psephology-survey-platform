@@ -29,6 +29,8 @@ import {
 
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import IterationResearchSetup from "@/components/IterationResearchSetup";
+import IterationOperationalCloseout from "@/components/IterationOperationalCloseout";
 import { apiFetch } from "@/lib/api";
 import { surveyStageOptions } from "@/lib/research-codes";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -869,7 +871,7 @@ export default function IterationPage() {
 
           <div className="iteration-detail-actions">
 
-            <button
+            {user && ["SUPER_ADMIN", "ADMIN", "CAMPAIGN_MANAGER"].includes(user.role.code) && <button
               type="button"
 
               onClick={
@@ -887,7 +889,7 @@ export default function IterationPage() {
             >
               <BarChart3 size={16} />
               View Analysis
-            </button>
+            </button>}
 
 
             {canCreateRuns && !["COMPLETED", "LOCKED"].includes(
@@ -1003,6 +1005,9 @@ export default function IterationPage() {
           </div>
 
         </section>
+
+
+        <IterationResearchSetup key={`research:${iterationId}`} iterationId={iterationId} campaignId={campaignId} />
 
 
         {canCreateRuns && showCreate && (
@@ -1748,7 +1753,7 @@ export default function IterationPage() {
 
                               <RunStat
                                 icon={Target}
-                                label="Successful"
+                                label="Successful call outcomes"
                                 value={
                                   String(
                                     run.successful_contacts ??
@@ -1786,7 +1791,7 @@ export default function IterationPage() {
                               <div>
 
                                 <span>
-                                  Successful survey coverage
+                                  Operational success coverage
                                 </span>
 
                                 <strong>
@@ -1887,6 +1892,14 @@ export default function IterationPage() {
           </div>
 
         </section>
+
+        <IterationOperationalCloseout
+          key={`closeout:${iterationId}:${user?.id}`}
+          iterationId={iterationId}
+          campaignId={campaignId}
+          refreshKey={runs.map((run) => `${run.id}:${run.status}`).join("|")}
+          onCompleted={loadData}
+        />
 
       </div>
 

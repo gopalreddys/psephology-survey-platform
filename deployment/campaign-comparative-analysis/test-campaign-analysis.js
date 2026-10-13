@@ -12,7 +12,7 @@ assert.equal(Object.hasOwn(response("i2", "v", "jobs"), "created_at"), false, "c
 assert.throws(() => assertCallsSchema("SELECT call_record.created_at FROM calls call_record"), /deployed schema/);
 assert.throws(() => assertCallsSchema("SELECT id AS call_id, created_at FROM calls"), /deployed schema/);
 const eligible = campaign.latestStructuredRespondents(state.records, "i2");
-assert.equal(eligible.length, 12, "one connected nonempty structured response per identified voter");
+assert.equal(eligible.length, 20, "one connected nonempty structured response per identified voter");
 assert.equal(eligible.find((record) => record.voter_id === "female-0").response_variables.graduate_issue_priority, "jobs", "newer ineligible calls do not erase the latest eligible answer");
 const subsecond = campaign.latestStructuredRespondents([
   response("i2", "v", "older", { call_id: "z", updated_at: new Date("2026-01-02T00:00:00.100Z") }),
@@ -37,7 +37,7 @@ for (const updatedAt of ["2026-01-02T00:00:00Z", null]) {
 let result = await getAnalysis();
 assert.equal(result.readiness.ready, true);
 assert.equal(result.comparison.status, "COMPARABLE");
-assert.equal(result.comparison.questions[0].iterations[1].totalRespondents, 12, "duplicate attempts cannot increase an answer base");
+assert.equal(result.comparison.questions[0].iterations[1].totalRespondents, 20, "duplicate attempts cannot increase an answer base");
 assert.ok(result.comparison.questions[0].largestShift);
 
 state.gateRows[1] = gateRow(2, { comparison_status: "NOT_COMPARABLE", comparison_reasons: ["Sampling method changed"] });

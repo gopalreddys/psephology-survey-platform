@@ -124,7 +124,8 @@ if (existsSync(realCandidatePath) && existsSync(realBackupPath)) {
   assert.equal(remapped.receipt.inverseWholeBundleMatches, true);
   assert.deepEqual(remapped.bundle.manifest.bindings.map(({ arn }) => arn), realCandidate.manifest.bindings.map(({ arn }) => arn));
   const validation = validatePublicationCandidate({ ...remapped.bundle.manifest, definition: remapped.bundle.dashboardRequest.Definition });
-  assert.equal(validation.valid, true, validation.errors.join("; "));
-  console.log("Real friendly-axes fixture: six ARNs retained; historical alias inverse verified.");
+  assert.equal(validation.valid, false, "Historical identifiers remain remappable, but the old disclosure policy is not promotable");
+  assert.ok(validation.errors.some((error) => error.includes("Whole-partition disclosure guard missing")));
+  console.log("Historical friendly-axes fixture: six ARNs retained; inverse verified; outdated disclosure policy blocked from promotion.");
 }
 console.log("Historical Quick identifier helper: immutable remap, fail-closed references, inverse proof and exclusive CLI output passed.");

@@ -1,0 +1,51 @@
+.setupPanel, .closeout { margin: 20px 0; border: 1px solid var(--platform-border, #eadfe2); border-radius: 18px; background: #fff; color: var(--platform-ink, #3f2f35); }
+.setupPanel > summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 16px 20px; cursor: pointer; font-weight: 750; }
+.setupPanel > summary small { color: var(--platform-muted, #806d75); font-size: 12px; font-weight: 500; }
+.setupBody { padding: 0 20px 20px; }
+.designRegistry { min-width: 0; }
+.designHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.designHead > div > span { color: var(--platform-primary-strong, #b9475c); font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.designHead h2 { margin: 6px 0; font-size: 20px; }
+.designHead p { margin: 0; max-width: 760px; color: var(--platform-muted, #806d75); font-size: 13px; line-height: 1.55; }
+.designHead .scopeLabel { flex: 0 0 230px; color: var(--platform-ink, #3f2f35); font-size: 13px; font-weight: 650; }
+.comparabilityStatus { display: flex; align-items: flex-start; gap: 12px; margin: 16px 0; padding: 12px; border-radius: 10px; background: #eef8f6; color: #206b60; font-size: 12px; line-height: 1.55; }
+.comparabilityStatus[data-status="NOT_COMPARABLE"] { background: #fff2f4; color: #994257; }
+.comparabilityStatus[data-status="BASELINE"] { background: #fff8e9; color: #8c6724; }
+.methodologyNotice { padding: 12px; border: 1px solid var(--platform-border, #eadfe2); border-radius: 10px; background: var(--background, #fff9f5); color: var(--platform-muted, #806d75); font-size: 12px; line-height: 1.55; }
+.methodologyNotice p { margin: 4px 0; overflow-wrap: anywhere; }
+.designFields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.srOnly { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.designGrid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 20px; }
+.designGrid label { display: grid; align-content: start; gap: 7px; color: var(--platform-ink, #3f2f35); font-size: 12px; font-weight: 650; }
+.designGrid input, .designGrid select, .designGrid textarea { min-width: 0; width: 100%; min-height: var(--platform-control-height, 44px); padding: 10px 12px; border: 1px solid var(--platform-border, #eadfe2); border-radius: var(--platform-control-radius, 10px); background: #fff; color: var(--platform-ink, #3f2f35); font: inherit; font-weight: 500; }
+.designGrid textarea { min-height: 88px; resize: vertical; }
+.designGrid input:disabled, .designGrid select:disabled { background: #f7f3f4; color: #8c7e84; }
+.notesField { grid-column: span 2; }
+.attestation { display: flex; align-items: flex-start; gap: 10px; margin-top: 20px; color: var(--platform-muted, #806d75); font-size: 13px; line-height: 1.55; }
+.attestation input { flex: 0 0 auto; margin-top: 4px; accent-color: var(--platform-primary, #cf586d); }
+.designActions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 18px; }
+.designActions span { margin-right: auto; color: var(--platform-muted, #806d75); font-size: 13px; line-height: 1.55; }
+.designActions button, .closeout button { min-height: 44px; padding: 10px 16px; border: 0; border-radius: 10px; background: var(--platform-primary-strong, #b9475c); color: #fff; font: inherit; font-size: 13px; font-weight: 700; }
+.designActions button:disabled, .closeout button:disabled, .declarationHistory button:disabled { opacity: .55; cursor: not-allowed; }
+.declarationHistory { margin-top: 20px; border-top: 1px solid var(--platform-border, #eadfe2); padding-top: 16px; color: var(--platform-muted, #806d75); font-size: 12px; }
+.declarationHistory button, .setupBody > div > button, .setupBody > button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--platform-border, #eadfe2); border-radius: 10px; color: var(--platform-primary-strong, #b9475c); background: #fff; font: inherit; font-weight: 650; }
+.declarationHistory details { margin-top: 10px; padding: 12px; border: 1px solid var(--platform-border, #eadfe2); border-radius: 10px; }
+.declarationHistory summary { cursor: pointer; overflow-wrap: anywhere; line-height: 1.5; font-weight: 650; }
+.declarationHistory dl { display: grid; grid-template-columns: minmax(90px,140px) minmax(0,1fr); gap: 8px; }
+.declarationHistory dt { font-weight: 650; }
+.declarationHistory dd { margin: 0; overflow-wrap: anywhere; }
+.closeout { padding: 20px; }
+.closeout h2 { margin: 0 0 8px; font-size: 20px; }
+.closeout p { color: var(--platform-muted, #806d75); font-size: 13px; line-height: 1.55; }
+.closeoutHeader, .closeoutFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.closeoutHeader strong { flex: 0 0 auto; font-size: 13px; color: var(--platform-teal, #168c7f); }
+.closeout dl { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 20px 0; }
+.closeout dl > div { padding: 12px; border: 1px solid var(--platform-border, #eadfe2); border-radius: 10px; }
+.closeout dt { font-size: 12px; color: var(--platform-muted, #806d75); }
+.closeout dd { margin: 6px 0 0; font-size: 21px; font-weight: 750; }
+.closeout details { margin: 12px 0; font-size: 13px; }
+.closeout summary { cursor: pointer; font-weight: 650; }
+.closeout ul { padding-left: 20px; color: var(--platform-muted, #806d75); line-height: 1.6; }
+.designRegistry :is(button,input,select,textarea):focus-visible, .setupPanel > summary:focus-visible, .closeout :is(button,summary):focus-visible { outline: 3px solid var(--platform-primary, #cf586d); outline-offset: 3px; }
+@media (max-width: 1000px) { .designGrid { grid-template-columns: repeat(2,minmax(0,1fr)); } .designHead { flex-direction: column; } .designHead .scopeLabel { flex-basis: auto; } }
+@media (max-width: 620px) { .setupBody, .closeout { padding: 16px; } .designGrid { grid-template-columns: 1fr; } .notesField { grid-column: auto; } .designActions, .closeoutHeader, .closeoutFooter, .comparabilityStatus { align-items: stretch; flex-direction: column; } .closeout dl { grid-template-columns: 1fr 1fr; } .designActions button { width: 100%; } .declarationHistory button { margin-bottom: 6px; } }

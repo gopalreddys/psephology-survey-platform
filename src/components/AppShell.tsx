@@ -281,6 +281,8 @@ function AuthenticatedShell({
                   item.href &&
                   (
                     pathname === item.href ||
+                    (item.href === "/" && pathname === "/enterprise-dashboard") ||
+                    (item.href === "/campaigns" && pathname.startsWith("/iterations/")) ||
                     (
                       item.href !== "/" &&
                       pathname.startsWith(
@@ -296,6 +298,7 @@ function AuthenticatedShell({
                   <Link
                     key={item.label}
                     href={item.href}
+                    aria-current={active ? "page" : undefined}
                     className={
                       active
                         ? "app-nav-item app-nav-item-active"

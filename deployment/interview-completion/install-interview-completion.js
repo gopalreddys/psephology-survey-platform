@@ -9,7 +9,7 @@ const marker = 'INTERVIEW_COMPLETENESS_V1';
 export const runtimeDependencies = [
   'src/db/postgres.js', 'src/middleware/auth.middleware.js', 'src/middleware/role.middleware.js',
   'src/repositories/campaign-visibility.repository.js',
-  'src/repositories/analytics-workspace.repository.js'
+  'src/repositories/research-scope.repository.js'
 ];
 const fileMappings = [
   ['interview-completion.js', 'src/repositories/interview-completion.js'],

@@ -17,6 +17,9 @@ let cursor = 0;
 let effects = [];
 let timers = [];
 const requests = [];
+let currentCampaignId = "campaign";
+const navigation = [];
+const location = { search: "?iterationId=i2&gender=Female" };
 const user = { id: "admin", role_code: "ADMIN" };
 const equalDeps = (left, right) => Boolean(left && right && left.length === right.length && left.every((value, index) => Object.is(value, right[index])));
 const hooks = {
@@ -48,9 +51,10 @@ const imports = {
   react: hooks,
   "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "Fragment" },
   "next/link": { __esModule: true, default: "Link" },
-  "next/navigation": { useParams: () => ({ id: "campaign" }), useRouter: () => ({ push() {} }) },
+  "next/navigation": { useParams: () => ({ id: currentCampaignId }), useRouter: () => ({ push(url) { navigation.push(url); } }) },
   "@/components/AppShell": { __esModule: true, default: "AppShell" },
   "@/components/FeedbackMessage": { __esModule: true, default: "FeedbackMessage" },
+  "@/components/ResearchReportingPanel": { __esModule: true, default: "ResearchReportingPanel" },
   "@/hooks/useCurrentUser": { useCurrentUser: () => ({ user }) },
   "@/lib/api": { apiFetch(url) {
     if (url === "/api/analytics") return Promise.resolve({ campaigns: [{ id: "campaign", name: "Fixture", code: "TEST" }] });
@@ -67,7 +71,7 @@ vm.runInNewContext(compiled, {
     return imports[id];
   },
   window: {
-    location: { search: "?iterationId=i2&gender=Female" },
+    location,
     setTimeout(callback) { const timer = { callback, active: true }; timers.push(timer); return timer; },
     clearTimeout(timer) { timer.active = false; }
   },
@@ -178,4 +182,33 @@ requests[6].resolve(payload("Selected incumbent construct", "Female"));
 await settle();
 view = render(); view.commit();
 assert.match(text(view.tree), /Selected incumbent construct/);
-console.log("Analytics UI request ordering, scope and suppression behavior tests passed.");
+
+// Selecting a different Campaign clears every subordinate scope before navigation.
+const campaignLabel = walk(view.tree, (node) => node.type === "label" && text(node).startsWith("Campaign"));
+walk(campaignLabel, (node) => node.type === "select").props.onChange({ target: { value: "next-campaign" } });
+assert.equal(navigation.at(-1), "/analytics/campaigns/next-campaign");
+view = render(); view.commit(); flushTimers();
+assert.doesNotMatch(text(view.tree), /Selected incumbent construct/);
+assert.equal(requests.length, 7, "the old Campaign cannot load while the next Campaign's scope initializes");
+currentCampaignId = "next-campaign";
+location.search = "";
+view = render(); view.commit(); flushTimers();
+assert.equal(requests.length, 7, "a route change cannot submit stale Iteration or Run scope before initialization");
+view = render(); view.commit(); flushTimers();
+assert.equal(requests.length, 8);
+assert.match(requests[7].url, /^\/api\/analytics\/campaigns\/next-campaign\?/);
+assert.doesNotMatch(requests[7].url, /iterationId|runId|gender|ageBand|mandal/);
+assert.match(requests[7].url, /sentimentConstruct=candidate_impression/);
+
+// A direct/back-navigation route change also reinitializes from that URL.
+currentCampaignId = "campaign";
+location.search = "?iterationId=i2&runId=run-a&ageBand=30-39";
+view = render(); view.commit(); flushTimers();
+assert.equal(requests.length, 8);
+view = render(); view.commit(); flushTimers();
+assert.equal(requests.length, 9);
+assert.match(requests[8].url, /iterationId=i2/);
+assert.match(requests[8].url, /runId=run-a/);
+assert.match(requests[8].url, /ageBand=30-39/);
+assert.doesNotMatch(requests[8].url, /gender=Female/);
+console.log("Analytics UI request ordering, Campaign/Iteration/Run scope reset and suppression behavior tests passed.");

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { buildNormalizationSqlFunction, normalizeOutputValue, OUTPUT_KEYS, selectStructuredOutput, summarizeOutput } from "../output-variable-standardization/output-normalization.repository.js";
+import { buildNormalizationSqlFunction, buildDirectRatingSqlFunction, normalizeOutputValue, OUTPUT_KEYS, selectStructuredOutput, selectDirectRating, summarizeOutput } from "../output-variable-standardization/output-normalization.repository.js";
 import { buildQuestionnaireContentSnapshot } from "../research-methodology/questionnaire-snapshot.repository.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -117,12 +117,12 @@ try {
     { party_salience_unaided: "BRS", PARTY_SALIENCE_UNAIDED: "BJP" },
     { party_salience_unaided: "", PARTY_SALIENCE_UNAIDED: "BRS" }
   ]) {
-    const js = summarizeOutput([{ response_variables: variables }], OUTPUT_KEYS.party);
+    const js = selectStructuredOutput({ response_variables: variables }, OUTPUT_KEYS.party);
     const { rows: [{ normalized: sql }] } = await db.query(
       "SELECT analytics_normalize_output_v1('party_salience_unaided', analytics_output_value_v1($1::jsonb, 'party_salience_unaided')) AS normalized",
       [JSON.stringify(variables)]);
-    assert.equal(sql.label, js.values[0]?.value || null, "case/whitespace aliases and conflicts have SQL/JS parity");
-    assert.equal(Number(sql.status === "UNCODED"), js.uncodedCount);
+    assert.equal(sql.label, js.label, "case/whitespace aliases and conflicts have SQL/JS parity");
+    assert.equal(sql.status, js.status);
   }
   for (const [variables, keys, expectedStatus, expectedLabel] of [
     [{ candidate_impression: "Positive", candidate_sentiment: "Negative" }, OUTPUT_KEYS.candidate, "UNCODED", "Uncoded response"],
@@ -319,6 +319,38 @@ try {
   assert.equal((await movement(waveIds[2])).comparison_basis, "NOT_COMPARABLE", "replay preserves missing-wave gate");
   assert.deepEqual((await db.query("SELECT id, response_variables FROM calls ORDER BY id")).rows, rawBeforeReplay, "migration replay never rewrites retained raw source answers");
   assert.equal((await thirdRespondent(2)).candidate_sentiment, "Mixed", "replay ends on 032 instead of reinstating obsolete 030 pooling");
+  const consistency = await readFile(path.join(here, '034_reporting_consistency.sql'), 'utf8');
+  assert.ok(consistency.includes(buildDirectRatingSqlFunction()), 'The migration uses the exact shared direct-rating selector, including the whitespace and status contract');
+  await db.exec(consistency);
+  assert.deepEqual((await db.query('SELECT id,response_variables FROM calls ORDER BY id')).rows, rawBeforeReplay, '034 does not rewrite retained outputs');
+  for (const variables of [{ brs_lean_rating: 5, party_lean_rating: 1 }, { brs_lean_rating: true, party_lean_rating: 3 },
+    { brs_lean_rating: '', party_lean_rating: 3 }, { ' PARTY_LEAN_RATING ': ' 4 ' }, { party_lean_rating: 1.0 },
+    { party_lean_rating: 4.5 }, { party_lean_rating: '1.0' }, { party_lean_rating: null },
+    { '\tPARTY_LEAN_RATING\u00a0': '\u00a0\t4\ufeff' }, { party_lean_rating: '\u00a0\ufeff' }]) {
+    const expected = selectDirectRating({ response_variables: variables });
+    const actual = (await db.query('SELECT analytics_direct_rating_v1($1::jsonb) AS value, analytics_direct_rating_status_v1($1::jsonb) AS status', [JSON.stringify(variables)])).rows[0];
+    assert.equal(actual.value === null ? null : Number(actual.value), expected.value, 'Conflicts and invalid aliases have identical JS/SQL results');
+    assert.equal(actual.status, expected.status, 'Missing and unresolved alias statuses are not merged');
+  }
+  assert.equal((await thirdRespondent(2)).demographic_provenance, 'CURRENT_MASTER_DATA');
+  await db.query(`UPDATE calls SET response_variables=jsonb_build_object('party_salience_unaided','BRS','party_lean_rating',4,
+    'candidate_impression','Positive','incumbent_assessment',CASE WHEN voter_id=$1::uuid THEN 'Negative' ELSE 'Positive' END) WHERE iteration_id=$2::uuid`, [voterIds[0], waveIds[0]]);
+  const protectedMovement = await movement(waveIds[0]);
+  for (const column of ['positive_sentiment_pct','negative_sentiment_pct','sentiment_answer_base','sentiment_missing_count','sentiment_uncoded_count', 'respondent_base'])
+    assert.equal(protectedMovement[column], null, `Sparse sentiment partition also withholds ${column}`);
+  assert.equal(protectedMovement.candidate_answer_base, 10, 'An independently reportable construct retains its own base');
+  const safeGeography = (await db.query('SELECT * FROM analytics_research_geographic_v2 WHERE iteration_id=$1::uuid', [waveIds[0]])).rows;
+  assert.equal(safeGeography[0].respondent_count, 10);
+  for (const column of ['positive_respondents','negative_respondents','uncertain_respondents','direct_measure_base','average_party_strength','party_pulse_score'])
+    assert.equal(safeGeography[0][column], null, 'Party-only maps cannot leak unaudited secondary constructs');
+  await db.query(`UPDATE calls SET response_variables = CASE WHEN voter_id=ANY($1::uuid[]) THEN '{"party_lean_rating":4}'::jsonb
+    WHEN voter_id=$2::uuid THEN '{"party_lean_rating":4,"brs_lean_rating":1}'::jsonb ELSE '{"graduate_issue_priority":"jobs"}'::jsonb END
+    WHERE iteration_id=$3::uuid`, [voterIds.slice(0, 5), voterIds[5], waveIds[0]]);
+  assert.equal((await db.query("SELECT analytics_construct_partition_reportable_v1($1::uuid,$2::uuid,'direct') AS safe", [campaignId,waveIds[0]])).rows[0].safe, false, 'Five direct ratings cannot hide one unresolved and four missing answers in a combined five-person bucket');
+  assert.equal((await movement(waveIds[0])).direct_measure_base, null);
+  await db.query(`UPDATE calls SET response_variables=jsonb_build_object('party_salience_unaided', CASE WHEN voter_id=$1::uuid THEN 'BJP' ELSE 'BRS' END) WHERE iteration_id=$2::uuid`, [voterIds[0], waveIds[0]]);
+  assert.equal((await db.query('SELECT * FROM analytics_research_geographic_v2 WHERE iteration_id=$1::uuid', [waveIds[0]])).rows.length, 0, 'Nine-person map complement is withheld beside a one-person party category');
+  await db.exec(consistency);
   console.log("Normalized Quick SQL passed: shared-rule/alias-conflict parity, distinct sentiment constructs, Mixed separation, fixed source keys, explicit answer states, denominators, minimum bases, audited provenance/comparison gates, geographic/demographic dimensions and full migration replay without raw rewrites.");
 } catch (error) {
   console.error(`Normalized Quick SQL regression failed (${error.code || error.name}): ${error.message}`);

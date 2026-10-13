@@ -50,7 +50,7 @@ try {
   for (const [name, server, missing] of [
     ['no-anchor', 'const app = {};\n', null],
     ['no-visibility', original, 'src/repositories/campaign-visibility.repository.js'],
-    ['no-analytics', original, 'src/repositories/analytics-workspace.repository.js'],
+    ['no-research-scope', original, 'src/repositories/research-scope.repository.js'],
     ['duplicate-legacy-anchor', `${original}\napp.use('/api', votersRoutes);\n`, null],
     ['partial-marker', `${original}\n/* INTERVIEW_COMPLETENESS_V1 */\n`, null],
     ['unrecognized-registration', `${original}\nimport x from './routes/interview-completion.routes.js';\n`, null],

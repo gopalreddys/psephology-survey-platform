@@ -33,6 +33,10 @@ await copyLocal(
   "lifecycle-audit.repository.js",
   path.join(runtimeRoot, "src/repositories/lifecycle-audit.repository.js")
 );
+await copy(
+  path.resolve(packageRoot, "../run-lifecycle-automation/operational-lifecycle-policy.js"),
+  path.join(runtimeRoot, "src/repositories/operational-lifecycle-policy.js")
+);
 await copyLocal(
   "campaign-lifecycle.repository.js",
   path.join(runtimeRoot, "src/repositories/campaign-lifecycle.repository.js")

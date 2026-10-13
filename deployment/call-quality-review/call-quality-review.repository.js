@@ -1,5 +1,5 @@
 import { campaignReviewVisibilitySql } from './campaign-visibility.repository.js';
-import { getCampaignStrategicAnalytics } from './analytics-workspace.repository.js';
+import { resolveResearchScope } from './research-scope.repository.js';
 import { authorize, validId, validateReview, validateDecision, CallQualityError, normalizationRulesHash,
   buildReviewDetail, buildReviewSummary, unavailableSummary } from './call-quality-review.js';
 
@@ -184,7 +184,8 @@ export async function getCampaignCallQuality(db, actor, campaignId, selection = 
   if (selection.iterationId) selection = { iterationId: validId(selection.iterationId) };
   // Existing analysis authorization resolves the selected insight Iteration;
   // this summary never accepts a copied scope from the browser.
-  const analysis = await (dependencies.analyze || getCampaignStrategicAnalytics)(campaignId, actor, selection);
+  const analysis = dependencies.analyze ? await dependencies.analyze(campaignId, actor, selection)
+    : await (dependencies.resolveScope || resolveResearchScope)(db, campaignId, actor, selection);
   const iterationId = analysis.scope?.insightScope?.iterationId || null;
   if (analysis.campaign?.id !== campaignId || (iterationId && analysis.scope?.iteration?.id !== iterationId)
     || (!iterationId && analysis.scope?.iteration?.id) || (selection.iterationId && iterationId !== selection.iterationId)) {

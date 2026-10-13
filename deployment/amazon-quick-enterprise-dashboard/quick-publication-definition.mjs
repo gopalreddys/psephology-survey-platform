@@ -1,5 +1,5 @@
 import { applyPartyColors, applySentimentColors, minimumCellFilter, privacyPartitionColumns, PRIVACY_DISPLAY_DIMENSIONS, uniquePersonWindowExpression, REPORTING_VIEWS, REQUIRED_SHEETS, VALIDATION_DISCLOSURE } from "./quick-publication-plan.mjs";
-import { getSentimentValidation } from "../output-variable-standardization/output-normalization.repository.js";
+import { getSentimentValidation, reportingCategoryLabels, OUTPUT_KEYS, DISCLOSURE_POLICY_VERSION } from "../output-variable-standardization/output-normalization.repository.js";
 import { ADDITIONAL_INSIGHT_VISUALS, EXISTING_VISUAL_NOTES } from "./quick-insight-catalog.mjs";
 
 const text = (value) => ({ Visibility: "VISIBLE", FormatText: { PlainText: value } });
@@ -74,7 +74,7 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
       QBusinessInsightsStatus: existingDefinition.Options?.QBusinessInsightsStatus ?? "DISABLED"
     }
   };
-  const guards = [], answerBaseGuards = [], answerStatusFilters = [], reviewedVisualIds = [], filterScopes = [];
+  const guards = [], partitionGuards = [], answerBaseGuards = [], answerStatusFilters = [], reviewedVisualIds = [], filterScopes = [];
   const enterprise = role.enterprise;
   const calc = (dataset, name, expression) => {
     if (!result.CalculatedFields.some((item) => item.DataSetIdentifier === dataset && item.Name === name)) result.CalculatedFields.push({ DataSetIdentifier: dataset, Name: name, Expression: expression });
@@ -126,6 +126,32 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
     }
     const guard = { datasetIdentifier: dataset, sheetId: sheet.SheetId, visualId: id, id: `${id}-${column}-minimum`, column, aggregation, ...sourceMetadata };
     result.FilterGroups.push(minimumCellFilter(guard)); guards.push(guard);
+    if (dataset === enterprise) {
+      // Protect every category of a construct together, including missingness.
+      // Category-level hiding beside a full answered KPI leaks complements.
+      // Independent conditional-key windows avoid unsupported nested LAC-W.
+      const taxonomy = {
+        incumbent: ['respondent_sentiment', ['incumbent_assessment']], candidate: ['candidate_sentiment', OUTPUT_KEYS.candidate],
+        party: ['party_salience', OUTPUT_KEYS.party], leadership: ['party_leadership', OUTPUT_KEYS.leadership], issue: ['issue_priority', OUTPUT_KEYS.issue]
+      };
+      const selectedKind = /^quick_(incumbent|candidate|party|leadership|issue)_/.exec(sourceMetadata.sourceKey || '')?.[1];
+      const kinds = selectedKind ? [selectedKind] : Object.keys(taxonomy);
+      const checks = [];
+      for (const kind of kinds) {
+        const [dimension, keys] = taxonomy[kind];
+        const partitions = sourceMetadata.partitions.filter((name) => ![dimension, `${dimension}_status`, 'quick_issue_answer_state', 'quick_party_label'].includes(name));
+        const labels = [...reportingCategoryLabels(keys), 'No response'];
+        for (const [index, label] of labels.entries()) {
+          const key = calc(dataset, `quick_partition_${kind}_${index}_person_key`, `ifelse({${dimension}} = ${JSON.stringify(label)}, {respondent_key}, NULL)`);
+          const name = calc(dataset, `quick_partition_${kind}_${index}_${partitions.join('_') || 'all'}_count`, uniquePersonWindowExpression(key, partitions));
+          checks.push(`({${name}} > 0 AND {${name}} < 5)`);
+        }
+      }
+      const protectedColumn = calc(dataset, `quick_partition_${id.replaceAll('-', '_')}_safe`, `ifelse(${checks.join(' OR ')}, 0, 5)`);
+      const partitionGuard = { datasetIdentifier: dataset, sheetId: sheet.SheetId, visualId: id,
+        id: `${id}-whole-partition`, column: protectedColumn, aggregation: 'NONE', policy: DISCLOSURE_POLICY_VERSION, kinds };
+      result.FilterGroups.push(minimumCellFilter(partitionGuard)); partitionGuards.push(partitionGuard);
+    }
   };
   const addAnswerBaseGuard = (sheet, id, column) => {
     const filterId = `${id}-${column}-answer-base`;
@@ -343,9 +369,9 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
     const elements = []; let row = 0;
     for (const [index, control] of sheet.FilterControls.entries()) {
       // Live Quick validation needs room for the control label and dropdown.
-      elements.push({ ElementId: control.Dropdown.FilterControlId, ElementType: "FILTER_CONTROL", ColumnIndex: (index % 3) * 12, ColumnSpan: 12, RowIndex: Math.floor(index / 3) * 4, RowSpan: 4 });
+      elements.push({ ElementId: control.Dropdown.FilterControlId, ElementType: "FILTER_CONTROL", ColumnIndex: (index % 4) * 9, ColumnSpan: 9, RowIndex: Math.floor(index / 4) * 4, RowSpan: 4 });
     }
-    row = Math.ceil(sheet.FilterControls.length / 3) * 4;
+    row = Math.ceil(sheet.FilterControls.length / 4) * 4;
     for (const box of sheet.TextBoxes) {
       const height = sheet === guide ? Math.max(12, Math.ceil(box.Content.length / 100) + 8) : 4;
       elements.push({ ElementId: box.SheetTextBoxId, ElementType: "TEXT_BOX", ColumnIndex: 0, ColumnSpan: 36, RowIndex: row, RowSpan: height }); row += height;
@@ -363,5 +389,5 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
   }
   const sentiments = applySentimentColors(result);
   const colored = applyPartyColors(sentiments.definition);
-  return { definition: colored.definition, bindings, guards, answerBaseGuards, answerStatusFilters, percentagePolicies: [], reviewedVisualIds, filterScopes, measurementNotes, coloredVisuals: colored.colored, sentimentColoredVisuals: sentiments.colored };
+  return { definition: colored.definition, bindings, guards, partitionGuards, disclosurePolicy: DISCLOSURE_POLICY_VERSION, answerBaseGuards, answerStatusFilters, percentagePolicies: [], reviewedVisualIds, filterScopes, measurementNotes, coloredVisuals: colored.colored, sentimentColoredVisuals: sentiments.colored };
 }
