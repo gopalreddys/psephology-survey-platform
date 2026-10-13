@@ -1,0 +1,23 @@
+.panel { border: 1px solid #d9e5e4; border-radius: 14px; background: #fff; margin: 16px 0; color: #344b4a; overflow: hidden; }
+.panel > summary { cursor: pointer; padding: 16px 18px; font-weight: 700; min-height: 48px; }
+.body { border-top: 1px solid #e5edec; padding: 16px 18px; }
+.body p { line-height: 1.6; margin: 0 0 12px; }
+.body h4 { margin: 20px 0 10px; }
+.body button { border: 1px solid #b8d1ce; border-radius: 9px; color: #226d67; background: #f4faf9; font-weight: 600; padding: 9px 12px; cursor: pointer; margin-bottom: 12px; min-height: 42px; }
+.body button:disabled { opacity: .55; cursor: wait; }
+.body button:focus-visible, .panel > summary:focus-visible, .tableWrap:focus-visible { outline: 3px solid #168f83; outline-offset: 3px; }
+.note { font-size: .875rem; color: #657976; }
+.warning { border-left: 3px solid #b9606c; background: #fff5f6; padding: 12px; color: #8c4150; }
+.tableWrap { overflow-x: auto; margin: 12px 0; }
+.tableWrap table { width: 100%; border-collapse: collapse; text-align: left; font-size: .9rem; }
+.tableWrap th, .tableWrap td { border-bottom: 1px solid #e4ebea; padding: 10px 12px; vertical-align: top; }
+.tableWrap th { background: #f6f9f8; font-weight: 600; }
+.tableWrap td:last-child { white-space: nowrap; }
+.sources { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 3fr); gap: 8px 16px; font-size: .85rem; }
+.sources dt { font-weight: 600; }
+.sources dd { margin: 0; overflow-wrap: anywhere; }
+.explanation { margin-top: 14px; }
+.explanation > summary { cursor: pointer; font-weight: 600; min-height: 36px; }
+.explanation p, .explanation ul { font-size: .875rem; line-height: 1.6; }
+@media (max-width: 600px) { .sources { grid-template-columns: 1fr; gap: 4px; } .sources dd { margin-bottom: 8px; } .body { padding: 14px; } }
+@media print { .body button { display: none; } }

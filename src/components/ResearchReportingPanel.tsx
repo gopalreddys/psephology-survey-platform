@@ -5,6 +5,8 @@ import { Download, FileCheck2, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { buildPrintableResearchReport, fieldworkValueLabel, parseResearchReport, researchStatusLabel, type ResearchReport } from "@/lib/research-report";
 import styles from "./research-reporting-panel.module.css";
+import CallQualitySummary from "./CallQualitySummary";
+import InterviewCompletionSummary from "./InterviewCompletionSummary";
 
 function saveReport(report: ResearchReport, format: "json" | "html") {
   const content = format === "json" ? JSON.stringify(report, null, 2) : buildPrintableResearchReport(report);
@@ -66,6 +68,8 @@ export default function ResearchReportingPanel({ campaignId, query }: { campaign
         <article><span>Actual methods</span><strong>{researchStatusLabel(current.methodology.declarationStatus)}</strong><small>Declaration is not a sampling engine</small></article>
         <article><span>Human validation</span><strong>{researchStatusLabel(current.methodology.humanValidation)}</strong><small>No automatic research sign-off</small></article>
       </div>
+      {current.scope.iterationId && <CallQualitySummary key={current.scope.iterationId} campaignId={campaignId} iterationId={current.scope.iterationId} refreshKey={current.reportId} />}
+      {current.scope.iterationId && <InterviewCompletionSummary key={`coverage-${current.scope.iterationId}`} campaignId={campaignId} iterationId={current.scope.iterationId} refreshKey={current.reportId} />}
       <details className={styles.details}><summary>Report coverage and evidence</summary><p>{current.scope.description} Run selection changes operations only; research answers cover the entire selected Iteration.</p><div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Report coverage table"><table><thead><tr><th>Report</th><th>Question contract</th><th>Recorded answers</th><th>What is needed</th></tr></thead><tbody>{current.reports.map((item) => <tr key={item.id}><th scope="row">{item.title}{item.target?.name && <small>{item.target.name}</small>}<small>{item.outputVariables.join(", ") || "Output variables not defined"}</small></th><td>{researchStatusLabel(item.definitionStatus)}</td><td>{researchStatusLabel(item.captureStatus)}<small>{item.answerBase === null ? "Answer base unavailable" : `${item.answerBase} answered`}{item.respondentBase === null ? "" : ` / ${item.respondentBase} respondents`}</small></td><td>{item.message}<small>{item.caution}</small></td></tr>)}</tbody></table></div></details>
       {diagnostics && <details className={styles.details}><summary>Contact cohort and response coverage</summary>
         <p>Distinct database voter IDs retained in Run 1, inspected across all retry Runs — not verified unique people. Run selection does not narrow these Iteration-wide diagnostics.</p>

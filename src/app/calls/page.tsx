@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle, CheckCircle2, Clock3, FileText,
   LoaderCircle, Phone, RefreshCw, Search, X
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FeedbackMessage from "@/components/FeedbackMessage";
+import CallQualityReview from "@/components/CallQualityReview";
+import InterviewCompletionDetail from "@/components/InterviewCompletionDetail";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { apiFetch } from "@/lib/api";
 import styles from "./calls.module.css";
@@ -80,6 +82,7 @@ export default function CallsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<CallDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const detailGeneration = useRef(0);
   const [filters, setFilters] = useState({ status: "ALL", campaignId: "", search: "", from: "", to: "" });
   const [selectedIterationId, setSelectedIterationId] = useState("");
   const [selectedRunId, setSelectedRunId] = useState("");
@@ -142,10 +145,14 @@ export default function CallsPage() {
   }, [user]);
 
   async function openDetail(executionId: string) {
-    setDetailLoading(true); setMessage(null);
-    try { setSelected(await apiFetch(`/api/call-operations/${executionId}`)); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Unable to load call details"); }
-    finally { setDetailLoading(false); }
+    const current = ++detailGeneration.current;
+    setSelected(null); setDetailLoading(true); setMessage(null);
+    try {
+      const detail = await apiFetch(`/api/call-operations/${executionId}`);
+      if (current === detailGeneration.current) setSelected(detail);
+    }
+    catch (error) { if (current === detailGeneration.current) setMessage(error instanceof Error ? error.message : "Unable to load call details"); }
+    finally { if (current === detailGeneration.current) setDetailLoading(false); }
   }
 
   const summary = data?.summary;
@@ -193,6 +200,8 @@ export default function CallsPage() {
     {(selected || detailLoading) && <div className={styles.backdrop} role="presentation" onMouseDown={function (event) { if (event.target === event.currentTarget && !detailLoading) setSelected(null); }}><section className={styles.drawer} role="dialog" aria-modal="true" aria-label="Call details">{detailLoading && !selected ? <div className={styles.empty}><LoaderCircle className={styles.spin} />Loading call details…</div> : selected && <><header><div><span>CALL ATTEMPT</span><h2>{selected.voter_name || "Unknown voter"}</h2><p>•••• {selected.phone_ending} · Attempt {selected.attempt_number} · {selected.voice_agent_name || "Voice agent not recorded"}</p></div><button type="button" onClick={function () { setSelected(null); }}><X size={18} /></button></header><div className={styles.detailBody}>
         <div className={styles.detailGrid}><Detail label="Operational status" value={operationalStatus(selected)} /><Detail label="Provider attempt" value={selected.provider_attempt_id || "Not assigned"} /><Detail label="Submitted" value={dateTime(selected.submitted_at || selected.created_at)} /><Detail label="Callback received" value={dateTime(selected.callback_received_at)} /><Detail label="Duration" value={duration(selected.duration_seconds)} /><Detail label="Final outcome" value={selected.final_status || selected.completion_reason || "Pending"} /></div>
         <nav><Link href={`/campaigns/${selected.campaign_id}`}>{selected.campaign_name}</Link><Link href={`/iterations/${selected.iteration_id}`}>Iteration {selected.iteration_number}</Link></nav>
+        {(user?.role.code === "ADMIN" || user?.role.code === "SUPER_ADMIN") && <CallQualityReview key={selected.execution_id} executionId={selected.execution_id} campaignId={selected.campaign_id} iterationId={selected.iteration_id} runId={selected.run_id} />}
+        {(user?.role.code === "ADMIN" || user?.role.code === "SUPER_ADMIN") && <InterviewCompletionDetail key={`coverage-${selected.execution_id}`} executionId={selected.execution_id} campaignId={selected.campaign_id} iterationId={selected.iteration_id} runId={selected.run_id} />}
         {(selected.error_message || selected.failure_reason) && <div className={styles.failure}><AlertCircle size={17} /><span><strong>Failure detail</strong>{selected.error_message || selected.failure_reason}</span></div>}
         <section><h3>Conversation transcript</h3>{Array.isArray(selected.interaction_transcript) && selected.interaction_transcript.length ? <div className={styles.transcript}>{selected.interaction_transcript.map(function (turn, index) { const parsed = transcriptTurn(turn); return <div key={index}><strong>{parsed.speaker}</strong><p>{parsed.text}</p></div>; })}</div> : <div className={styles.noEvidence}>No transcript was stored for this attempt.</div>}</section>
         <section><h3>Captured response variables</h3>{selected.response_variables && Object.keys(selected.response_variables).length ? <div className={styles.variables}>{Object.entries(selected.response_variables).map(function ([key, value]) { return <div key={key}><span>{key}</span><strong>{typeof value === "object" ? JSON.stringify(value) : String(value)}</strong></div>; })}</div> : <div className={styles.noEvidence}>No response variables were stored for this attempt.</div>}</section>

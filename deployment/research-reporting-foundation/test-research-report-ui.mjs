@@ -71,6 +71,8 @@ function harness(apiFetch, initialProps = { campaignId: syntheticId(1), query: `
     window: { setTimeout: (callback, delay) => { if (delay === 1000) { delayedRevocations.push(callback); return 0; } return setTimeout(callback, delay); }, clearTimeout },
     require: (id) => id === 'react' ? react : id === '@/lib/api' ? { apiFetch }
       : id === '@/lib/research-report' ? library.exports
+        : id === './CallQualitySummary' ? { default: () => null }
+        : id === './InterviewCompletionSummary' ? { default: () => null }
         : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => key }) } : require(id)
   };
   runInNewContext(code, context);

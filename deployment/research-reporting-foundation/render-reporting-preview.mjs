@@ -20,6 +20,8 @@ function renderComponent(code, props, values, detailsToOpen, prefix) {
   const context = { exports: {}, Error, require: (id) => id === 'react' ? react
     : id === '@/lib/api' ? { apiFetch: () => { throw new Error('No live API is allowed in this static preview'); } }
       : id === '@/lib/research-report' ? library.exports
+        : id === './CallQualitySummary' ? { default: () => null }
+        : id === './InterviewCompletionSummary' ? { default: () => null }
         : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => `${prefix}-${String(key)}` }) } : require(id) };
   runInNewContext(code, context);
   const element = context.exports.default(props);
