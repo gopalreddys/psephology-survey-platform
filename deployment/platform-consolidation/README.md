@@ -50,7 +50,7 @@ Reapplying identical content returns `UNCHANGED` and creates no duplicate releas
 
 ## Separate database and activation steps
 
-The manifest ships additive `sql/034_reporting_consistency.sql` and the updated Amazon Quick migration runner. **Copying these files does not apply their SQL.** Review and apply the database change through a separately approved, tested database procedure. The migration runner replays its declared historical SQL prerequisites; confirm compatibility rather than treating it as a new migration ledger or automatically executing it from this installer.
+The manifest ships additive `sql/034_reporting_consistency.sql` and the updated Amazon Quick migration runner. **Copying these files does not apply their SQL.** Review and apply the database change through a separately approved, tested database procedure. For an existing 032 reporting schema, apply only reviewed 034 after checking its prerequisites. The guarded runner inspects metadata before writes: a complete 034 schema reapplies only 034, a partial/incompatible upgrade fails closed, and historical bootstrap is allowed only before any 034 markers with the required base tables present. Never replay older view definitions after 034: they would try to remove appended columns. This is not a migration ledger and is not automatically executed by this installer.
 
 Only after coordinated backend/database verification should the operator restart services and deploy the matching frontend. Validate `/ready`, authorized account scopes, blocked incomplete Iteration completion, deployment-bound health evidence, legacy navigation and new research setup. No outbound calls or human review submission are required for the file installer test.
 

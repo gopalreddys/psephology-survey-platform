@@ -229,12 +229,20 @@ try {
   const queries = [];
   let ended = false;
   globalThis.quickMigrationTestDb = {
-    async query(source) { queries.push(source); return { rows: [] }; },
+    async query(source) {
+      queries.push(source);
+      return { rows: queries.length === 1 ? [{
+        missing_base_relations: [], missing_reporting_relations: [], missing_reporting_functions: [],
+        provenance_column: false, rating_status_column: false, trailing_columns_valid: false,
+        direct_rating_function: false, rating_status_function: false, partition_function: false, movement_guard: false
+      }] : [] };
+    },
     async end() { ended = true; }
   };
   await import(pathToFileURL(path.join(runtime, "src/db/migrate-amazon-quick-dashboard.js")).href);
-  assert.equal(queries.length, 11, "ten ordered migrations plus shared normalizer definition are executed");
-  assert.match(queries[6], /CREATE OR REPLACE FUNCTION analytics_normalize_output_v1/);
+  assert.equal(queries.length, 12, "metadata-only preflight precedes ten ordered migrations and the shared normalizer definition");
+  assert.match(queries[0], /missing_base_relations/);
+  assert.match(queries[7], /CREATE OR REPLACE FUNCTION analytics_normalize_output_v1/);
   assert.equal(queries.at(-3), await readFile(path.join(here, "031_audited_research_methodology.sql"), "utf8"));
   assert.equal(queries.at(-2), sentimentSql, "the sentiment correction follows the audited methodology gate");
   assert.equal(queries.at(-1), await readFile(path.join(here, "034_reporting_consistency.sql"), "utf8"), "privacy consistency follows corrected constructs");
