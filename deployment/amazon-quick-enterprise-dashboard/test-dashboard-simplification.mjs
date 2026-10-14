@@ -145,7 +145,7 @@ function resolve(element) {
   const { children, ...props } = element.props;
   return React.createElement(element.type, { ...props, key: element.key }, resolve(children));
 }
-function render({ role = 'ADMIN', report = dashboard, evidence = quality, loading = false,
+function render({ role = 'SUPER_ADMIN', report = dashboard, evidence = quality, loading = false,
   sessionError = null, qualityError = null, actorId = 'synthetic-user' } = {}) {
   currentUser = { id: 'synthetic-user', role: { code: role } };
   hookCursor = 0;
@@ -180,25 +180,25 @@ function assertClosedDetails(tree) {
   }
 }
 
-const adminTree = render();
+const superAdminTree = render();
 const staleActorTree = render({ actorId: 'another-user' });
 assert.ok(!find(staleActorTree, (element) => element.props['data-sdk-report-fixture']), 'old actor session is hidden synchronously');
 assert.ok(!supportingPanel(staleActorTree, 'Fieldwork summary'), 'old actor quality data is hidden synchronously');
-const nodes = flatten(adminTree);
+const nodes = flatten(superAdminTree);
 const reportIndex = nodes.findIndex((element) => element.props['data-sdk-report-fixture']);
 assert.ok(reportIndex >= 0, 'successful session renders the report iframe');
 const fieldworkIndex = nodes.findIndex((element) => hasClass(element, 'qualityPanel'));
 assert.ok(fieldworkIndex > reportIndex, 'reports precede the fieldwork summary');
 for (const title of ['Iteration comparisons', 'Research setup', 'Boundary explorer']) {
-  const panel = supportingPanel(adminTree, title);
+  const panel = supportingPanel(superAdminTree, title);
   assert.ok(panel, `${title} is available on demand`);
   assert.ok(nodes.indexOf(panel) > reportIndex, `reports precede ${title}`);
 }
-const registry = supportingPanel(adminTree, 'Research setup');
-const boundary = find(adminTree, (element) => element.props['data-boundary-fixture']);
+const registry = supportingPanel(superAdminTree, 'Research setup');
+const boundary = find(superAdminTree, (element) => element.props['data-boundary-fixture']);
 assert.ok(nodes.indexOf(registry) > reportIndex, 'reports precede the methodology editor');
 assert.ok(nodes.indexOf(boundary) > reportIndex, 'reports precede the boundary component');
-assertClosedDetails(adminTree);
+assertClosedDetails(superAdminTree);
 
 for (const [Component, props] of [
   [MeasurementNote, { children: 'Private measurement detail' }],
@@ -211,18 +211,18 @@ for (const [Component, props] of [
   assert.match(textContent(element), /Private/);
 }
 
-const visible = textContent(adminTree, true);
+const visible = textContent(superAdminTree, true);
 for (const label of ['DEMO · TEST SURVEY EVIDENCE', 'Unweighted', 'Human review pending', 'Whole portfolio', 'all Runs', 'independent of report filters']) {
   assert.ok(visible.includes(label), `${label} stays visible without opening notes`);
 }
 assert.doesNotMatch(visible, /Technical error|Recorded design and frozen questionnaire|synthetic-rule-hash|I confirm these entries/,
   'long explanations and methodology editing start inside closed notes');
-assert.match(textContent(adminTree), /Fewer than five distinct people/);
-assert.match(textContent(adminTree), /Synthetic fixture: coded answers only/);
-assert.match(textContent(adminTree), /Synthetic questionnaire mismatch/);
+assert.match(textContent(superAdminTree), /Fewer than five distinct people/);
+assert.match(textContent(superAdminTree), /Synthetic fixture: coded answers only/);
+assert.match(textContent(superAdminTree), /Synthetic questionnaire mismatch/);
 assert.match(visible, /Full Iterations · not filtered by age, gender or Mandal/);
 
-const comparisons = supportingPanel(adminTree, 'Iteration comparisons');
+const comparisons = supportingPanel(superAdminTree, 'Iteration comparisons');
 const articles = flatten(comparisons).filter((element) => element.type === 'article');
 assert.equal(articles.length, 6);
 const articleText = articles.map((element) => textContent(element, true));
@@ -242,13 +242,19 @@ assert.match(articleText[5], /Withheld — too few response records/);
 assert.doesNotMatch(articleText[5], /Not comparable|99|pp/);
 assert.match(textContent(articles[5]), /at least five response records are required in each adjacent wave/);
 
-for (const role of ['SUPER_ADMIN', 'ADMIN']) {
+for (const role of ['SUPER_ADMIN']) {
   assert.ok(supportingPanel(render({ role }), 'Research setup'), `${role} can find canonical research setup links`);
 }
-for (const role of ['CAMPAIGN_MANAGER', 'CAMPAIGNER']) {
+for (const role of ['ADMIN', 'CAMPAIGN_MANAGER', 'CAMPAIGNER']) {
   const tree = render({ role });
+  assert.match(textContent(tree), /Amazon Quick unavailable for this role/);
+  assert.match(textContent(tree), /Super Admin only in this demo/);
+  assert.ok(!find(tree, (element) => element.props['data-sdk-report-fixture']), `${role} does not receive an embed even when a cached report is injected`);
+  assert.ok(!supportingPanel(tree, 'Fieldwork summary'), `${role} does not receive cached research quality`);
   assert.ok(!supportingPanel(tree, 'Research setup'), `${role} does not receive the setup panel`);
   assert.ok(!find(tree, (element) => hasClass(element, 'designRegistry')), `${role} does not receive the registry`);
+  assert.ok(find(tree, (element) => element.type === 'a' && element.props.href === '/'), `${role} can return to native Dashboard`);
+  assert.equal(Boolean(find(tree, (element) => element.type === 'a' && element.props.href === '/analytics')), role !== 'CAMPAIGNER', `${role} retains only its existing Analysis access`);
 }
 
 const errorTree = render({ report: null, evidence: null,
@@ -293,7 +299,7 @@ if (previewArgument) {
     const { children, ...props } = element.props;
     return React.createElement(element.type, { ...props, key: element.key }, previewTree(children));
   }
-  const markup = renderToStaticMarkup(previewTree(adminTree));
+  const markup = renderToStaticMarkup(previewTree(superAdminTree));
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Local layout preview · synthetic data</title><style>
     :root{--background:#fff9f5;--platform-ink:#3f2f35;--platform-font:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:var(--background);color:var(--platform-ink);font-family:var(--platform-font)}.fixtureLabel{padding:12px 20px;background:#392b32;color:white;font-weight:700;font-size:14px}
     .fixtureReportPlaceholder{display:grid;align-content:center;justify-items:center;min-height:780px;padding:32px;background:#f8faf9;color:#74656b;text-align:center;border-top:1px dashed #c8d8d3}.fixtureReportPlaceholder p{max-width:480px;line-height:1.5}

@@ -17,6 +17,8 @@ let authStatus = 'authenticated';
 let actor = { id: 'super-one', name: 'Synthetic Super Admin', role: { code: 'SUPER_ADMIN', name: 'Super Admin' } };
 let scope, apiCalls = 0, cleanups = 0;
 const instances = new Map();
+const timers = new Map();
+let nextTimer = 1;
 const react = {
   ...React,
   useState(initial) {
@@ -63,7 +65,10 @@ const mocks = { ...sharedMocks,
   './quick.module.css': wrap(new Proxy({}, { get: (_, key) => String(key) }))
 };
 const pageContext = { exports: {}, AbortController, URLSearchParams,
-  window: { setTimeout: () => 1, clearTimeout: () => { cleanups++; } },
+  window: {
+    setTimeout: (callback, delay) => { const id = nextTimer++; timers.set(id, { callback, delay }); return id; },
+    clearTimeout: (id) => { timers.delete(id); cleanups++; }
+  },
   require: (name) => mocks[name] ?? require(name) };
 runInNewContext(compile(await readFile(new URL('../../src/app/enterprise-dashboard/page.tsx', import.meta.url), 'utf8')), pageContext);
 function render() {
@@ -91,6 +96,8 @@ function render() {
 }
 const flatten = (value) => Array.isArray(value) ? value.flatMap(flatten)
   : value?.props ? [value, ...flatten(value.props.children)] : [];
+const text = (value) => Array.isArray(value) ? value.map(text).join('')
+  : value?.props ? text(value.props.children) : typeof value === 'string' ? value : '';
 const reportInstance = () => [...instances].find(([key]) => key.endsWith(':AuthenticatedEnterpriseDashboard'))?.[1];
 const session = (tree) => flatten(tree).find((node) => node.props['data-test-session'])?.props['data-test-session'];
 render();
@@ -107,8 +114,22 @@ assert.equal(reportInstance(), undefined, 'logout unmounts report/profile/sessio
 assert.ok(cleanups > 0, 'pending report effect is cleaned up');
 actor = { id: 'admin-two', name: 'Synthetic Admin', role: { code: 'ADMIN', name: 'Admin' } };
 authStatus = 'authenticated';
-assert.equal(session(render()), undefined, 'new login cannot revive the prior Super Admin URL');
+const adminTree = render();
+assert.equal(session(adminTree), undefined, 'new login cannot revive the prior Super Admin URL');
 assert.notEqual(reportInstance(), first);
 assert.equal(reportInstance().slots[0].id, 'admin-two', 'profile is loaded again for the newly mounted account');
+assert.match(text(adminTree), /Super Admin only in this demo/);
+assert.ok(flatten(adminTree).some((node) => node.type === 'a' && node.props.href === '/'));
+assert.ok(flatten(adminTree).some((node) => node.type === 'a' && node.props.href === '/analytics'));
+for (const [id, timer] of [...timers]) if (timer.delay === 0) {
+  timers.delete(id); timer.callback();
+}
+await Promise.resolve();
+assert.equal(apiCalls, 0, 'a direct Admin route does not request a Quick session or quality data');
+const adminInstance = reportInstance();
+adminInstance.slots[1] = { embedUrl: 'synthetic-super-session', accessScope: 'SUPER_ADMIN_PORTFOLIO' };
+adminInstance.slots[3] = false;
+adminInstance.slots[6] = actor.id;
+assert.equal(session(render()), undefined, 'non-Super-Admin role guard hides even same-actor injected cached sessions');
 assert.equal(apiCalls, 0);
-console.log('Actual AppShell/Quick auth boundary: logout cleanup and different-account re-login discard old profile, report and session state.');
+console.log('Actual AppShell/Quick auth boundary: logout cleanup, Super-Admin-only demo route, no Admin embed requests and different-account re-login discard old profile, report and session state.');

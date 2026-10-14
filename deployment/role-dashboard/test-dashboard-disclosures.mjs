@@ -348,7 +348,7 @@ for (const role of Object.keys(titles)) {
     assert.ok(allText.includes(explanation), `${role}: ${explanation} is retained in its note`);
   }
   const privileged = role === 'SUPER_ADMIN' || role === 'ADMIN';
-  assert.equal(links(tree).includes('/enterprise-dashboard'), privileged, `${role}: Amazon Quick link guard is retained`);
+  assert.equal(links(tree).includes('/enterprise-dashboard'), role === 'SUPER_ADMIN', `${role}: demo Amazon Quick is visible only to Super Admin`);
   assert.equal(links(tree).includes('/programs'), privileged, `${role}: Programs link guard is retained`);
   assert.equal(links(tree).includes('/analytics'), role !== 'CAMPAIGNER', `${role}: Analytics link guard is retained`);
   assert.ok(links(tree).includes('/calls') && links(tree).includes('/campaigns'));

@@ -176,7 +176,7 @@ function AuthenticatedEnterpriseDashboard() {
   const activeRequest = useRef<AbortController | null>(null);
 
   const loadDashboard = useCallback(async function () {
-    if (!user || !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) return;
+    if (!user || user.role.code !== "SUPER_ADMIN") return;
     const sequence = ++requestSequence.current;
     activeRequest.current?.abort();
     const controller = new AbortController();
@@ -228,8 +228,15 @@ function AuthenticatedEnterpriseDashboard() {
   const actorMatches = loadedActorId === user?.id;
   const shownDashboard = actorMatches ? dashboard : null;
   const shownQuality = actorMatches ? quality : null;
-  if (user && !["SUPER_ADMIN", "ADMIN"].includes(user.role.code)) return (
-    <main className={styles.page}><FeedbackMessage tone="error" message="Amazon Quick is available only to authorized Admin and Super Admin profiles." /></main>
+  if (user && user.role.code !== "SUPER_ADMIN") return (
+    <main className={styles.page}>
+      <section className={styles.setup} aria-label="Amazon Quick access">
+        <h1>Amazon Quick unavailable for this role</h1>
+        <FeedbackMessage tone="info" message="Amazon Quick is available to Super Admin only in this demo. Your native Dashboard remains available." />
+        <Link href="/"><ArrowLeft size={16} />Open native Dashboard</Link>
+        {user.role.code !== "CAMPAIGNER" && <Link href="/analytics"><BarChart3 size={16} />Open Analysis</Link>}
+      </section>
+    </main>
   );
 
   return <main className={styles.page}>

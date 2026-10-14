@@ -330,7 +330,7 @@ export default function Home() {
     <header className={styles.hero}>
       <div><span>RESEARCH COMMAND CENTER</span><h1>{role ? titleFor(role) : "Dashboard"}</h1></div>
       <div className={styles.heroActions}>
-        {(role === "SUPER_ADMIN" || role === "ADMIN") && <Link href="/enterprise-dashboard"><BarChart3 size={16} />Leadership reports <ArrowRight size={14} /></Link>}
+        {role === "SUPER_ADMIN" && <Link href="/enterprise-dashboard"><BarChart3 size={16} />Leadership reports <ArrowRight size={14} /></Link>}
         <button type="button" onClick={function () { void loadDashboard(true); }} disabled={loading || refreshing}><RefreshCw size={16} className={refreshing ? styles.spin : ""} />{refreshing ? "Refreshing…" : "Refresh"}</button>
       </div>
     </header>

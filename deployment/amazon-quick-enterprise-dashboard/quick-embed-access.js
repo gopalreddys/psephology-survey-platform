@@ -21,6 +21,23 @@ export function validateEmbedDomains(domains) {
   return domains;
 }
 
+function registeredReaderName(config, userArn) {
+  const prefix = `arn:aws:quicksight:${config.region}:${config.accountId}:user/`;
+  const resource = typeof userArn === 'string' && userArn.startsWith(prefix) ? userArn.slice(prefix.length) : '';
+  // A QuickSight IAM Reader's UserName is RoleName/SessionName. Namespace is
+  // only the first path segment; the remaining registered name is indivisible.
+  const separator = resource.indexOf('/');
+  const namespace = resource.slice(0, separator);
+  const userName = resource.slice(separator + 1);
+  const singleUser = /^[^\s/\u0000-\u001f\u007f-\u009f]+$/u.test(userName);
+  const iamUser = /^[A-Za-z0-9_+=,.@-]+\/[A-Za-z0-9_+=,.@-]+$/.test(userName);
+  if (separator < 1 || !/^[-\w]{1,64}$/.test(namespace) ||
+      /[\u0000-\u0020\u007f-\u009f]/.test(resource) || (!singleUser && !iamUser)) {
+    throw new QuickEmbedAccessError("A registered Quick Reader must be configured for this platform user");
+  }
+  return { namespace, userName };
+}
+
 export function resolveEmbedIdentity(config, actor) {
   if (!actor?.id || !["SUPER_ADMIN", "ADMIN"].includes(actor.role_code)) {
     throw new QuickEmbedAccessError("Amazon Quick access is unavailable for this role", "QUICKSIGHT_ACCESS_DENIED", 403);
@@ -36,11 +53,7 @@ export function resolveEmbedIdentity(config, actor) {
   }
   const mappedArn = Object.hasOwn(readers, actor.id) ? readers[actor.id] : null;
   const userArn = mappedArn || (actor.role_code === "SUPER_ADMIN" ? config.userArn : null);
-  const prefix = `arn:aws:quicksight:${config.region}:${config.accountId}:user/`;
-  if (typeof userArn !== "string" || !userArn.startsWith(prefix) ||
-      !/^[-\w]+\/[^\s/]+$/.test(userArn.slice(prefix.length))) {
-    throw new QuickEmbedAccessError("A registered Quick Reader must be configured for this platform user");
-  }
+  registeredReaderName(config, userArn);
   const restricted = actor.role_code === "ADMIN";
   if (restricted && (userArn === config.userArn ||
       Object.values(readers).filter((value) => value === userArn).length !== 1)) {
@@ -51,7 +64,7 @@ export function resolveEmbedIdentity(config, actor) {
 
 export async function verifyRestrictedEmbed(api, config, identity) {
   if (!identity.restricted) return null;
-  const [namespace, userName] = identity.userArn.split(":user/")[1].split("/");
+  const { namespace, userName } = registeredReaderName(config, identity.userArn);
   const user = await api.describeUser(namespace, userName);
   if (user?.Arn !== identity.userArn || user.Active !== true ||
       !["READER", "READER_PRO"].includes(user.Role)) {
