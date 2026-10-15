@@ -23,8 +23,8 @@ assert.equal(baseReport.rulesVersion, 'RESEARCH_REPORT_V2');
 assert.equal(baseReport.fieldworkDiagnostics.status, 'AVAILABLE');
 assert.deepEqual(baseReport.fieldworkDiagnostics.coverage.stages.map((row) => row.participants), [60, 50, 40, 30]);
 assert.equal(baseReport.fieldworkDiagnostics.sources.analysisBaseAlignment, 'MATCHED');
-assert.equal(baseReport.reports.filter((report) => report.captureStatus === 'DESCRIPTIVE_AVAILABLE').length, 8, 'preview uses exact frozen-output aggregation for implemented constructs');
-assert.equal(baseReport.reports.filter((report) => report.captureStatus === 'MAPPING_PENDING').length, 2, 'scheme and named-leader calculations remain pending, not fabricated');
+assert.equal(baseReport.reports.filter((report) => report.captureStatus === 'DESCRIPTIVE_AVAILABLE').length, 9, 'preview uses exact frozen-output aggregation for implemented constructs');
+assert.equal(baseReport.reports.filter((report) => report.captureStatus === 'MAPPING_PENDING').length, 1, 'scheme calculations remain pending, not fabricated');
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
 function deferred() { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 const flatten = (element) => !element || typeof element !== 'object' ? []
@@ -95,22 +95,41 @@ const app = harness(async (url, options) => { requests.push({ url, options }); r
 app.render();
 assert.equal(app.button('Printable report').props.disabled, true);
 assert.equal(app.button('Report JSON').props.disabled, true);
+assert.equal(flatten(app.render()).filter((item) => item.type === 'figure').length, 0, 'pending scope has no cached charts');
 assert.ok(app.body().includes('Checking this selected research scope'));
 await app.flush();
 assert.equal(requests.length, 1);
 assert.equal(requests[0].options, undefined, 'research checks are read-only GET requests');
 assert.ok(app.body().includes('Methodology and report checks'));
 assert.ok(app.body().includes('Display threshold met · not validation'), app.body());
-assert.ok(app.body().includes('8/10'));
+assert.ok(app.body().includes('9/10'));
 assert.ok(app.body().includes('No automatic research sign-off'));
 assert.equal(app.button('Report JSON').props.disabled, false);
-for (const disclosure of ['Report coverage and evidence', 'Contact cohort and response coverage', 'Methodology, provenance and limitations', 'Next research actions']) {
+for (const disclosure of ['Captured answer distributions', 'Report coverage and evidence', 'Contact cohort and response coverage', 'Methodology, provenance and limitations', 'Next research actions']) {
   const item = app.find((element) => element.type === 'details' && text(element).startsWith(disclosure));
   assert.ok(item, disclosure);
   assert.ok(!item.props.open, 'explanation is closed by default');
 }
 assert.ok(app.body().includes('Government scheme experience'));
 assert.ok(app.body().includes('mapping pending'), 'unsupported mappings are not reported as available');
+const charts = flatten(app.render()).filter((item) => item.type === 'figure');
+assert.equal(charts.length, 9);
+for (const key of ['development_priority', 'expected_change', 'leader_assessment']) {
+  const expected = baseReport.reports.find((item) => item.id === key);
+  const chart = charts.find((item) => item.props['aria-label'] === `${expected.title} recorded answer distribution`);
+  assert.ok(chart, `${key} has an exact-contract chart`);
+  assert.ok(text(chart).includes('30 non-missing answers'));
+  assert.ok(text(chart).includes('15 (50.0%)'));
+  assert.ok(text(chart).includes('Exact frozen output keys:'));
+  if (expected.target) {
+    assert.ok(text(chart).includes(expected.target.name));
+    assert.ok(text(chart).includes(expected.target.id));
+  }
+  assert.ok(flatten(chart).find((item) => item.type === 'details' && !item.props.open));
+  const bars = flatten(chart).filter((item) => item.type === 'span' && item.props.style?.width);
+  assert.deepEqual(bars.map((item) => item.props.style.width), ['50%', '50%']);
+}
+assert.ok(!charts.some((item) => text(item).includes('Government scheme experience')), 'mapping-pending reports never get fake charts');
 const tableRegion = app.find((element) => element.props?.['aria-label'] === 'Report coverage table');
 assert.equal(tableRegion.props.tabIndex, 0, 'wide coverage table can be focused and panned by keyboard');
 assert.equal(flatten(app.render()).filter((item) => item.type === 'article').length, 4, 'diagnostics do not add another row of summary cards');
@@ -151,6 +170,7 @@ assert.equal(app.downloads.filter((item) => item.revoked).length, 2);
 report = syntheticResearchReport({ generatedAt: '2026-10-11T12:01:00.000Z' });
 app.button('Refresh checks').props.onClick();
 assert.equal(app.button('Report JSON').props.disabled, true, 'old report cannot be exported during refresh');
+assert.equal(flatten(app.render()).filter((item) => item.type === 'figure').length, 0, 'old distributions disappear immediately during refresh');
 await app.flush();
 assert.equal(requests.length, 2);
 assert.ok(app.body().includes('2026-10-11T12:01:00.000Z'));
@@ -214,6 +234,7 @@ for (const malformed of invalidPayloads) {
   assert.ok(bad.body().includes('Research checks unavailable'), 'unsupported response is a component-level failure, not an Analysis crash');
   assert.equal(bad.button('Report JSON').props.disabled, true);
   assert.equal(bad.button('Printable report').props.disabled, true);
+  assert.equal(flatten(bad.render()).filter((item) => item.type === 'figure').length, 0, 'an invalid aggregate never becomes a chart');
   assert.ok(!bad.body().includes('Fully specified report contracts'));
 }
 
@@ -222,6 +243,8 @@ legacy.render(); await legacy.flush();
 assert.ok(legacy.body().includes('0/10'));
 assert.ok(legacy.body().includes('not available'));
 assert.ok(legacy.body().includes('unconfigured'));
+assert.equal(flatten(legacy.render()).filter((item) => item.type === 'figure').length, 0, 'legacy contracts never get inferred charts');
+assert.ok(legacy.body().includes('No disclosure-safe distributions are available'));
 assert.equal(legacy.button('Report JSON').props.disabled, false, 'an honest incomplete report is still available; unavailable definitions are not a transport failure');
 
 for (const diagnosticMode of ['unavailable', 'withheld', 'demographic-withheld', 'complement-withheld', 'zero']) {
@@ -251,6 +274,7 @@ for (const diagnosticMode of ['unavailable', 'withheld', 'demographic-withheld',
     assert.ok(!printed.includes('Hidden tiny synthetic geography'));
     assert.ok(printed.includes('Whole composition partition withheld'));
   } else {
+    assert.equal(flatten(example.render()).filter((item) => item.type === 'figure').length, 0, 'insufficient-base measures are not charted as zeros');
     assert.equal(exported.coverage.selectedBase, 0, 'verified empty filtered cohort is zero, not unavailable');
     assert.ok(exported.coverage.stages.every((row) => row.participants === 0 && row.percentage === null));
     assert.equal(exported.coverage.yield, null, 'zero denominator does not imply a zero-percent rate');

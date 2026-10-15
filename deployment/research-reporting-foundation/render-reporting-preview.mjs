@@ -13,6 +13,8 @@ const compile = async (path) => ts.transpileModule(await readFile(new URL(path, 
 }).outputText;
 const library = { exports: {}, require };
 runInNewContext(await compile('../../src/lib/research-report.ts'), library);
+const presets = { exports: {}, require };
+runInNewContext(await compile('../../src/lib/reporting-presets.ts'), presets);
 function renderComponent(code, props, values, detailsToOpen, prefix) {
   let stateIndex = 0;
   const react = { ...React, useState: (initial) => [stateIndex < values.length ? values[stateIndex++] : typeof initial === 'function' ? initial() : initial, () => {}],
@@ -20,6 +22,7 @@ function renderComponent(code, props, values, detailsToOpen, prefix) {
   const context = { exports: {}, Error, require: (id) => id === 'react' ? react
     : id === '@/lib/api' ? { apiFetch: () => { throw new Error('No live API is allowed in this static preview'); } }
       : id === '@/lib/research-report' ? library.exports
+        : id === '@/lib/reporting-presets' ? presets.exports
         : id === './CallQualitySummary' ? { default: () => null }
         : id === './InterviewCompletionSummary' ? { default: () => null }
         : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => `${prefix}-${String(key)}` }) } : require(id) };
@@ -45,7 +48,7 @@ const draft = {
   targetId: editing.contract.target.id, targetName: editing.contract.target.name
 };
 const contractHtml = renderComponent(await compile('../../src/components/QuestionnaireReportingContracts.tsx'), { questionnaireId: syntheticId(10) },
-  [coverage, false, false, null, null, editing.id, draft, null], ['Question 4'], 'contract');
+  [coverage, false, false, null, null, editing.id, draft, null, false], ['Question 4'], 'contract');
 const report = syntheticResearchReport();
 const query = `iterationId=${syntheticId(2)}`;
 const reportHtml = renderComponent(await compile('../../src/components/ResearchReportingPanel.tsx'), { campaignId: syntheticId(1), query },

@@ -21,6 +21,21 @@
 .details dd { margin: 0; overflow-wrap: anywhere; }
 .subheading { font-size: 14px; margin: 22px 0 8px; color: #325345; }
 .composition { margin-top: 20px; border-top: 1px solid #edf2ef; }
+.distributions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 16px; }
+.distribution { display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 18px; border: 1px solid #e1e9e5; border-radius: 13px; background: #fbfdfc; }
+.distribution h3 { margin: 0; font-size: 16px; color: #325345; }
+.distribution figcaption p { margin: 6px 0; overflow-wrap: anywhere; }
+.distribution figcaption small { color: #627b70; }
+.answerRows { list-style: none; padding: 0 !important; margin: 18px 0; }
+.answerRows li { margin-bottom: 14px; }
+.answerLabel { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.answerLabel > span { overflow-wrap: anywhere; min-width: 0; }
+.answerLabel strong { flex-shrink: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.answerLabel small { font-weight: 400; color: #52655e; }
+.answerTrack { height: 8px; overflow: hidden; margin-top: 7px; border-radius: 4px; background: #e8f0ec; }
+.answerTrack > span { display: block; height: 100%; border-radius: inherit; background: #168b7d; }
+.measurement { margin-top: auto; padding-top: 13px; border-top: 1px solid #e2ebe6; font-size: 12px; }
+.measurement p { overflow-wrap: anywhere; }
 .tableWrap { overflow-x: auto; margin-top: 16px; }
 .tableWrap:focus-visible { outline: 2px solid #168b7d; outline-offset: 3px; }
 .tableWrap table { border-collapse: collapse; width: 100%; min-width: 650px; font-size: 12px; }
@@ -32,4 +47,4 @@
 .warning p { overflow-wrap: anywhere; }
 .note { margin: 13px 0 0; }
 @media (max-width: 1100px) { .header { flex-direction: column; } .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (max-width: 600px) { .panel { padding: 16px; } .metrics { grid-template-columns: 1fr; } .header h2 { font-size: 21px; } .details dl { grid-template-columns: 1fr; gap: 0; } .details dd { margin-bottom: 12px; } }
+@media (max-width: 600px) { .panel { padding: 16px; } .metrics, .distributions { grid-template-columns: 1fr; } .header h2 { font-size: 21px; } .details dl { grid-template-columns: 1fr; gap: 0; } .details dd { margin-bottom: 12px; } }

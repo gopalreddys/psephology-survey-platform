@@ -49,6 +49,9 @@ export default function ResearchReportingPanel({ campaignId, query }: { campaign
   const pending = loadedKey !== scopeKey;
   const defined = current?.reports.filter((item) => item.definitionStatus === "CONTRACT_RECORDED").length || 0;
   const captured = current?.reports.filter((item) => item.captureStatus === "DESCRIPTIVE_AVAILABLE").length || 0;
+  const distributions = current?.reports.filter((item) => item.captureStatus === "DESCRIPTIVE_AVAILABLE"
+    && !item.suppressed && item.distribution.length > 0
+    && item.distribution.every((row) => row.percentage !== null)) || [];
   const diagnostics = current?.fieldworkDiagnostics;
 
   return <section className={styles.panel} aria-label="Research methodology and reporting checks" aria-busy={pending}>
@@ -70,6 +73,17 @@ export default function ResearchReportingPanel({ campaignId, query }: { campaign
       </div>
       {current.scope.iterationId && <CallQualitySummary key={current.scope.iterationId} campaignId={campaignId} iterationId={current.scope.iterationId} refreshKey={current.reportId} />}
       {current.scope.iterationId && <InterviewCompletionSummary key={`coverage-${current.scope.iterationId}`} campaignId={campaignId} iterationId={current.scope.iterationId} refreshKey={current.reportId} />}
+      <details className={styles.details}><summary>Captured answer distributions · {distributions.length} available</summary>
+        <p>Recorded answers in this filtered Iteration, across all Runs. Missing answers are excluded; explicit uncertainty and refusals remain in the answered base. Withheld results are not zero.</p>
+        {distributions.length ? <div className={styles.distributions}>{distributions.map((item) => <figure key={item.id} className={styles.distribution} aria-label={`${item.title} recorded answer distribution`}>
+          <figcaption><h3>{item.title}</h3><p>{item.target ? `${item.target.type.toLowerCase()}: ${item.target.name}` : "Untargeted question"}</p><small>{item.answerBase} non-missing answers · unweighted · human review pending</small></figcaption>
+          <ol className={styles.answerRows}>{item.distribution.map((row) => <li key={row.value}>
+            <div className={styles.answerLabel}><span>{row.value}</span><strong>{row.respondents} <small>({row.percentage === null ? "Unavailable" : `${row.percentage.toFixed(1)}%`})</small></strong></div>
+            <div className={styles.answerTrack} aria-hidden="true"><span style={{ width: `${row.percentage}%` }} /></div>
+          </li>)}</ol>
+          <details className={styles.measurement}><summary>How it’s measured</summary><p>Exact frozen output keys: {item.outputVariables.join(", ")}. Percentages use all {item.answerBase} non-missing answers, not just the substantive categories. Each displayed category meets the five-person minimum; an unsafe partition and its linked totals are withheld in full.</p>{item.target && <p>Frozen target: {item.target.name} · {item.target.id}. Assessments of other targets are not combined.</p>}<p>{item.caution}</p></details>
+        </figure>)}</div> : <p className={styles.note}>No disclosure-safe distributions are available for this selection. See Report coverage and evidence for missing definitions, missing answers or withheld results.</p>}
+      </details>
       <details className={styles.details}><summary>Report coverage and evidence</summary><p>{current.scope.description} Run selection changes operations only; research answers cover the entire selected Iteration.</p><div className={styles.tableWrap} tabIndex={0} role="region" aria-label="Report coverage table"><table><thead><tr><th>Report</th><th>Question contract</th><th>Recorded answers</th><th>What is needed</th></tr></thead><tbody>{current.reports.map((item) => <tr key={item.id}><th scope="row">{item.title}{item.target?.name && <small>{item.target.name}</small>}<small>{item.outputVariables.join(", ") || "Output variables not defined"}</small></th><td>{researchStatusLabel(item.definitionStatus)}</td><td>{researchStatusLabel(item.captureStatus)}<small>{item.answerBase === null ? "Answer base unavailable" : `${item.answerBase} answered`}{item.respondentBase === null ? "" : ` / ${item.respondentBase} respondents`}</small></td><td>{item.message}<small>{item.caution}</small></td></tr>)}</tbody></table></div></details>
       {diagnostics && <details className={styles.details}><summary>Contact cohort and response coverage</summary>
         <p>Distinct database voter IDs retained in Run 1, inspected across all retry Runs — not verified unique people. Run selection does not narrow these Iteration-wide diagnostics.</p>

@@ -2,12 +2,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
+import { createHash, webcrypto } from 'node:crypto';
+import { normalizeOutputValue } from '../output-variable-standardization/output-normalization.repository.js';
 
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 const source = await readFile(new URL('../../src/components/QuestionnaireReportingContracts.tsx', import.meta.url), 'utf8');
 const page = await readFile(new URL('../../src/app/questionnaires/[id]/page.tsx', import.meta.url), 'utf8');
 const css = await readFile(new URL('../../src/components/questionnaire-reporting-contracts.module.css', import.meta.url), 'utf8');
+const presetSource = await readFile(new URL('../../src/lib/reporting-presets.ts', import.meta.url), 'utf8');
+const presetModule = { exports: {}, crypto: webcrypto, TextEncoder, Uint8Array, Date };
+runInNewContext(ts.transpileModule(presetSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText, presetModule);
+const presets = presetModule.exports;
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX }
 }).outputText;
@@ -32,7 +40,7 @@ const flatten = (element) => !element || typeof element !== 'object' ? []
 const text = (value) => Array.isArray(value) ? value.map(text).join('')
   : value?.props ? text(value.props.children) : typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 
-function harness(apiFetch) {
+function harness(apiFetch, buildReviewPack = presets.buildSarvamReviewPack) {
   const hooks = [];
   const pendingEffects = [];
   let cursor = 0;
@@ -63,8 +71,16 @@ function harness(apiFetch) {
       }
     }
   };
-  const context = { exports: {}, Error, require: (id) => id === 'react' ? react
+  const downloads = [], blobs = [], revoked = [];
+  const context = { exports: {}, Error, Blob,
+    URL: { createObjectURL(blob) { blobs.push(blob); return `blob:local-${blobs.length}`; }, revokeObjectURL(url) { revoked.push(url); } },
+    document: { body: { appendChild() {} }, createElement(kind) {
+      assert.equal(kind, 'a');
+      return { click() { downloads.push({ href: this.href, name: this.download }); }, remove() {} };
+    } },
+    require: (id) => id === 'react' ? react
     : id === '@/lib/api' ? { apiFetch }
+      : id === '@/lib/reporting-presets' ? { ...presets, buildSarvamReviewPack: buildReviewPack }
       : id.endsWith('.module.css') ? { default: new Proxy({}, { get: (_, key) => key }) } : require(id) };
   runInNewContext(compiled, context);
   const Component = context.exports.default;
@@ -76,7 +92,7 @@ function harness(apiFetch) {
     return flatten(item?.props.children).find((element) => ['input', 'select', 'textarea'].includes(element.type));
   };
   return {
-    render, find, button, field,
+    render, find, button, field, downloads, blobs, revoked,
     setField(label, value) { const control = field(label); assert.ok(control, label); control.props.onChange({ target: { value } }); },
     async flush() { while (pendingEffects.length) pendingEffects.shift()(); await tick(); },
     changeId(id) { questionnaireId = id; render(); },
@@ -220,4 +236,117 @@ assert.ok(page.indexOf('<QuestionnaireReportingContracts') < page.indexOf('{show
 assert.ok(css.includes('grid-template-columns: repeat(2, minmax(0, 1fr))'));
 assert.ok(css.includes('@media (max-width: 640px)'));
 assert.ok(css.includes(':focus-visible'));
-console.log('Reporting-contract actual-render validation, frozen instruments, no false provider verification, GET/PATCH races, failed reload and accessibility tests passed.');
+
+// Every preset is an explicit authoring aid, not a question/provider update.
+assert.deepEqual(Array.from(presets.REPORTING_PRESETS, (item) => item.reportKey), ['development_priority', 'expected_change', 'leader_assessment']);
+for (const preset of presets.REPORTING_PRESETS) {
+  for (const label of preset.allowedValues) {
+    assert.equal(normalizeOutputValue(preset.outputVariable, label).label, label,
+      `${preset.reportKey}: canonical emitted categories round-trip through the real normalizer`);
+  }
+  assert.ok(preset.english && preset.telugu);
+  assert.doesNotMatch(`${preset.english} ${preset.telugu}`, /BRS|BJP|Congress|Kasani|Veeresh|vote for|support this/i);
+}
+assert.ok(!presets.PRIORITY_REPORTING_CATEGORIES.includes('Multiple issues mentioned'), 'Multiple/uncoded is not a substantive emitted preset category');
+const presetCalls = [];
+const presetApp = harness(async (url, options) => { presetCalls.push({ url, options }); return fixture(); });
+presetApp.render(); await presetApp.flush();
+presetApp.button('Define reporting outputs').props.onClick();
+assert.equal(presetApp.button('Download agent review pack').props.disabled, true, 'An unsaved editor cannot export stale saved definitions');
+for (const preset of presets.REPORTING_PRESETS) {
+  presetApp.button(`Use ${preset.label.toLowerCase()} preset`).props.onClick();
+  assert.equal(presetApp.field('Report *').props.value, preset.reportKey);
+  assert.equal(presetApp.field('Output keys *').props.value, preset.outputVariable);
+  assert.equal(presetApp.field('Substantive categories *').props.value, preset.allowedValues.join('\n'));
+  assert.equal(presetApp.field('Target type *').props.value, preset.targetType);
+  assert.ok(presetApp.body().includes('What issue matters most?'), 'The saved question is not replaced by a suggestion');
+  assert.equal(presetApp.field('Suggested English question').props.readOnly, true);
+  assert.equal(presetApp.field('Suggested English question').props.value, preset.english);
+  assert.equal(presetApp.field('Suggested Telugu question').props.lang, 'te');
+  assert.equal(presetCalls.filter((call) => call.options).length, 0, 'Applying a preset performs no API write');
+}
+presetApp.find((element) => element.type === 'form').props.onSubmit({ preventDefault() {} }); await tick();
+assert.ok(presetApp.body().includes('Named targets need a stable ID'), 'Leader preset cannot be saved without target identity');
+assert.equal(presetCalls.filter((call) => call.options).length, 0);
+presetApp.button('Download agent review pack').props.onClick(); await tick();
+assert.equal(presetApp.downloads.length, 0, 'The handler independently blocks exports during unsaved editing');
+presetApp.button('Cancel').props.onClick();
+assert.equal(presetApp.button('Download agent review pack').props.disabled, false);
+
+const leaderDefinition = { reportKey: 'leader_assessment', outputVariables: ['leader_assessment'], valueType: 'CATEGORICAL',
+  allowedValues: ['Positive', 'Neutral', 'Negative', 'Mixed'], target: { type: 'LEADER', id: 'leader_demo', name: 'Example leader' }, missingPolicy: 'EXPLICIT_STATES' };
+const packCoverage = fixture('instrument', {
+  questionnaire: { ...fixture().questionnaire, phone_number: 'NEVER_EXPORT_PHONE', secret: 'NEVER_EXPORT_CREDENTIAL' },
+  respondents: [{ name: 'NEVER_EXPORT_RESPONDENT', output: 'NEVER_EXPORT_ANSWER' }],
+  transcript: 'NEVER_EXPORT_TRANSCRIPT',
+  questions: [{ ...fixture().questions[0], text: 'Actual saved question, not a suggestion?', contractValid: true,
+    contract: { ...leaderDefinition, response_variables: 'NEVER_EXPORT_CONTRACT_EXTRA', target: { ...leaderDefinition.target, phone: 'NEVER_EXPORT_TARGET_EXTRA' } },
+    participant: 'NEVER_EXPORT_QUESTION_EXTRA' }]
+});
+const generatedAt = '2026-10-15T12:00:00.000Z';
+const pack = await presets.buildSarvamReviewPack(packCoverage, generatedAt);
+assert.equal(pack.provenance, 'CURRENT_CATALOGUE_NOT_ITERATION_SNAPSHOT');
+assert.equal(pack.sourceFreshness, 'LOADED_COVERAGE_NOT_REVALIDATED_AT_EXPORT', 'Generation time does not certify the latest server catalogue');
+assert.equal(pack.questions[0].questionText, 'Actual saved question, not a suggestion?');
+assert.equal(pack.questions[0].expectedContractFingerprint, 'a'.repeat(64));
+assert.equal(pack.questions[0].contract.target.id, 'leader_demo');
+assert.equal(pack.reviewStatus, 'MANUAL_REVIEW_REQUIRED_NOT_LAUNCH_APPROVAL');
+assert.deepEqual(JSON.parse(JSON.stringify(pack.actionsPerformed)), { providerUpdate: false, agentCommit: false, canaryCall: false, launch: false });
+assert.ok(pack.requiredBeforeLaunch.some((value) => /commit the intended Sarvam agent version/.test(value)));
+assert.ok(pack.requiredBeforeLaunch.some((value) => /approved canary test call/.test(value)));
+assert.doesNotMatch(JSON.stringify(pack), /NEVER_EXPORT/);
+const canonicalPack = (value) => Array.isArray(value) ? value.map(canonicalPack) : value && typeof value === 'object'
+  ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b, 'en-US')).map(([key, item]) => [key, canonicalPack(item)])) : value;
+const payload = Object.fromEntries(Object.entries(pack).filter(([key]) => key !== 'contentFingerprint'));
+assert.equal(pack.contentFingerprint, createHash('sha256').update(JSON.stringify(canonicalPack(payload))).digest('hex'));
+assert.equal((await presets.buildSarvamReviewPack(packCoverage, generatedAt)).contentFingerprint, pack.contentFingerprint);
+assert.notEqual((await presets.buildSarvamReviewPack({ ...packCoverage, questions: [{ ...packCoverage.questions[0], text: 'Changed wording?' }] }, generatedAt)).contentFingerprint, pack.contentFingerprint);
+for (const changes of [
+  { questions: [{ ...packCoverage.questions[0], expectedContractFingerprint: 'invalid' }] },
+  { questions: [packCoverage.questions[0], packCoverage.questions[0]] },
+  { questions: [{ ...packCoverage.questions[0], contractValid: true, contract: null }] }
+]) await assert.rejects(() => presets.buildSarvamReviewPack({ ...packCoverage, ...changes }, generatedAt), /Reload valid current/);
+await assert.rejects(() => presets.buildSarvamReviewPack(packCoverage, 'invalid'), /Reload valid current/);
+const invalidContractPack = await presets.buildSarvamReviewPack({ ...packCoverage, questions: [{ ...packCoverage.questions[0], contractValid: false }] }, generatedAt);
+assert.equal(invalidContractPack.questions[0].contract, null, 'Invalid definitions cannot be exported as valid agent instructions');
+assert.equal(invalidContractPack.questions[0].definitionStatus, 'NOT_DEFINED_OR_INVALID');
+
+const waitUntil = async (condition) => { for (let attempt = 0; attempt < 30 && !condition(); ++attempt) await tick(); assert.ok(condition()); };
+const downloadCalls = [];
+const downloadApp = harness(async (url, options) => { downloadCalls.push({ url, options }); return packCoverage; });
+downloadApp.render(); await downloadApp.flush();
+const downloadAction = downloadApp.button('Download agent review pack').props.onClick;
+downloadAction(); downloadAction();
+await waitUntil(() => downloadApp.downloads.length === 1);
+assert.equal(downloadApp.downloads[0].name, 'sarvam-review-DEMO_INSTRUMENT-v1.json');
+assert.equal(downloadApp.blobs[0].type, 'application/json');
+assert.equal(JSON.parse(await downloadApp.blobs[0].text()).questions[0].questionText, packCoverage.questions[0].text);
+assert.equal(downloadApp.revoked.length, 1, 'Local object URLs are cleaned up');
+assert.equal(downloadCalls.length, 1, 'Export uses verified current coverage, with no additional API request or provider action');
+assert.ok(downloadApp.body().includes('No provider update or call was performed'));
+
+for (const changes of [{ locked: true, usedByIterations: 2 }, { metadataWritable: false }]) {
+  const lockedApp = harness(async () => fixture('instrument', changes));
+  lockedApp.render(); await lockedApp.flush();
+  assert.equal(lockedApp.button('Define reporting outputs'), undefined);
+  assert.equal(lockedApp.button('Download agent review pack').props.disabled, false, 'Frozen/read-only catalogue may be reviewed without being edited');
+  assert.equal(lockedApp.button('Use development priorities preset'), undefined);
+}
+const packWait = deferred();
+const exportRace = harness(async (url) => fixture(url.includes('/instrument/') ? 'instrument' : 'new-instrument'), async (saved) => {
+  const prepared = await presets.buildSarvamReviewPack(saved, generatedAt); await packWait.promise; return prepared;
+});
+exportRace.render(); await exportRace.flush();
+exportRace.button('Download agent review pack').props.onClick();
+exportRace.changeId('new-instrument'); await exportRace.flush();
+packWait.resolve(); await tick(); await tick();
+assert.equal(exportRace.downloads.length, 0, 'A prepared pack from an old instrument cannot download after scope changes');
+assert.ok(!exportRace.body().includes('Review pack downloaded'));
+const failedDownload = harness(async () => fixture(), async () => { throw new Error('Local digest unavailable'); });
+failedDownload.render(); await failedDownload.flush();
+failedDownload.button('Download agent review pack').props.onClick(); await tick();
+assert.ok(failedDownload.body().includes('Unable to prepare the local review pack'));
+assert.equal(failedDownload.downloads.length, 0);
+assert.equal(failedDownload.button('Download agent review pack').props.disabled, false);
+
+console.log('Reporting-contract actual-render validation, neutral presets, local fingerprinted review packs, frozen instruments, no provider writes, scope races, reload and accessibility tests passed.');

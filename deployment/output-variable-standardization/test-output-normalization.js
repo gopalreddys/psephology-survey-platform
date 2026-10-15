@@ -30,6 +30,35 @@ assert.equal(selectStructuredOutput({ response_variables: { candidate_impression
 assert.equal(getSentimentValidation().status, "HUMAN_REVIEW_PENDING");
 assert.match(getSentimentValidation().ruleHash, /^[a-f0-9]{64}$/);
 assert.equal(normalize("a long and complicated story", "candidate_sentiment").status, "UNCODED");
+// Named-leader polarity uses the existing explicit assessment taxonomy only.
+// It does not infer approval from a party/leader name or unstructured praise.
+for (const key of ["leader_assessment", "leader_sentiment"]) {
+  for (const [value, label] of [["good", "Positive"], ["బాగుంది", "Positive"], ["अच्छा", "Positive"],
+    ["not satisfied", "Negative"], ["సంతృప్తి లేదు", "Negative"], ["अच्छा नहीं", "Negative"],
+    ["average", "Neutral"], ["తటస్థం", "Neutral"], ["औसत", "Neutral"],
+    ["both good and bad", "Mixed"], ["మిశ్రమం", "Mixed"], ["मिश्रित", "Mixed"]]) {
+    assert.deepEqual(normalize(value, key), { status: "CODED", label, domain: "assessment", version: "OUTPUT_TAXONOMY_V2" });
+  }
+  for (const [value, status] of [["no answer", "MISSING"], ["can't say", "CANT_SAY"], ["refused", "REFUSED"],
+    ["KCR", "UNCODED"], ["BRS", "UNCODED"], ["previously aware", "UNCODED"],
+    ["a capable leader who will win", "UNCODED"], ["not bad", "UNCODED"], ["None", "UNCODED"]]) {
+    assert.equal(normalize(value, key).status, status, `${key}: ${value} cannot become inferred sentiment`);
+  }
+}
+assert.equal(selectStructuredOutput({ response_variables: { leader_assessment: "good", leader_sentiment: "bad" } }, ["leader_assessment", "leader_sentiment"]).status, "UNCODED");
+assert.equal(selectStructuredOutput({ response_variables: { leader_assessment: "good", leader_sentiment: "Positive" } }, ["leader_assessment", "leader_sentiment"]).label, "Positive");
+assert.equal(selectStructuredOutput({ response_variables: { incumbent_assessment: "good", candidate_impression: "good", perceived_issue_leader_aided: "KCR" } }, ["leader_assessment"]).status, "MISSING", "Other assessments and leader mentions cannot supply the exact named-leader answer");
+assert.equal(selectStructuredOutput({ response_variables: { "\tLEADER_ASSESSMENT\u00a0": "good", leader_assessment: "bad" } }, ["leader_assessment"]).status, "UNCODED", "Conflicting canonical spelling aliases remain unresolved");
+for (const keys of [["development_priority"], ["desired_change"], ["leader_assessment"]]) {
+  const values = keys[0] === "leader_assessment" ? ["good", "bad"] : ["jobs", "education"];
+  const safe = summarizeOutput(Array.from({ length: 10 }, (_, index) => ({ response_variables: { [keys[0]]: values[index < 5 ? 0 : 1] } })), keys);
+  assert.equal(safe.suppressed, false);
+  assert.equal(safe.codedCount, 10);
+  const sparse = summarizeOutput(Array.from({ length: 10 }, (_, index) => ({ response_variables: { [keys[0]]: values[index < 9 ? 0 : 1] } })), keys);
+  assert.equal(sparse.suppressed, true);
+  assert.equal(sparse.respondentBase, null);
+  assert.deepEqual(sparse.values, [], "New report partitions retain whole-partition suppression");
+}
 for (const value of [[], {}, ["BRS", "BJP"]]) assert.equal(normalize(value).status, "UNCODED");
 const records = ["BRS", "TRS", "Can't say", "not recorded", "prefer not to answer", "a story", "None", null]
   .map((value) => ({ response_variables: { party_salience_unaided: value } }));

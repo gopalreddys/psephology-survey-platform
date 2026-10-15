@@ -10,7 +10,7 @@ export const REPORT_CATALOG = Object.freeze([
   { id: 'development_priority', title: 'Development priorities', outputKeys: ['development_priority', 'priority_development'], measureKeys: ['development_priority'], domain: 'issue', caution: 'Development priorities require their own question; general issue answers are not substituted.' },
   { id: 'expected_change', title: 'Expected changes', outputKeys: ['desired_change', 'expected_change', 'change_priority'], measureKeys: ['desired_change'], domain: 'issue', caution: 'Expected changes require their own question; satisfaction or issue priority is not substituted.' },
   { id: 'scheme_experience', title: 'Government scheme experience', outputKeys: ['scheme_experience', 'scheme_satisfaction'], measureKeys: [], domain: 'assessment', targetType: 'SCHEME', caution: 'A specific scheme and experience measure must be identified. Incumbent assessment is not scheme experience.' },
-  { id: 'leader_assessment', title: 'Named-leader assessment', outputKeys: ['leader_assessment', 'leader_sentiment'], measureKeys: [], domain: 'assessment', targetType: 'LEADER', caution: 'A specific leader must be identified. Party attention and aided issue leadership are not leader approval.' }
+  { id: 'leader_assessment', title: 'Named-leader assessment', outputKeys: ['leader_assessment', 'leader_sentiment'], measureKeys: ['leader_assessment'], domain: 'assessment', targetType: 'LEADER', caution: 'A specific leader must be identified. Party attention and aided issue leadership are not leader approval.' }
 ].map((report) => Object.freeze(report)));
 
 export const REPORT_KEYS = Object.freeze(REPORT_CATALOG.map((report) => report.id));

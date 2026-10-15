@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { buildSarvamReviewPack, REPORTING_PRESETS } from "@/lib/reporting-presets";
 import styles from "./questionnaire-reporting-contracts.module.css";
 
 const reportOptions = [
@@ -164,9 +165,11 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ContractDraft>(() => draftFor(null));
   const [formError, setFormError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const requestGeneration = useRef(0);
   const scopeGeneration = useRef(0);
   const saveInFlight = useRef(false);
+  const downloadInFlight = useRef(false);
 
   const load = useCallback(async () => {
     const request = ++requestGeneration.current;
@@ -195,9 +198,11 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
     const requests = requestGeneration;
     const scope = ++scopes.current;
     saveInFlight.current = false;
+    downloadInFlight.current = false;
     void Promise.resolve().then(() => {
       if (scope !== scopes.current) return;
       setSaving(false);
+      setDownloading(false);
       void load();
     });
     return () => { ++scopes.current; ++requests.current; };
@@ -205,10 +210,10 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
 
   const current = coverage?.questionnaire.id === questionnaireId ? coverage : null;
   const readOnly = !current || current.locked || current.usedByIterations > 0 || !current.metadataWritable;
-  const busy = loading || saving;
+  const busy = loading || saving || downloading;
 
   function edit(question: CoverageQuestion) {
-    if (readOnly || busy || saveInFlight.current) return;
+    if (readOnly || busy || saveInFlight.current || downloadInFlight.current) return;
     setEditingId(question.id);
     setDraft(draftFor(question.contract));
     setFormError(null);
@@ -220,8 +225,44 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
     setFormError(null);
   }
 
+  function applyPreset(preset: typeof REPORTING_PRESETS[number]) {
+    if (readOnly || busy || saveInFlight.current || downloadInFlight.current || !editingId) return;
+    setDraft({ reportKey: preset.reportKey, outputVariables: preset.outputVariable, valueType: "CATEGORICAL",
+      allowedValues: preset.allowedValues.join("\n"), targetType: preset.targetType, targetId: "", targetName: "" });
+    setFormError(null);
+    setNotice(null);
+  }
+
+  async function downloadReviewPack() {
+    if (!current || busy || editingId || downloadInFlight.current || saveInFlight.current) return;
+    const scope = scopeGeneration.current;
+    const request = requestGeneration.current;
+    downloadInFlight.current = true;
+    setDownloading(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const pack = await buildSarvamReviewPack(current);
+      if (scope !== scopeGeneration.current || request !== requestGeneration.current) return;
+      const url = URL.createObjectURL(new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" }));
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `sarvam-review-${current.questionnaire.code.replace(/[^a-z0-9_-]/gi, "_")}-v${current.questionnaire.version}.json`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } finally { URL.revokeObjectURL(url); }
+      setNotice("Review pack downloaded from saved current definitions. Manually review and commit the intended Sarvam agent version, then validate an approved test call before launch. No provider update or call was performed.");
+    } catch {
+      if (scope === scopeGeneration.current && request === requestGeneration.current) setError("Unable to prepare the local review pack. Refresh current definitions and try again; no provider update or call was performed.");
+    } finally {
+      if (scope === scopeGeneration.current) { downloadInFlight.current = false; setDownloading(false); }
+    }
+  }
+
   async function save() {
-    if (readOnly || busy || saveInFlight.current || !current || !editingId) return;
+    if (readOnly || busy || saveInFlight.current || downloadInFlight.current || !current || !editingId) return;
     const question = current.questions.find((item) => item.id === editingId);
     if (!question) return;
     let contract: ReportingContract;
@@ -258,13 +299,17 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
           <h2 id="questionnaire-reporting-title">Question-to-report coverage</h2>
           <p>{current ? `${definedCount}/${current.questions.length} question contracts defined · provider delivery not verified` : "Define the outputs a question is intended to collect."}</p>
         </div>
-        <button type="button" onClick={() => { if (!saveInFlight.current) void load(); }} disabled={busy}>Refresh definitions</button>
+        <div className={styles.headerActions}>
+          <button type="button" onClick={() => { if (!saveInFlight.current && !downloadInFlight.current) void load(); }} disabled={busy}>Refresh definitions</button>
+          <button type="button" onClick={() => { void downloadReviewPack(); }} disabled={busy || !current || Boolean(editingId)}>{downloading ? "Preparing review pack…" : "Download agent review pack"}</button>
+        </div>
       </header>
       <details className={styles.help}>
         <summary>How reporting definitions work</summary>
         <p>A contract connects a question to a report, expected output keys, permitted values and a named target where required. It declares planned collection only: saving here does not update a committed Sarvam agent, verify a delivered question, or certify extracted answers.</p>
         <p>Review the committed agent and approved test-call evidence separately before launch. Party mentions are not voting intention; no individual political-lean score is created. NOT_ANSWERED, CANT_SAY and REFUSED are conceptual reporting-state names, not instructions to emit literal provider values. They remain separate from substantive answer categories.</p>
         <p>The current provider normalizer supports wording such as &quot;no answer&quot;, &quot;can&apos;t say&quot; and &quot;refused&quot;. Do not emit underscore tokens from the agent without matching normalizer support. Saving this contract does not configure Sarvam output values.</p>
+        <p>The downloadable review pack contains actual saved wording, questionnaire identity and contract fingerprints from the catalogue loaded in this page—not an Iteration snapshot. Refresh definitions before review; this local download does not recheck concurrent changes. It does not contain unsaved edits, change Sarvam, commit an agent or launch a call. Save or cancel editing before downloading.</p>
       </details>
       {loading && <p className={styles.state} role="status">Loading reporting definitions…</p>}
       {error && <p className={styles.error} role="alert">{error}</p>}
@@ -297,6 +342,12 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
           {editingId === question.id && !readOnly && <form className={styles.editor} onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <fieldset disabled={busy}>
               <legend>Reporting contract for question {question.order}</legend>
+              <div className={styles.presets} role="group" aria-label="Reporting presets">
+                <p>Start with a supported reporting preset. It fills this draft only; question wording is never changed automatically.</p>
+                <div className={styles.presetActions}>{REPORTING_PRESETS.map((preset) => (
+                  <button key={preset.reportKey} type="button" onClick={() => applyPreset(preset)}>Use {preset.label.toLowerCase()} preset</button>
+                ))}</div>
+              </div>
               <div className={styles.grid}>
                 <label>Report *<select value={draft.reportKey} onChange={(event) => {
                   const reportKey = event.target.value as ReportKey;
@@ -316,6 +367,14 @@ export default function QuestionnaireReportingContracts({ questionnaireId }: { q
                   <label>Target name *<input value={draft.targetName} maxLength={160} onChange={(event) => update("targetName", event.target.value)} /></label>
                 </>}
               </div>
+              {REPORTING_PRESETS.filter((preset) => preset.reportKey === draft.reportKey).map((preset) => (
+                <details key={preset.reportKey} className={styles.suggestions}>
+                  <summary>Neutral question suggestions · copy and review</summary>
+                  <p>Author and review a new unused questionnaire for changed collection requirements. These suggestions do not replace the saved question above or update Sarvam. Replace a leader placeholder only with the explicitly identified target.</p>
+                  <label>Suggested English question<textarea readOnly rows={4} value={preset.english} /></label>
+                  <label>Suggested Telugu question<textarea readOnly rows={4} lang="te" value={preset.telugu} /></label>
+                </details>
+              ))}
               <p className={styles.policy}>Missing-answer policy: preserve not answered, can&apos;t say and refused separately. Provider wording must match the supported normalizer; this definition does not configure Sarvam or make an election prediction.</p>
               {formError && <p className={styles.error} role="alert">{formError}</p>}
               <div className={styles.actions}>

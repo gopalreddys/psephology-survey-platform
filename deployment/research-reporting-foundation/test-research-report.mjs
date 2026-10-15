@@ -5,6 +5,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { buildResearchReport as rawBuildResearchReport, canonical } from './research-report.js';
 import { REPORT_CATALOG } from './report-catalog.js';
 import { buildFieldworkDiagnostics, unavailableFieldworkDiagnostics } from './fieldwork-diagnostics.js';
+import { summarizeOutput } from '../output-variable-standardization/output-normalization.repository.js';
 
 const uid = (number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const hash = (value) => createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
@@ -217,11 +218,87 @@ assert.equal(get(report, 'candidate_impression').definitionStatus, 'CONFLICTING_
 report = buildResearchReport({ ...base, snapshot: snapshot([contract('candidate_fit', ['veeresh_criterion_fit'], { target: candidate, allowedValues: ['Strong fit', 'Poor fit'] })]) });
 assert.equal(get(report, 'candidate_fit').captureStatus, 'DESCRIPTIVE_AVAILABLE');
 assert.equal(get(report, 'candidate_impression').definitionStatus, 'UNCONFIGURED', 'Fit is not impression');
-for (const [key, output, type] of [['scheme_experience', 'scheme_experience', 'SCHEME'], ['leader_assessment', 'leader_assessment', 'LEADER']]) {
+for (const [key, output, type] of [['scheme_experience', 'scheme_experience', 'SCHEME']]) {
   report = buildResearchReport({ ...base, snapshot: snapshot([contract(key, [output], { target: { type, id: 'target_1', name: 'Explicit public target' } })]) });
   assert.equal(get(report, key).captureStatus, 'MAPPING_PENDING');
   assert.deepEqual(get(report, key).distribution, [], 'Do not fabricate charts for unsupported calculations');
 }
+// Dedicated future questions have independent exact-key distributions. No
+// issue-priority, incumbent, candidate or party answer fills these constructs.
+const namedLeader = { type: 'LEADER', id: 'public_leader_1', name: 'Named public leader' };
+const newConstructs = [
+  { id: 'development_priority', key: 'development_priority', values: ['jobs', 'education'], labels: ['Employment and jobs', 'Education and universities'], target },
+  { id: 'expected_change', key: 'desired_change', values: ['water', 'skills'], labels: ['Civic services and infrastructure', 'Skills and professional development'], target },
+  { id: 'leader_assessment', key: 'leader_assessment', values: ['good', 'bad'], labels: ['Positive', 'Negative'], target: namedLeader }
+];
+const newContracts = newConstructs.map((item) => contract(item.id, [item.key], { allowedValues: item.labels, target: item.target }));
+const newInstrument = snapshot(newContracts);
+const newRecords = Array.from({ length: 10 }, (_, index) => ({ response_variables: {
+  graduate_issue_priority: 'representation', incumbent_assessment: 'mixed', candidate_impression: 'mixed',
+  party_salience_unaided: 'Congress', perceived_issue_leader_aided: 'BRS',
+  ...Object.fromEntries(newConstructs.map((item) => [item.key, item.values[index < 5 ? 0 : 1]]))
+} }));
+const exactFor = (records, definitions = newConstructs) => Object.fromEntries(definitions.map((item) => [item.id, {
+  source: 'FROZEN_CONTRACT_EXACT_KEYS', outputVariables: [item.key], measure: summarizeOutput(records, [item.key])
+}]));
+report = rawBuildResearchReport({ ...base, snapshot: newInstrument, exactMeasures: exactFor(newRecords) });
+for (const item of newConstructs) {
+  const result = get(report, item.id);
+  assert.equal(result.definitionStatus, 'CONTRACT_RECORDED');
+  assert.equal(result.captureStatus, 'DESCRIPTIVE_AVAILABLE');
+  assert.equal(result.answerBase, 10);
+  assert.equal(result.codedBase, 10);
+  assert.deepEqual(new Set(result.distribution.map((row) => row.value)), new Set(item.labels));
+  assert.ok(result.distribution.every((row) => row.respondents === 5 && row.percentage === 50));
+  assert.deepEqual(result.target, item.id === 'leader_assessment' ? namedLeader : null);
+  assert.ok(!result.distribution.some((row) => ['Representation and accessibility', 'Mixed', 'Congress', 'BRS'].includes(row.value)));
+}
+for (const item of newConstructs) {
+  const instrument = snapshot([newContracts.find((entry) => entry.reportKey === item.id)]);
+  const unrelated = newRecords.map(() => ({ response_variables: { graduate_issue_priority: 'jobs', incumbent_assessment: 'good',
+    candidate_impression: 'good', party_salience_unaided: 'BRS', perceived_issue_leader_aided: 'KCR' } }));
+  const missing = rawBuildResearchReport({ ...base, snapshot: instrument, exactMeasures: exactFor(unrelated, [item]) });
+  assert.notEqual(get(missing, item.id).captureStatus, 'DESCRIPTIVE_AVAILABLE', `${item.id} cannot borrow a different question's answer`);
+  assert.deepEqual(get(missing, item.id).distribution, []);
+  const wrongBinding = exactFor(newRecords, [item]);
+  wrongBinding[item.id].outputVariables = ['incumbent_assessment'];
+  assert.equal(get(rawBuildResearchReport({ ...base, snapshot: instrument, exactMeasures: wrongBinding }), item.id).captureStatus, 'MAPPING_PENDING');
+  const sparse = Array.from({ length: 10 }, (_, index) => ({ response_variables: { [item.key]: item.values[index < 9 ? 0 : 1] } }));
+  const withheld = get(rawBuildResearchReport({ ...base, snapshot: instrument, exactMeasures: exactFor(sparse, [item]) }), item.id);
+  assert.equal(withheld.captureStatus, 'SMALL_CELLS_WITHHELD');
+  for (const key of ['answerBase', 'codedBase', 'respondentBase']) assert.equal(withheld[key], null);
+  assert.deepEqual(withheld.distribution, []);
+  // Missing and uncertainty/refusal are separate from substantive answers;
+  // each state has five observations so no suppressed complement is disclosed.
+  const states = [...Array(5).fill(item.values[0]), ...Array(5).fill(item.values[1]),
+    ...Array(5).fill("can't say"), ...Array(5).fill('refused'), ...Array(5).fill('unrecognized wording'), ...Array(5).fill('no answer')];
+  const stateReport = get(rawBuildResearchReport({ ...base, snapshot: instrument,
+    analysis: analysis({ segment: { respondentBase: 30, suppressed: false } }),
+    exactMeasures: exactFor(states.map((value) => ({ response_variables: { [item.key]: value } })), [item]) }), item.id);
+  assert.equal(stateReport.captureStatus, 'DESCRIPTIVE_AVAILABLE');
+  assert.equal(stateReport.answerBase, 25);
+  assert.equal(stateReport.respondentBase, 30);
+  assert.equal(stateReport.codedBase, 10);
+  for (const value of ["Can't say", 'Declined to answer', 'Uncoded response']) assert.ok(stateReport.distribution.some((row) => row.value === value && row.respondents === 5));
+  assert.ok(!stateReport.distribution.some((row) => row.value === 'no answer'));
+}
+const leaderContract = newContracts.find((item) => item.reportKey === 'leader_assessment');
+for (const invalidTarget of [target, { type: 'CANDIDATE', id: 'candidate_1', name: 'A candidate' }]) {
+  const invalidLeader = snapshot([{ ...leaderContract, target: invalidTarget }]);
+  const result = get(rawBuildResearchReport({ ...base, snapshot: invalidLeader, exactMeasures: exactFor(newRecords) }), 'leader_assessment');
+  assert.equal(result.definitionStatus, 'INVALID_CONTRACT');
+  assert.deepEqual(result.distribution, []);
+}
+const conflictingLeaders = snapshot([leaderContract, { ...leaderContract, outputVariables: ['leader_sentiment'],
+  target: { type: 'LEADER', id: 'public_leader_2', name: 'Different public leader' } }]);
+assert.equal(get(rawBuildResearchReport({ ...base, snapshot: conflictingLeaders, exactMeasures: exactFor(newRecords) }), 'leader_assessment').definitionStatus, 'CONFLICTING_TARGETS');
+const mixedLeaderAliases = snapshot([{ ...leaderContract, outputVariables: ['leader_assessment', 'leader_sentiment'] }]);
+const conflictingAliasReport = rawBuildResearchReport({ ...base, snapshot: mixedLeaderAliases, exactMeasures: {
+  leader_assessment: { source: 'FROZEN_CONTRACT_EXACT_KEYS', outputVariables: ['leader_assessment', 'leader_sentiment'],
+    measure: summarizeOutput(Array.from({ length: 10 }, () => ({ response_variables: { leader_assessment: 'good', leader_sentiment: 'bad' } })), ['leader_assessment', 'leader_sentiment']) }
+} });
+assert.equal(get(conflictingAliasReport, 'leader_assessment').captureStatus, 'INSUFFICIENT_BASE');
+assert.deepEqual(get(conflictingAliasReport, 'leader_assessment').distribution, []);
 const design = { design_declared: true, revision: 3, declared_at: '2026-10-10T10:00:00Z', sampling_method: 'CENSUS',
   weighting_status: 'PLANNED', fieldwork_mode: 'AI_ASSISTED_OUTBOUND_VOICE', cohort_design: 'SAME_PARTICIPANTS', declared_by_user_id: 'secret-actor' };
 report = buildResearchReport({ ...base, design });

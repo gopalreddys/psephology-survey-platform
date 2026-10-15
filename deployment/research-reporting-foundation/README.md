@@ -93,7 +93,12 @@ geography count is not substituted for this evidence. See
 
 Named targets never make unrelated historic candidate answers apply to a new
 candidate. New output keys without analytical support stay mapping-pending.
-Scheme/leader contracts can be authored but do not manufacture those reports.
+Named-leader assessment now supports exact frozen `leader_assessment` or
+`leader_sentiment` keys with a required LEADER identity; scheme calculations
+remain mapping-pending. Guided question/contract presets, a local Sarvam review
+pack and on-demand native distributions are described in the
+[15 October reporting completion](../../docs/reporting-completion-20261015.md).
+These source changes do not configure an agent or add new published Quick charts.
 Missing values are not zero. Small bases/cells are withheld in the downloadable
 report, and no voter identities, phones, individual scores or transcripts are
 included. The checksum identifies the artifact, not an independent certification.
@@ -175,8 +180,9 @@ it requires a new output filename and does not query the API.
   dispositions and coverage/nonresponse diagnostics before population claims.
 - Build and validate weights/effective sample sizes and justified uncertainty.
 - Approve common-core questions before comparing changed stage instruments.
-- Add official historical election baselines and dedicated scheme/leader
-  calculations before labeling those reports implemented.
+- Add official historical election baselines and dedicated scheme calculations
+  before labeling those reports implemented. Validate actual question delivery
+  and named-target extraction separately from native leader-report capability.
 - Complete production security, consent/suppression, calling limits, restore,
   monitoring and scale gates separately.
 

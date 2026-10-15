@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { canonical } from './research-report.js';
+import { buildNormalizationSqlFunction, normalizeOutputValue } from '../output-variable-standardization/output-normalization.repository.js';
 
 const { PGlite } = await import(process.env.PGLITE_MODULE_PATH
   ? pathToFileURL(process.env.PGLITE_MODULE_PATH).href : '@electric-sql/pglite');
@@ -34,6 +35,17 @@ const load = () => loadResearchReport(campaignId, { role_code: 'ADMIN' }, {}, { 
 const get = (report) => report.reports.find((item) => item.id === 'party_salience');
 
 try {
+  // Execute the same generated SQL normalizer used by Quick, not a test rewrite.
+  await db.exec(buildNormalizationSqlFunction());
+  for (const key of ['leader_assessment', 'leader_sentiment', 'development_priority', 'expected_change']) {
+    for (const value of [null, '', 'no answer', "can't say", 'refused', {},
+      'good', 'bad', 'average', 'mixed', 'బాగుంది', 'సంతృప్తి లేదు', 'अच्छा नहीं',
+      'jobs', 'education', 'water', 'skills', 'KCR', 'BRS', 'unrecognized wording']) {
+      const canonicalKey = `\t${key.toUpperCase()}\u00a0`;
+      const sqlResult = await db.query('SELECT analytics_normalize_output_v1($1, $2::jsonb) AS result', [canonicalKey, JSON.stringify(value)]);
+      assert.deepEqual(sqlResult.rows[0].result, normalizeOutputValue(canonicalKey, value), `${key}: SQL and JavaScript must share the identical taxonomy`);
+    }
+  }
   await db.exec(`
     CREATE TABLE campaigns (id uuid PRIMARY KEY, status text);
     CREATE TABLE program_iterations (id uuid PRIMARY KEY, questionnaire_id uuid, questionnaire_snapshot jsonb, voice_agent_snapshot jsonb);
@@ -139,7 +151,88 @@ try {
   report = await loadResearchReport(campaignId, {}, {}, { analyze: async () => mismatched, getDb: async () => db });
   assert.equal(report.fieldworkDiagnostics.sources.analysisBaseAlignment, 'MISMATCH');
   assert.equal(report.checks.find((check) => check.id === 'fieldwork-analysis-alignment').status, 'REVIEW_REQUIRED');
-  console.log('PostgreSQL research report exact-key projection, deduplication, missingness, filters, source freshness and schema fallback tests passed.');
+  // A separate future instrument exercises all three newly surfaced report
+  // constructs. Its leader target and exact keys must not borrow a party name,
+  // another assessment, a sibling alias, a different Iteration or an older call.
+  const futureCampaign = uid(1000), futureIteration = uid(1001), futureQuestionnaire = uid(1002), otherIteration = uid(1003);
+  const leader = { type: 'LEADER', id: 'public_leader_1', name: 'Named public leader' };
+  const constructs = [
+    { id: 'development_priority', key: 'development_priority', values: ['jobs', 'education'], labels: ['Employment and jobs', 'Education and universities'], target: { type: 'NONE', id: '', name: '' } },
+    { id: 'expected_change', key: 'expected_change', values: ['water', 'skills'], labels: ['Civic services and infrastructure', 'Skills and professional development'], target: { type: 'NONE', id: '', name: '' } },
+    { id: 'leader_assessment', key: 'leader_sentiment', values: ['good', 'bad'], labels: ['Positive', 'Negative'], target: leader }
+  ];
+  const futureQuestions = constructs.map((item, index) => ({ question_order: index + 1, question_code: `Q_NEW_${index + 1}`,
+    question_text: `Neutral dedicated research question ${index + 1}?`, metadata: { output_variables: [item.key],
+      reporting_contract: { reportKey: item.id, outputVariables: [item.key], valueType: 'CATEGORICAL',
+        allowedValues: item.labels, target: item.target, missingPolicy: 'EXPLICIT_STATES' } } }));
+  const futureSnapshot = { id: futureQuestionnaire, code: 'FUTURE_RESEARCH_1', version: 1, snapshot_schema_version: 2,
+    question_provenance: 'FROZEN_AT_SELECTION', questions: futureQuestions,
+    content_fingerprint: createHash('sha256').update(JSON.stringify(canonical(futureQuestions))).digest('hex') };
+  await db.query("INSERT INTO campaigns VALUES ($1,'ACTIVE')", [futureCampaign]);
+  await db.query('INSERT INTO program_iterations VALUES ($1,$2,$3::jsonb,NULL),($4,$2,$3::jsonb,NULL)', [futureIteration, futureQuestionnaire, JSON.stringify(futureSnapshot), otherIteration]);
+  await db.query('INSERT INTO campaign_iteration_links VALUES ($1,$2),($1,$3)', [futureCampaign, futureIteration, otherIteration]);
+  const futureAnalysis = () => ({ ...analysis(), campaign: { id: futureCampaign, code: 'FUTURE', name: 'Future research', status: 'ACTIVE' },
+    scope: { ...analysis().scope, iteration: { id: futureIteration, number: 1, name: 'Future Iteration', completed: true },
+      insightScope: { iterationId: futureIteration, filters: { gender: 'Female', ageBand: '30–39', mandal: 'Serilingampally' } } },
+    segment: { respondentBase: 10, suppressed: false } });
+  const futureLoad = () => loadResearchReport(futureCampaign, { role_code: 'ADMIN' }, {}, { analyze: async () => futureAnalysis(), getDb: async () => db });
+  const futureGet = (result, key) => result.reports.find((entry) => entry.id === key);
+  function futureValues(index) {
+    const values = Object.fromEntries(constructs.map((item) => [item.key, item.values[index < 5 ? 0 : 1]]));
+    if (index === 0) { values['\tLEADER_SENTIMENT\u00a0'] = values.leader_sentiment; delete values.leader_sentiment; }
+    return { ...values, priority_development: 'representation', desired_change: 'jobs', leader_assessment: 'mixed',
+      graduate_issue_priority: 'representation', incumbent_assessment: 'neutral', candidate_impression: 'mixed',
+      party_salience_unaided: 'Congress', perceived_issue_leader_aided: 'KCR',
+      voter_name: 'NEVER_EXPORT_NEW_REPORT_NAME', phone_number: '9999999999' };
+  }
+  for (let index = 0; index < 25; index++) {
+    const gender = index >= 10 && index < 15 ? 'male' : 'female';
+    const age = index >= 15 && index < 20 ? 25 : 35;
+    const mandal = index >= 20 ? 'Another Mandal' : 'Serilingampally';
+    await db.query('INSERT INTO voter_master VALUES ($1,$2,$3,$4)', [uid(1100 + index), gender, age, mandal]);
+    // Old eligible answers and the same voters in another Iteration carry
+    // different values. Neither may enter the future instrument's latest scope.
+    await db.query("INSERT INTO calls (id,iteration_id,voter_id,connectivity_status,response_variables,updated_at,first_seen_at) VALUES ($1,$2,$3,'connected',$4::jsonb,'2026-10-08T10:00:00Z','2026-10-08T09:00:00Z')",
+      [uid(1200 + index), futureIteration, uid(1100 + index), JSON.stringify({ development_priority: 'roads', expected_change: 'jobs', leader_sentiment: 'mixed' })]);
+    await db.query("INSERT INTO calls (id,iteration_id,voter_id,connectivity_status,response_variables,updated_at,first_seen_at) VALUES ($1,$2,$3,'connected',$4::jsonb,'2026-10-10T10:00:00Z','2026-10-10T09:00:00Z')",
+      [uid(1300 + index), futureIteration, uid(1100 + index), JSON.stringify(futureValues(index))]);
+    await db.query("INSERT INTO calls (id,iteration_id,voter_id,connectivity_status,response_variables,updated_at,first_seen_at) VALUES ($1,$2,$3,'connected',$4::jsonb,'2026-10-12T10:00:00Z','2026-10-12T09:00:00Z')",
+      [uid(1400 + index), otherIteration, uid(1100 + index), JSON.stringify({ development_priority: 'roads', expected_change: 'jobs', leader_sentiment: 'mixed' })]);
+  }
+  report = await futureLoad();
+  for (const item of constructs) {
+    const result = futureGet(report, item.id);
+    assert.equal(result.captureStatus, 'DESCRIPTIVE_AVAILABLE', `${item.id}: exact filtered current instrument distribution`);
+    assert.equal(result.answerBase, 10);
+    assert.equal(result.codedBase, 10);
+    assert.deepEqual(new Set(result.distribution.map((row) => row.value)), new Set(item.labels));
+    assert.ok(result.distribution.every((row) => row.respondents === 5 && row.percentage === 50));
+    assert.deepEqual(result.outputVariables, [item.key]);
+  }
+  assert.deepEqual(futureGet(report, 'leader_assessment').target, leader);
+  assert.equal(report.sources.latestEvidenceAt, '2026-10-10T10:00:00.000Z');
+  assert.ok(!JSON.stringify(report).includes('NEVER_EXPORT_NEW_REPORT_NAME'));
+  assert.ok(!JSON.stringify(report).includes('9999999999'));
+  // Later disconnected or empty rows do not erase eligible evidence.
+  for (const [id, status, variables] of [[1500, 'disconnected', { development_priority: 'roads', expected_change: 'jobs', leader_sentiment: 'mixed' }], [1501, 'connected', {}]]) {
+    await db.query("INSERT INTO calls (id,iteration_id,voter_id,connectivity_status,response_variables,updated_at,first_seen_at) VALUES ($1,$2,$3,$4,$5::jsonb,'2026-10-13T10:00:00Z','2026-10-13T09:00:00Z')",
+      [uid(id), futureIteration, uid(1100), status, JSON.stringify(variables)]);
+  }
+  report = await futureLoad();
+  for (const item of constructs) assert.equal(futureGet(report, item.id).captureStatus, 'DESCRIPTIVE_AVAILABLE');
+  // A latest nonempty row with only other aliases cannot revive older exact
+  // answers. Its one-person missing complement suppresses the whole partition.
+  await db.query("INSERT INTO calls (id,iteration_id,voter_id,connectivity_status,response_variables,updated_at,first_seen_at) VALUES ($1,$2,$3,'connected',$4::jsonb,'2026-10-14T10:00:00Z','2026-10-14T09:00:00Z')",
+    [uid(1502), futureIteration, uid(1100), JSON.stringify({ priority_development: 'jobs', desired_change: 'water', leader_assessment: 'good', incumbent_assessment: 'good' })]);
+  report = await futureLoad();
+  for (const item of constructs) {
+    const result = futureGet(report, item.id);
+    assert.equal(result.captureStatus, 'SMALL_CELLS_WITHHELD');
+    for (const key of ['answerBase', 'codedBase', 'respondentBase']) assert.equal(result[key], null);
+    assert.deepEqual(result.distribution, []);
+  }
+  assert.equal(report.sources.latestEvidenceAt, '2026-10-14T10:00:00.000Z');
+  console.log('PostgreSQL research report exact-key projection, three dedicated constructs, normalization parity, deduplication, missingness, filters, source freshness and schema fallback tests passed.');
 } finally {
   await db.close();
 }

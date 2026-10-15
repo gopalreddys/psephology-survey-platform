@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "RESEARCH_REPORTING_COMPLETION_20261015_V1",
+  "requiredFiles": [
+    "src/db/postgres.js",
+    "src/repositories/research-report.repository.js",
+    "src/repositories/research-scope.repository.js",
+    "src/repositories/reporting-contract.validation.js",
+    "src/repositories/reporting-contract.repository.js"
+  ],
+  "requiredMounts": [
+    { "module": "./routes/reporting-contract.routes.js", "binding": "reportingContractRoutes", "prefix": "/api" },
+    { "module": "./routes/research-report.routes.js", "binding": "researchReportRoutes", "prefix": "/api" }
+  ],
+  "files": [
+    { "source": "deployment/output-variable-standardization/output-normalization.repository.js", "target": "src/repositories/output-normalization.repository.js" },
+    { "source": "deployment/output-variable-standardization/normalization-rules.json", "target": "src/repositories/normalization-rules.json" },
+    { "source": "deployment/research-reporting-foundation/report-catalog.js", "target": "src/repositories/report-catalog.js" },
+    { "source": "deployment/research-reporting-foundation/sync-reporting-normalization.mjs", "target": "src/db/sync-reporting-normalization.mjs", "allowNew": true }
+  ],
+  "separateApprovedSteps": [
+    "Stop the API and acknowledge it before multi-file promotion; this installer never controls services.",
+    "Synchronize only the current SQL normalization function with a reviewed dry-run definition hash and durable backup; do not replay historical migrations or reporting views.",
+    "Deploy the matching frontend and perform live role/contract/preview validation separately.",
+    "Manually configure and commit Sarvam, then verify an approved canary. No provider or Quick dashboard changes are part of this release."
+  ]
+}

@@ -8,7 +8,8 @@ No synthetic responses are mixed with captured survey evidence.
 
 ## Report-to-source coverage
 
-This is a source-code audit updated on 11 October 2026, not a declaration that
+This is a source-code audit with the 15 October native reporting follow-up noted
+below, not a declaration that
 every deployed agent version has returned these fields. The reviewed Quick
 dashboard was published on 10 October as version 7: six sheets, 41 visuals and
 six intended staged dataset bindings, with zero AWS definition errors. Full
@@ -43,8 +44,10 @@ For each intended report:
 1. Define the construct, neutral question, output key, allowed values and separate
    missing/uncertainty/refusal states. Record target candidate/party where relevant.
 2. Retain the questionnaire identity and frozen question content for the Iteration.
-   The current questionnaire editor does not author `outputVariables`; the JSON
-   instrument or a future editor extension must retain this metadata explicitly.
+   The existing reporting-contract editor authors question-level output metadata
+   and future snapshots retain it. The 15 October follow-up adds guided presets
+   and a local Sarvam review-pack download; source implementation is not proof
+   of live-agent configuration or delivery.
 3. Configure and commit the matching Sarvam question and extraction field. Normal
    Campaign Runs currently use the compact phone-tested handoff with empty
    `questionnaire_context` and `research_context`; do not assume new platform
@@ -82,14 +85,20 @@ recoverable, and the diagnostic dashboard is retained privately, outside the
 platform embedding integration. Sparse values were not treated as a substitute
 for resolving technical errors.
 
-Release work remaining after the cloud publication: commit/deploy the native
+Historical 11 October checkpoint (superseded by the completed 15 October
+consolidation release): commit/deploy the native
 dashboard simplification, verify the authenticated in-platform embed and role
 access for that release, and retain final deployment/baseline evidence. Refresh
 SPICE if newer survey evidence must be presented. Keep actual sentiment review
 and missing historical methodology declarations visible; do not infer sign-off
 or invent declarations from code tests.
 
-Development/expected-change Quick reporting, personal-leader assessment and
-generalized candidate/party-qualified measures are not end-to-end certified by
-the current instrument. They can be shown as planned report capabilities, but
-must not be presented as implemented collection paths or validated predictions.
+Development/expected-change Quick reporting and generalized candidate/party-
+qualified measures are not end-to-end certified by the current instrument. The
+15 October source follow-up enables native exact-contract named-leader
+assessment and on-demand distributions, with dedicated question presets for
+all three new measures. It does not add those constructs to the published Quick
+dashboard or configure a live agent. See
+[the implementation and release boundary](./reporting-completion-20261015.md).
+Do not present source capability, presets or saved metadata as delivered
+questions, validated sentiment or predictions.

@@ -53,7 +53,7 @@
     },
     {
       "name": "assessment",
-      "keys": ["veeresh_impression", "candidate_sentiment", "candidate_impression", "incumbent_assessment", "issue_sentiment", "development_sentiment", "change_sentiment"],
+      "keys": ["veeresh_impression", "candidate_sentiment", "candidate_impression", "incumbent_assessment", "issue_sentiment", "development_sentiment", "change_sentiment", "leader_assessment", "leader_sentiment"],
       "multipleLabel": "Uncoded response",
       "categories": [
         {"label": "Positive", "pattern": "^(positive|good|very good|excellent|favourable|favorable|satisfied|very satisfied|బాగుంది|చాలా బాగుంది|మంచి|సంతృప్తి|अच्छा|बहुत अच्छा|संतुष्ट)$"},
