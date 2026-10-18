@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateIdentifier, validateRegistration } from "./voter-electorate.validation.js";
+import { patchOutboundClient } from "../outbound-consent/patch-outbound-client.mjs";
 
 const identifier = validateIdentifier({
   identifierType: "mlc_graduate_roll",
@@ -42,6 +43,22 @@ try {
     'import votersRoutes from "./routes/voters.routes.js";',
     'app.use("/api", votersRoutes);'
   ].join("\n"));
+  const beforePrerequisites = readFileSync(serverPath, "utf8");
+  assert.throws(() => execFileSync(process.execPath, [path.join(here, "install-voter-electorate-management.js"), fixture], {
+    stdio: ["ignore", "pipe", "pipe"]
+  }), error => /coordinated outbound-consent installer and 035 migration/.test(String(error.stderr)));
+  assert.equal(readFileSync(serverPath, "utf8"), beforePrerequisites);
+  assert.deepEqual(readdirSync(path.join(fixture, "src")), ["server.js"], "Consent preflight rejects the legacy installer before any partial feature directories or files are created");
+  // Explicit provider-free installed consent artifacts; their presence does
+  // not claim that a production database migration has been executed.
+  for (const directory of ["src/repositories", "src/clients", "sql"]) mkdirSync(path.join(fixture, directory), { recursive: true });
+  writeFileSync(path.join(fixture, "src/repositories/outbound-consent.repository.js"),
+    readFileSync(new URL("../outbound-consent/outbound-consent.repository.js", import.meta.url)));
+  writeFileSync(path.join(fixture, "sql/035_outbound_contact_suppression.sql"),
+    readFileSync(new URL("../outbound-consent/035_outbound_contact_suppression.sql", import.meta.url)));
+  writeFileSync(path.join(fixture, "src/clients/sarvam.js"), patchOutboundClient(
+    "export async function createInstantOutboundCall(options) { return options; }\n"
+  ));
   execFileSync(process.execPath, [path.join(here, "install-voter-electorate-management.js"), fixture]);
   const installed = readFileSync(serverPath, "utf8");
   assert.match(installed, /VOTER_ELECTORATE_MANAGEMENT_V1/);

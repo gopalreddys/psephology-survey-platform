@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertLegacyConsentPrerequisites } from "../outbound-consent/assert-legacy-consent-prerequisites.mjs";
 
 import {
   hasCorrectAgentVariableHandoff,
@@ -11,6 +12,7 @@ const runtimeRoot = path.resolve(
   process.argv[2] || "/opt/sarvam-voice-analytics"
 );
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
+await assertLegacyConsentPrerequisites(runtimeRoot);
 
 async function copy(sourceName, destination) {
   await mkdir(path.dirname(destination), { recursive: true });

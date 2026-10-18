@@ -7,6 +7,7 @@ import {
 import {
   ADDITIONAL_INSIGHT_VISUALS, EXISTING_VISUAL_NOTES, ANSWER_STATE_LABELS
 } from "./quick-insight-catalog.mjs";
+import { reportingCategoryLabels, OUTPUT_KEYS } from "../output-variable-standardization/output-normalization.repository.js";
 
 // Entirely offline: no production definitions, credentials, or cloud calls.
 const bindings = Object.entries(REPORTING_VIEWS).map(([role, view]) => ({
@@ -73,6 +74,33 @@ for (const sheet of definition.Sheets) {
 }
 assert.equal(validatePublicationCandidate(candidate).valid, true, JSON.stringify(validatePublicationCandidate(candidate).errors));
 assert.deepEqual(existingDefinition.Options, { WeekStart: "MONDAY", QBusinessInsightsStatus: "DISABLED" });
+
+// A newly recognized explicit aided Other value must join every affected
+// whole-partition guard, not just its chart palette or display dictionary.
+const otherIndex = reportingCategoryLabels(OUTPUT_KEYS.leadership).indexOf("Other");
+assert.ok(otherIndex >= 0, "The shared aided-group dictionary includes the exact V1 Other category");
+const otherPersonKey = `quick_partition_leadership_${otherIndex}_person_key`;
+assert.equal(calculation(otherPersonKey)?.Expression, 'ifelse({party_leadership} = "Other", {respondent_key}, NULL)');
+const leadershipPartitionGuards = candidate.partitionGuards.filter((guard) => guard.kinds.includes("leadership"));
+assert.ok(leadershipPartitionGuards.length > 0);
+for (const guard of leadershipPartitionGuards) {
+  const { body } = visuals.get(guard.visualId);
+  const partitions = privacyPartitionColumns(body, "enterprise").filter((name) => !["party_leadership", "party_leadership_status", "quick_issue_answer_state", "quick_party_label"].includes(name));
+  const count = `quick_partition_leadership_${otherIndex}_${partitions.join("_") || "all"}_count`;
+  assert.equal(calculation(count)?.Expression, uniquePersonWindowExpression(otherPersonKey, partitions));
+  assert.ok(calculation(guard.column)?.Expression.includes(`({${count}} > 0 AND {${count}} < 5)`), `${guard.visualId}: sparse Other suppresses the entire group partition`);
+  assert.equal(numericGuard(guard)?.RangeMinimum.StaticValue, 5, `${guard.visualId}: the complete partition is actually filtered`);
+}
+const missingOtherDictionary = structuredClone(candidate);
+missingOtherDictionary.definition.CalculatedFields = missingOtherDictionary.definition.CalculatedFields.filter((field) => field.Name !== otherPersonKey);
+assert.equal(validatePublicationCandidate(missingOtherDictionary).valid, false, "An older definition that lacks Other's person dictionary is rejected");
+const missingOtherPartition = structuredClone(candidate);
+const firstOtherGuard = leadershipPartitionGuards[0];
+const otherSafeField = missingOtherPartition.definition.CalculatedFields.find((field) => field.Name === firstOtherGuard.column);
+const otherSafeCheck = otherSafeField.Expression.match(new RegExp(`\\(\\{quick_partition_leadership_${otherIndex}_[^}]+\\} > 0 AND \\{quick_partition_leadership_${otherIndex}_[^}]+\\} < 5\\)`))?.[0];
+assert.ok(otherSafeCheck);
+otherSafeField.Expression = otherSafeField.Expression.replace(`${otherSafeCheck} OR `, "").replace(` OR ${otherSafeCheck}`, "");
+assert.equal(validatePublicationCandidate(missingOtherPartition).valid, false, "Dropping Other from a whole-partition expression is rejected even if its dictionary remains");
 
 const expectedAxisLabels = {
   age_band: "Age group", gender: "Gender", mandal_name: "Mandal",

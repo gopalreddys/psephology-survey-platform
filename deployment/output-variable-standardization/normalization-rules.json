@@ -23,12 +23,13 @@
       "name": "leadership",
       "keys": ["perceived_issue_leader_aided", "perceived_issue_leader", "leadership_preference", "party_leadership"],
       "categoryDomain": "party",
-      "selectionPattern": "^(brs|trs|brs government|brs party|bharat rashtra samithi|telangana rashtra samithi|bjp|bjp party|bharatiya janata party|congress|congress government|inc|indian national congress|cpi|cpm|communist / left|communist|left|left parties|independent|independent / graduate group|graduate group|kcr|k[.]? chandrashekar rao|kalvakuntla chandrashekar rao|ktr|k[.]? t[.]? rama rao|revanth reddy|a[.]? revanth reddy|బీఆర్ఎస్|బీజేపీ|కాంగ్రెస్)$",
+      "selectionPattern": "^(brs|trs|brs government|brs party|bharat rashtra samithi|telangana rashtra samithi|bjp|bjp party|bharatiya janata party|congress|congress government|inc|indian national congress|cpi|cpm|communist / left|communist|left|left parties|independent|independent / graduate group|independent or graduate group|graduate group|other|kcr|k[.]? chandrashekar rao|kalvakuntla chandrashekar rao|ktr|k[.]? t[.]? rama rao|revanth reddy|a[.]? revanth reddy|బీఆర్ఎస్|బీజేపీ|కాంగ్రెస్)$",
       "multipleLabel": "Multiple leaders mentioned",
       "categories": [
         {"label": "K. Chandrashekar Rao", "pattern": "(^|[^a-z])kcr([^a-z]|$)|chandrashekar rao"},
         {"label": "K. T. Rama Rao", "pattern": "(^|[^a-z])ktr([^a-z]|$)|rama rao"},
-        {"label": "Revanth Reddy", "pattern": "revanth reddy"}
+        {"label": "Revanth Reddy", "pattern": "revanth reddy"},
+        {"label": "Other", "pattern": "^other$"}
       ]
     },
     {
@@ -95,11 +96,20 @@
     },
     {
       "name": "awareness",
-      "keys": ["veeresh_awareness", "candidate_awareness", "incumbent_awareness", "mlc_role_awareness"],
+      "keys": ["veeresh_awareness", "candidate_awareness", "incumbent_awareness"],
       "multipleLabel": "Uncoded response",
       "categories": [
         {"label": "Previously aware", "pattern": "^(yes|aware|previously aware|heard of|heard of him|familiar|very familiar|somewhat familiar|know|well aware)$"},
         {"label": "Not previously aware", "pattern": "^(no|unaware|not aware|not previously aware|not heard|never heard|not familiar)$"}
+      ]
+    },
+    {
+      "name": "mlc_role_awareness",
+      "keys": ["mlc_role_awareness"],
+      "categoryDomain": "awareness",
+      "multipleLabel": "Uncoded response",
+      "categories": [
+        {"label": "Previously aware", "pattern": "^heard of the role but not the duties$"}
       ]
     }
   ]

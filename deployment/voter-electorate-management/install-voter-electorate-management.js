@@ -1,11 +1,13 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertLegacyConsentPrerequisites } from "../outbound-consent/assert-legacy-consent-prerequisites.mjs";
 
 const runtimeRoot = path.resolve(process.argv[2] || "/opt/sarvam-voice-analytics");
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(runtimeRoot, "src/server.js");
 const marker = "VOTER_ELECTORATE_MANAGEMENT_V1";
+await assertLegacyConsentPrerequisites(runtimeRoot);
 
 await mkdir(path.join(runtimeRoot, "src/repositories"), { recursive: true });
 await mkdir(path.join(runtimeRoot, "src/routes"), { recursive: true });

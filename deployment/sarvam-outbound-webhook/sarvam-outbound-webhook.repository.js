@@ -4,8 +4,10 @@ import { getDb } from "../db/postgres.js";
 import { reconcileRunLifecycle } from "./run-lifecycle.repository.js";
 import {
   classifyCallCompletion,
-  DEFAULT_TECHNICAL_VARIABLES
+  DEFAULT_TECHNICAL_VARIABLES,
+  requestsDoNotCall
 } from "./call-completion-policy.js";
+import { recordOutboundOptOut, hasRecordedOutboundOptOut } from "./outbound-consent.repository.js";
 import {
   recordVoterDemoCallOutcome
 } from "./voter-demo-calls.repository.js";
@@ -146,6 +148,10 @@ export async function recordSarvamOutboundResult(payload) {
         ? payload.final_agent_variables
         : {})
     };
+    // Neither container may erase an explicit stop in the other. Preserve the
+    // existing merged evidence below and the full raw payload for audit.
+    const explicitOptOut = [payload.output_agent_variables, payload.final_agent_variables]
+      .some((variables) => variables && typeof variables === "object" && requestsDoNotCall(variables));
 
     const executionResult = await db.query(
       `
@@ -153,7 +159,8 @@ export async function recordSarvamOutboundResult(payload) {
           execution.*,
           run.iteration_id,
           iteration.study_id,
-          voter.is_demo_contact
+          voter.is_demo_contact,
+          voter.phone_number AS current_phone_number
         FROM call_executions execution
         LEFT JOIN campaign_runs run ON run.id = execution.run_id
         LEFT JOIN program_iterations iteration ON iteration.id = run.iteration_id
@@ -162,6 +169,7 @@ export async function recordSarvamOutboundResult(payload) {
            OR (
              $2::uuid IS NOT NULL
              AND execution.id = $2::uuid
+             AND execution.provider_attempt_id IS NULL
            )
         ORDER BY
           CASE WHEN execution.provider_attempt_id = $1 THEN 0 ELSE 1 END,
@@ -207,6 +215,14 @@ export async function recordSarvamOutboundResult(payload) {
         : null;
 
       if (demoOutcome) {
+        // The matched database request, not untrusted linkage metadata, owns
+        // this identity. Opt-out commits atomically with callback acceptance.
+        if (explicitOptOut) {
+          const voterResult = await db.query("SELECT phone_number FROM voter_master WHERE id=$1::uuid", [demoOutcome.voter_id]);
+          await recordOutboundOptOut(db, { voterId: demoOutcome.voter_id,
+            phoneNumbers: [demoOutcome.submitted_phone_snapshot, voterResult.rows[0]?.phone_number], sourceAttemptId: attemptId,
+            source: "SARVAM_STANDALONE_DEMO" });
+        }
         await db.query(
           `
             UPDATE sarvam_outbound_webhook_events
@@ -253,9 +269,19 @@ export async function recordSarvamOutboundResult(payload) {
       [String(execution.run_id)]
     );
 
+    const submittedPhone = execution.request_payload?.user_config?.user_phone_number ||
+      execution.request_payload?.body?.user_config?.user_phone_number;
+    const phoneNumbers = [submittedPhone, execution.current_phone_number];
+    if (explicitOptOut) {
+      await recordOutboundOptOut(db, { voterId: execution.voter_id,
+        phoneNumbers, sourceAttemptId: attemptId, source: "SARVAM_RUN_CALLBACK" });
+    }
+    const suppressed = await hasRecordedOutboundOptOut(db, { voterId: execution.voter_id, phoneNumbers });
     const completion = classifyCallCompletion({
       providerStatus,
-      finalVariables,
+      // Preserve raw provider outputs below. A later conflicting callback may
+      // update attempt evidence but cannot reactivate an opted-out contact.
+      finalVariables: suppressed ? { ...finalVariables, do_not_call: true } : finalVariables,
       technicalVariables: TECHNICAL_VARIABLES
     });
     const {

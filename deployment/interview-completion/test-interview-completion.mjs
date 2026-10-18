@@ -135,14 +135,58 @@ async function test() {
   detail = build({ questionnaire_snapshot: multi, response_variables: { public_need: 'Roads' } });
   assert.equal(detail.status, 'PARTIAL_RECORDED'); assert.equal(detail.coverage.substantiveQuestions, 0);
   for (const value of ['CANT_SAY', 'REFUSED']) unresolved({ questionnaire_snapshot: multi, response_variables: { public_need: 'Roads', need_reason: value, awareness: 'Familiar' } }, 'MIXED_EXPLICIT_OUTPUT_STATE_UNRESOLVED');
-  for (const denied of [{ consent: false }, { consent_status: 'denied' }, { consent_status: 'no_consent' }, { wrong_number: true }, { do_not_call: true }, { disposition: 'WRONG_NUMBER' }, { disposition: 'NO_CONSENT' }]) {
+  for (const denied of [{ consent: false }, { consent_status: 'denied' }, { consent_status: 'no_consent' }, { wrong_number: true }, { wrong_person: true }, { do_not_call: true },
+    { disposition: 'WRONG_NUMBER' }, { disposition: 'wrong_person' }, { disposition: 'NO_CONSENT' }]) {
     detail = build({ response_variables: { ...sourceRow().response_variables, ...denied } });
     assert.equal(detail.status, 'NO_SUBSTANTIVE_RECORD'); assert.deepEqual(detail.coverage, nullCoverage);
   }
   unresolved({ response_variables: { ...sourceRow().response_variables, consent: 'possibly' } }, 'CONSENT_STATE_UNRESOLVED');
   unresolved({ response_variables: { ...sourceRow().response_variables, consent: true, disposition: 'DO_NOT_CALL' } }, 'PARTICIPATION_STATE_CONFLICT');
+  unresolved({ response_variables: { ...sourceRow().response_variables, consent: true, wrong_person: true } }, 'PARTICIPATION_STATE_CONFLICT');
+  unresolved({ response_variables: { ...sourceRow().response_variables, Wrong_Person: true } }, 'OUTPUT_KEY_CASE_CONFLICT');
+  unresolved({ response_variables: { ...sourceRow().response_variables, wrong_person: 'possibly' } }, 'DISPOSITION_STATE_UNRESOLVED');
   unresolved({ response_variables: { ...sourceRow().response_variables, disposition: 'incomplete' } }, 'PARTIAL_DISPOSITION_CONFLICT');
   assert.equal(build({ response_variables: { public_need: 'Roads', disposition: 'partial' } }).status, 'PARTIAL_RECORDED');
+  for (const field of ['call_disposition', 'respondent_status', 'disposition']) {
+    for (const completed of ['survey_completed', 'Survey completed.', 'SURVEY-COMPLETED']) {
+      assert.equal(build({ response_variables: { ...sourceRow().response_variables, [field]: completed } }).status, 'COMPLETE_RECORDED');
+      assert.equal(build({ response_variables: { public_need: 'Roads', [field]: completed } }).status, 'PARTIAL_RECORDED');
+      assert.equal(build({ response_variables: { [field]: completed } }).status, 'NO_SUBSTANTIVE_RECORD');
+      // Recognition of a completion label cannot supply consent, required
+      // answers, the correct instrument, terminal callback or transcript.
+      assert.equal(build({ response_variables: { ...sourceRow().response_variables, [field]: completed, consent: false } }).status, 'NO_SUBSTANTIVE_RECORD');
+      unresolved({ response_variables: { ...sourceRow().response_variables, [field]: completed }, callback_received_at: null }, 'TERMINAL_CALLBACK_REQUIRED');
+      unresolved({ response_variables: { ...sourceRow().response_variables, [field]: completed }, interaction_transcript: [] }, 'CONNECTED_TRANSCRIPT_REQUIRED');
+      unresolved({ response_variables: { ...sourceRow().response_variables, [field]: completed }, questionnaire_snapshot: { ...snapshot(), snapshot_schema_version: 1 } }, 'VERIFIED_FROZEN_INSTRUMENT_REQUIRED');
+    }
+    for (const partial of ['partial_feedback_captured', 'substantial_feedback_captured']) {
+      assert.equal(build({ response_variables: { public_need: 'Roads', [field]: partial } }).status, 'PARTIAL_RECORDED');
+      assert.equal(build({ response_variables: { [field]: partial } }).status, 'NO_SUBSTANTIVE_RECORD');
+      unresolved({ response_variables: { ...sourceRow().response_variables, [field]: partial } }, 'PARTIAL_DISPOSITION_CONFLICT');
+    }
+    assert.equal(build({ response_variables: { [field]: 'no_meaningful_feedback' } }).status, 'NO_SUBSTANTIVE_RECORD');
+    assert.equal(build({ response_variables: { public_need: 'CANT_SAY', awareness: 'REFUSED', [field]: 'no_meaningful_feedback' } }).status, 'NO_SUBSTANTIVE_RECORD');
+    unresolved({ response_variables: { public_need: 'Roads', [field]: 'no_meaningful_feedback' } }, 'NO_MEANINGFUL_DISPOSITION_CONFLICT');
+    unresolved({ response_variables: { optional_explanation: 'Another public need', [field]: 'no_meaningful_feedback' } }, 'NO_MEANINGFUL_DISPOSITION_CONFLICT');
+    assert.equal(build({ response_variables: { [field]: 'callback_requested' } }).status, 'NO_SUBSTANTIVE_RECORD');
+    assert.equal(build({ response_variables: { public_need: 'Roads', [field]: 'callback_requested' } }).status, 'PARTIAL_RECORDED');
+    unresolved({ response_variables: { ...sourceRow().response_variables, [field]: 'callback_requested' } }, 'CALLBACK_DISPOSITION_CONFLICT');
+    for (const denied of ['wrong_person', 'wrong_number', 'do_not_call', 'no_consent', 'declined']) {
+      for (const values of [{}, sourceRow().response_variables]) {
+        const actual = build({ response_variables: { ...values, [field]: denied } });
+        assert.equal(actual.status, 'NO_SUBSTANTIVE_RECORD');
+        assert.deepEqual(actual.coverage, nullCoverage);
+      }
+    }
+  }
+  for (const conflicting of [
+    { disposition: 'survey_completed', call_disposition: 'partial_feedback_captured' },
+    { disposition: 'survey_completed', respondent_status: 'callback_requested' },
+    { disposition: 'COMPLETED', respondent_status: 'no_meaningful_feedback' },
+    { disposition: 'substantial_feedback_captured', call_disposition: 'no_meaningful_feedback' }
+  ]) unresolved({ response_variables: { public_need: 'Roads', ...conflicting } }, 'DISPOSITION_STATE_CONFLICT');
+  assert.equal(build({ response_variables: { public_need: 'Roads', disposition: 'partial_feedback_captured', respondent_status: 'callback_requested' } }).status, 'PARTIAL_RECORDED');
+  unresolved({ response_variables: { ...sourceRow().response_variables, disposition: 'some_new_provider_value' } }, 'DISPOSITION_STATE_UNRESOLVED');
   for (const changes of [{ callback_received_at: null }, { interaction_transcript: [] }, { provider_attempt_id: null }, { call_count: 2 },
     { identity_conflicts: 1 }, { source_conflict: true }, { execution_status: 'CANCELLED' }, { execution_status: 'FAILED' }, { connectivity_status: 'maybe' }]) unresolved(changes);
   assert.equal(build({ execution_status: 'SUBMITTED', callback_received_at: null, call_id: null, call_count: 0 }).status, 'IN_PROGRESS');
@@ -206,6 +250,47 @@ async function test() {
   assert.equal(detail.status, 'COMPLETE_RECORDED'); assert.equal(detail.coverage.requiredQuestions, 7);
   assert.equal(detail.questions.filter((question) => question.status === 'NOT_REQUIRED').length, 3);
   assert.ok(!JSON.stringify(detail).includes('No visible activity'));
+  // Synthetic callback-shaped V1 fixtures exercise the exact Sarvam labels
+  // against the real frozen instrument mapping, without calling handlers or
+  // rewriting missing historical snapshots. An operational declaration alone
+  // never fills the optional auxiliary fields or other required evidence.
+  const v1Answers = { graduate_issue_priority: 'Public transport', issue_sentiment: 'Concerned', mlc_role_awareness: 'Somewhat familiar',
+    incumbent_awareness: 'Yes', candidate_criterion: 'Accessibility', party_salience_unaided: 'None', party_salience_reason: 'No visible work',
+    perceived_issue_leader_aided: 'None', veeresh_awareness: 'No prior knowledge', veeresh_impression: 'No prior impression' };
+  const v1Source = { questionnaire_id: frozenMlc.id, questionnaire_snapshot: frozenMlc };
+  for (const [disposition, answers, expected, reason] of [
+    ['survey_completed', v1Answers, 'COMPLETE_RECORDED', 'ALL_REQUIRED_OUTPUTS_ACCOUNTED'],
+    ['survey_completed', { graduate_issue_priority: 'Public transport' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    ['survey_completed', {}, 'NO_SUBSTANTIVE_RECORD', 'NO_SUBSTANTIVE_REQUIRED_OUTPUT'],
+    ['partial_feedback_captured', { graduate_issue_priority: 'Public transport' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    ['substantial_feedback_captured', { graduate_issue_priority: 'Public transport' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    ['partial_feedback_captured', v1Answers, 'TECHNICALLY_UNRESOLVED', 'PARTIAL_DISPOSITION_CONFLICT'],
+    ['substantial_feedback_captured', v1Answers, 'TECHNICALLY_UNRESOLVED', 'PARTIAL_DISPOSITION_CONFLICT'],
+    ['no_meaningful_feedback', {}, 'NO_SUBSTANTIVE_RECORD', 'NO_SUBSTANTIVE_REQUIRED_OUTPUT'],
+    ['no_meaningful_feedback', v1Answers, 'TECHNICALLY_UNRESOLVED', 'NO_MEANINGFUL_DISPOSITION_CONFLICT'],
+    ['callback_requested', {}, 'NO_SUBSTANTIVE_RECORD', 'NO_SUBSTANTIVE_REQUIRED_OUTPUT'],
+    ['callback_requested', { graduate_issue_priority: 'Public transport' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    ['callback_requested', v1Answers, 'TECHNICALLY_UNRESOLVED', 'CALLBACK_DISPOSITION_CONFLICT'],
+    ['wrong_person', {}, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED'],
+    ['wrong_person', v1Answers, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED'],
+    ['do_not_call', v1Answers, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED'],
+    ['no_consent', v1Answers, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED']
+  ]) {
+    const row = sourceRow({ ...v1Source, response_variables: { ...answers, disposition } });
+    const before = JSON.stringify(row);
+    const actual = buildInterviewCompletion(row);
+    assert.equal(actual.status, expected, disposition);
+    assert.deepEqual(actual.reasonCodes, [reason]);
+    assert.equal(JSON.stringify(row), before, 'Read-only assessment must not mutate the retained callback fixture');
+    assert.ok(!JSON.stringify(actual).includes('Public transport'));
+  }
+  const coreWithoutAuxiliary = build({ ...v1Source, response_variables: { ...v1Answers, disposition: 'survey_completed',
+    issue_sentiment: '', party_salience_reason: '', veeresh_impression: '' } });
+  assert.equal(coreWithoutAuxiliary.status, 'PARTIAL_RECORDED');
+  assert.equal(coreWithoutAuxiliary.coverage.missingQuestions, 3);
+  const identityOnly = { id: frozenMlc.id, code: frozenMlc.code, version: frozenMlc.version };
+  unresolved({ ...v1Source, questionnaire_snapshot: identityOnly, response_variables: { ...v1Answers, disposition: 'survey_completed' } }, 'VERIFIED_FROZEN_INSTRUMENT_REQUIRED');
+  assert.deepEqual(identityOnly, { id: frozenMlc.id, code: frozenMlc.code, version: frozenMlc.version });
   const routes = await readFile(new URL('./interview-completion.routes.js', import.meta.url), 'utf8');
   assert.ok(!/router\.(post|put|patch|delete)/.test(routes)); assert.match(routes, /no-store/);
   console.log('Interview completion frozen contracts, scalar/missing states, seven outcomes, exact sources, denied participation and private partition tests passed.');

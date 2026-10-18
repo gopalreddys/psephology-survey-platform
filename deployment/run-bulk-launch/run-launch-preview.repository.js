@@ -65,6 +65,7 @@ export async function listPendingRunContacts(runId, requestedLimit = 50) {
         AND contact.selection_status = 'SELECTED'
         AND voter.is_active = TRUE
         AND voter.contact_status = 'ACTIVE'
+        AND NOT public.outbound_contact_is_suppressed_v1(voter.id, voter.phone_number)
         AND voter.is_demo_contact = TRUE
         AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
         AND (

@@ -5,7 +5,7 @@ import { sanitizeFieldworkDiagnostics, unavailableFieldworkDiagnostics } from '.
 
 const ALLOWED_LABELS = {
   party: ['BRS', 'BJP', 'Congress', 'Communist / Left', 'Independent / graduate group', 'None', 'Multiple parties mentioned'],
-  leadership: ['BRS', 'BJP', 'Congress', 'Communist / Left', 'Independent / graduate group', 'K. Chandrashekar Rao', 'K. T. Rama Rao', 'Revanth Reddy', 'None', 'Multiple leaders mentioned'],
+  leadership: ['BRS', 'BJP', 'Congress', 'Communist / Left', 'Independent / graduate group', 'K. Chandrashekar Rao', 'K. T. Rama Rao', 'Revanth Reddy', 'Other', 'None', 'Multiple leaders mentioned'],
   assessment: ['Positive', 'Neutral', 'Negative', 'Mixed'],
   suitability: ['Strong fit', 'Some fit', 'Poor fit', 'Mixed'],
   issue: ['Employment and jobs', 'Education and universities', 'Skills and professional development', 'Representation and accessibility', 'Civic services and infrastructure', 'Multiple issues mentioned', 'None']

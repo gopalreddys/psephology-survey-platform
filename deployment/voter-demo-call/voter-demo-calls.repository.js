@@ -51,23 +51,24 @@ export async function reserveVoterDemoCall({
     const voterResult = await db.query(
       `
         SELECT
-          id,
-          full_name,
-          phone_number,
-          preferred_language,
-          occupation,
-          qualification,
-          age,
-          gender,
-          mandal_name_source,
-          assembly_constituency_name,
+          voter_master.id,
+          voter_master.full_name,
+          voter_master.phone_number,
+          voter_master.preferred_language,
+          voter_master.occupation,
+          voter_master.qualification,
+          voter_master.age,
+          voter_master.gender,
+          voter_master.mandal_name_source,
+          voter_master.assembly_constituency_name,
           geography.name AS geography_name,
           geography.geo_type AS geography_type,
           parent_geography.name AS parent_geography_name,
           parent_geography.geo_type AS parent_geography_type,
-          contact_status,
-          is_active,
-          is_demo_contact
+          voter_master.contact_status,
+          public.outbound_contact_is_suppressed_v1(voter_master.id, voter_master.phone_number) AS outbound_suppressed,
+          voter_master.is_active,
+          voter_master.is_demo_contact
         FROM voter_master
         LEFT JOIN geo_units geography
           ON geography.id = voter_master.geo_unit_id
@@ -91,6 +92,10 @@ export async function reserveVoterDemoCall({
         409,
         "VOTER_NOT_ACTIVE"
       );
+    }
+
+    if (voter.outbound_suppressed !== false) {
+      throw repositoryError("This contact is not available for outbound calls", 409, "OUTBOUND_CONTACT_SUPPRESSED");
     }
 
     if (!voter.is_demo_contact) {
@@ -146,16 +151,18 @@ export async function reserveVoterDemoCall({
           idempotency_key,
           consent_confirmed,
           analytics_excluded,
-          preferred_language_snapshot
+          preferred_language_snapshot,
+          submitted_phone_snapshot
         )
-        VALUES ($1, $2, $3, TRUE, TRUE, $4)
+        VALUES ($1, $2, $3, TRUE, TRUE, $4, public.outbound_mobile_normalize_v1($5))
         RETURNING id, status, created_at
       `,
       [
         voterId,
         requestedBy,
         idempotencyKey,
-        voter.preferred_language || null
+        voter.preferred_language || null,
+        voter.phone_number
       ]
     );
 
@@ -184,6 +191,7 @@ export async function listVoterDemoContactIds() {
       WHERE is_demo_contact = TRUE
         AND is_active = TRUE
         AND contact_status = 'ACTIVE'
+        AND NOT public.outbound_contact_is_suppressed_v1(id, phone_number)
         AND phone_number IS NOT NULL
         AND length(trim(phone_number)) > 0
         AND (qualification IS NULL OR length(trim(qualification)) = 0)
@@ -263,9 +271,11 @@ export async function recordVoterDemoCallOutcome(db, {
         error_code = CASE WHEN $3 = 'FAILED' THEN 'PROVIDER_CALL_FAILED' ELSE NULL END,
         error_message = CASE WHEN $3 = 'FAILED' THEN $12 ELSE NULL END,
         updated_at = now()
-      WHERE ($1::uuid IS NOT NULL AND id = $1::uuid)
-         OR ($1::uuid IS NULL AND $2 IS NOT NULL AND provider_call_id = $2)
-      RETURNING id, status, provider_call_id, disposition, goal_status,
+      WHERE $2::text IS NOT NULL AND (
+        ($1::uuid IS NOT NULL AND id = $1::uuid AND (provider_call_id IS NULL OR provider_call_id = $2))
+        OR ($1::uuid IS NULL AND provider_call_id = $2)
+      )
+      RETURNING id, voter_id, status, submitted_phone_snapshot, provider_call_id, disposition, goal_status,
         callback_received_at
     `,
     [

@@ -75,6 +75,32 @@ try {
     if (sql.startsWith('BEGIN') || sql === 'ROLLBACK') return { rows: [] };
     throw Object.assign(new Error('Database permissions unavailable'), { code: '42501' }); }, release() {} }) };
   await assert.rejects(repository.getCampaignInterviewCompletion(failedDb, manager, campaignId, { iterationId }, deps), { code: '42501' });
+  // Callback-shaped provider labels round-trip through retained JSONB and the
+  // actual read-only repository; fixture writes are direct to isolated PGlite.
+  const completeOutputs = sourceRow().response_variables;
+  for (const [values, status, reason] of [
+    [{ ...completeOutputs, disposition: 'survey_completed' }, 'COMPLETE_RECORDED', 'ALL_REQUIRED_OUTPUTS_ACCOUNTED'],
+    [{ public_need: 'Roads', disposition: 'survey_completed' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    [{ public_need: 'Roads', disposition: 'partial_feedback_captured' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    [{ public_need: 'Roads', disposition: 'substantial_feedback_captured' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    [{ ...completeOutputs, disposition: 'substantial_feedback_captured' }, 'TECHNICALLY_UNRESOLVED', 'PARTIAL_DISPOSITION_CONFLICT'],
+    [{ disposition: 'no_meaningful_feedback' }, 'NO_SUBSTANTIVE_RECORD', 'NO_SUBSTANTIVE_REQUIRED_OUTPUT'],
+    [{ public_need: 'Roads', disposition: 'no_meaningful_feedback' }, 'TECHNICALLY_UNRESOLVED', 'NO_MEANINGFUL_DISPOSITION_CONFLICT'],
+    [{ disposition: 'callback_requested' }, 'NO_SUBSTANTIVE_RECORD', 'NO_SUBSTANTIVE_REQUIRED_OUTPUT'],
+    [{ public_need: 'Roads', disposition: 'callback_requested' }, 'PARTIAL_RECORDED', 'REQUIRED_OUTPUTS_MISSING'],
+    [{ ...completeOutputs, disposition: 'callback_requested' }, 'TECHNICALLY_UNRESOLVED', 'CALLBACK_DISPOSITION_CONFLICT'],
+    [{ ...completeOutputs, disposition: 'wrong_person' }, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED'],
+    [{ ...completeOutputs, disposition: 'survey_completed', consent_status: 'no_consent' }, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED'],
+    [{ ...completeOutputs, disposition: 'do_not_call' }, 'NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED']
+  ]) {
+    await pg.query('UPDATE calls SET response_variables=$2::jsonb WHERE id=$1', [uid(5000), JSON.stringify(values)]);
+    const assessed = await get();
+    assert.equal(assessed.status, status);
+    assert.deepEqual(assessed.reasonCodes, [reason]);
+    const stored = await pg.query('SELECT response_variables FROM calls WHERE id=$1', [uid(5000)]);
+    assert.deepEqual(stored.rows[0].response_variables, values, 'Assessment cannot repair or mutate stored callback answers');
+  }
+  await pg.query('UPDATE calls SET response_variables=$2::jsonb WHERE id=$1', [uid(5000), JSON.stringify(completeOutputs)]);
   for (const secret of ['PRIVATE_NAME', '9999999999', 'synthetic-4000', 'Roads', uid(100), uid(4000), 'Q_NEED']) assert.ok(!JSON.stringify(aggregate).includes(secret));
   assert.ok(statements.every((sql) => !/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/.test(sql)));
   assert.ok(statements.some((sql) => /BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/.test(sql)));

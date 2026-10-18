@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { normalizeOutputValue, summarizeOutput, summarizeLabels, selectStructuredOutput, selectDirectRating, summarizeDirectRatings, getSentimentValidation, OUTPUT_KEYS } from "./output-normalization.repository.js";
+import { normalizeOutputValue, summarizeOutput, summarizeLabels, selectStructuredOutput, selectDirectRating, summarizeDirectRatings, getSentimentValidation, reportingCategoryLabels, OUTPUT_KEYS } from "./output-normalization.repository.js";
 import { fixtureState, fixtureDb, response } from "../campaign-comparative-analysis/fixtures/analysis-fixtures.js";
 import { loadTestRepositories } from "../campaign-comparative-analysis/fixtures/load-test-repositories.js";
 
@@ -16,6 +16,53 @@ for (const value of ["Not BRS", "BRS కాదు", "BRS नहीं", "no ment
 assert.equal(normalize("BRS failed us", "perceived_issue_leader_aided").status, "UNCODED");
 assert.equal(normalize("BRS government", "perceived_issue_leader_aided").label, "BRS");
 assert.equal(normalize("KCR", "perceived_issue_leader_aided").label, "K. Chandrashekar Rao");
+// The exact V1 aided choices are descriptive selections, never inferred support.
+for (const value of ["Independent or graduate group", "\tINDEPENDENT OR GRADUATE GROUP.\n"]) {
+  assert.equal(normalize(value, "perceived_issue_leader_aided").label, "Independent / graduate group");
+  assert.equal(normalize(value, "perceived_issue_leader_aided").status, "CODED");
+}
+for (const value of ["Other", "\tOTHER.\n"]) {
+  assert.equal(normalize(value, "perceived_issue_leader_aided").label, "Other");
+  assert.equal(normalize(value, "perceived_issue_leader_aided").status, "CODED");
+}
+for (const value of ["Other parties should improve", "No other party", "Not Other", "Another group", "Independent or graduate group failed us"]) {
+  assert.equal(normalize(value, "perceived_issue_leader_aided").status, "UNCODED", `A narrative or negated choice is not an aided selection: ${value}`);
+}
+for (const key of ["party_salience_unaided", "candidate_impression", "incumbent_assessment", "graduate_issue_priority"]) {
+  assert.equal(normalize("Other", key).status, "UNCODED", `The V1 aided Other choice cannot supply a different construct: ${key}`);
+}
+assert.ok(reportingCategoryLabels(OUTPUT_KEYS.leadership).includes("Other"), "Quick/native category dictionaries must include the explicit aided Other choice");
+assert.ok(!reportingCategoryLabels(OUTPUT_KEYS.party).includes("Other"), "Aided Other is not added to unaided party coding");
+// Prior awareness of the institution is not knowledge of its duties or a candidate.
+for (const value of ["Heard of the role but not the duties", "\tHEARD OF THE ROLE BUT NOT THE DUTIES.\n"]) {
+  assert.equal(normalize(value, "mlc_role_awareness").label, "Previously aware");
+  assert.equal(normalize(value, "mlc_role_awareness").status, "CODED");
+}
+for (const [value, label] of [["Very familiar", "Previously aware"], ["Somewhat familiar", "Previously aware"], ["Not familiar", "Not previously aware"]]) {
+  assert.equal(normalize(value, "mlc_role_awareness").label, label, "The role-specific domain retains existing awareness coding");
+}
+for (const key of ["candidate_awareness", "veeresh_awareness", "incumbent_awareness", "candidate_impression"]) {
+  assert.equal(normalize("Heard of the role but not the duties", key).status, "UNCODED", `Institutional awareness must not substitute for ${key}`);
+}
+for (const value of ["Not heard of the role but not the duties", "I heard of the role but not the duties from someone else", "Heard of another role"]) {
+  assert.equal(normalize(value, "mlc_role_awareness").status, "UNCODED", "Only the exact recorded V1 option is normalized");
+}
+for (const [value, status] of [["No answer", "MISSING"], ["Not sure", "CANT_SAY"], ["Prefer not to answer", "REFUSED"]]) {
+  assert.equal(normalize(value, "mlc_role_awareness").status, status, "Nonresponse states remain distinct from role awareness");
+}
+const v1Records = Array.from({ length: 5 }, () => ({ response_variables: {
+  mlc_role_awareness: "Heard of the role but not the duties",
+  perceived_issue_leader_aided: "Other"
+} }));
+const v1Original = JSON.stringify(v1Records);
+const v1RoleSummary = summarizeOutput(v1Records, ["mlc_role_awareness"]);
+const v1LeaderSummary = summarizeOutput(v1Records, ["perceived_issue_leader_aided"]);
+assert.equal(v1RoleSummary.codedCount, 5);
+assert.equal(v1RoleSummary.values[0].value, "Previously aware");
+assert.equal(v1LeaderSummary.codedCount, 5);
+assert.equal(v1LeaderSummary.values[0].value, "Other");
+assert.equal(v1LeaderSummary.values[0].percentage, 100);
+assert.equal(JSON.stringify(v1Records), v1Original, "V1 normalization preserves every original recorded answer");
 assert.equal(normalize("not satisfied", "candidate_sentiment").label, "Negative");
 for (const value of ["mixed", "both good and bad", "మిశ్రమం", "मिश्रित"]) assert.equal(normalize(value, "candidate_sentiment").label, "Mixed");
 for (const value of ["బాగోలేదు", "సంతృప్తి లేదు", "अच्छा नहीं", "असंतुष्ट"]) assert.equal(normalize(value, "candidate_sentiment").label, "Negative");

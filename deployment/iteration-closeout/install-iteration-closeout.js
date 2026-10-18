@@ -2,12 +2,14 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installQuestionnaireSnapshot } from "../research-methodology/install-questionnaire-snapshot.js";
+import { assertLegacyConsentPrerequisites } from "../outbound-consent/assert-legacy-consent-prerequisites.mjs";
 
 const runtimeRoot = path.resolve(
   process.argv[2] || "/opt/sarvam-voice-analytics"
 );
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const marker = "ITERATION_CLOSEOUT_V1";
+await assertLegacyConsentPrerequisites(runtimeRoot);
 await installQuestionnaireSnapshot(runtimeRoot);
 
 async function copy(sourceName, destination) {

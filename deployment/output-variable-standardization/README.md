@@ -48,6 +48,27 @@ independent human reviewers and disagreement adjudication; see
 
 ## Installation
 
+### Coordinating V1 option compatibility with Amazon Quick
+
+The exact V1 choices `Independent or graduate group` and aided `Other` are
+recognized as descriptive issue-group selections. `Other` is a separate aided
+category, not an unaided party preference, uncertainty, refusal or inferred
+support. Only `mlc_role_awareness` maps the exact option `Heard of the role but
+not the duties` to the report grouping `Previously aware`; the original answer
+and its distinction from familiarity with the duties remain intact in source
+records. This mapping cannot supply candidate or incumbent awareness.
+
+The added aided `Other` category also changes Amazon Quick's complete-partition
+disclosure dictionary. **Do not sync the new SQL normalizer, refresh affected
+Quick sources/SPICE or expose a refreshed dashboard using an older published
+definition.** Rebuild the definition from these same rules, validate its `Other`
+person-key and whole-partition guards, and coordinate their publication before
+enabling refreshed reporting. Otherwise an older dictionary can miss the small
+`Other` complement. No Quick publication or SQL synchronization is performed by
+the local regression tests. Governed research reports require `Other` to be
+explicitly permitted in the existing frozen contract; this compatibility change
+does not expand, replace or backfill historical instruments.
+
 From the UI repository, the coordinated installer backs up existing code and
 installs all dependent modules, rules, routes and SQL assets:
 

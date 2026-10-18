@@ -178,7 +178,7 @@ function participationState(outputs) {
     else if (value === false || (typeof value === 'string' && ['NO', 'DENIED', 'DECLINED', 'REFUSED', 'NOT_CONSENTED', 'NO_CONSENT', 'NOT_GRANTED', 'DO_NOT_CALL'].includes(token(value)))) states.push('DENIED');
     else throw new Error('CONSENT_STATE_UNRESOLVED');
   }
-  for (const key of ['wrong_number', 'do_not_call']) {
+  for (const key of ['wrong_number', 'wrong_person', 'do_not_call']) {
     if (!Object.hasOwn(outputs, key) || outputs[key] == null || outputs[key] === '') continue;
     if (outputs[key] === true || (typeof outputs[key] === 'string' && token(outputs[key]) === 'YES')) states.push('DENIED');
     else if (outputs[key] !== false && !(typeof outputs[key] === 'string' && token(outputs[key]) === 'NO')) throw new Error('DISPOSITION_STATE_UNRESOLVED');
@@ -187,12 +187,22 @@ function participationState(outputs) {
     if (!Object.hasOwn(outputs, key) || outputs[key] == null || outputs[key] === '') continue;
     if (typeof outputs[key] !== 'string') throw new Error('DISPOSITION_STATE_UNRESOLVED');
     const state = token(outputs[key]);
-    if (['WRONG_NUMBER', 'DO_NOT_CALL', 'DECLINED', 'REFUSED', 'NOT_INTERESTED', 'CONSENT_DENIED', 'NO_CONSENT', 'NOT_CONSENTED'].includes(state)) states.push('DENIED');
-    else if (['PARTIAL', 'INCOMPLETE'].includes(state)) states.push('PARTIAL');
-    else if (!['COMPLETED', 'INTERESTED', 'PARTICIPATED', 'CONSENTED'].includes(state)) throw new Error('DISPOSITION_STATE_UNRESOLVED');
+    if (['WRONG_NUMBER', 'WRONG_PERSON', 'DO_NOT_CALL', 'DECLINED', 'REFUSED', 'NOT_INTERESTED', 'CONSENT_DENIED', 'NO_CONSENT', 'NOT_CONSENTED'].includes(state)) states.push('DENIED');
+    else if (['PARTIAL', 'INCOMPLETE', 'PARTIAL_FEEDBACK_CAPTURED', 'SUBSTANTIAL_FEEDBACK_CAPTURED'].includes(state)) states.push('PARTIAL');
+    else if (state === 'NO_MEANINGFUL_FEEDBACK') states.push('NO_FEEDBACK');
+    else if (state === 'CALLBACK_REQUESTED') states.push('CALLBACK');
+    else if (['COMPLETED', 'SURVEY_COMPLETED'].includes(state)) states.push('COMPLETE_DECLARED');
+    else if (!['INTERESTED', 'PARTICIPATED', 'CONSENTED'].includes(state)) throw new Error('DISPOSITION_STATE_UNRESOLVED');
   }
   if (states.includes('ALLOWED') && states.includes('DENIED')) throw new Error('PARTICIPATION_STATE_CONFLICT');
-  return states.includes('DENIED') ? 'DENIED' : states.includes('PARTIAL') ? 'PARTIAL' : 'NOT_DENIED';
+  if (states.includes('DENIED')) return 'DENIED';
+  // A provider disposition is not consent or proof of completed coverage.
+  // "Substantial" has no frozen completion threshold and remains partial.
+  // A callback can follow some feedback, but cannot certify a full interview.
+  if ((states.includes('COMPLETE_DECLARED') && ['PARTIAL', 'CALLBACK', 'NO_FEEDBACK'].some((state) => states.includes(state)))
+    || (states.includes('NO_FEEDBACK') && states.includes('PARTIAL'))) throw new Error('DISPOSITION_STATE_CONFLICT');
+  return states.includes('NO_FEEDBACK') ? 'NO_FEEDBACK' : states.includes('PARTIAL') ? 'PARTIAL'
+    : states.includes('CALLBACK') ? 'CALLBACK' : 'NOT_DENIED';
 }
 
 export function buildInterviewCompletion(row) {
@@ -227,27 +237,30 @@ export function buildInterviewCompletion(row) {
   const outputs = object(row.response_variables);
   if (!outputs) return finish('TECHNICALLY_UNRESOLVED', 'STRUCTURED_OUTPUT_RECORD_REQUIRED');
   const mapped = new Set(instrument.questions.flatMap((question) => question.keys));
-  const exactKeys = new Set([...mapped, 'survey_consent', 'consent', 'consent_status', 'wrong_number', 'do_not_call',
+  const exactKeys = new Set([...mapped, 'survey_consent', 'consent', 'consent_status', 'wrong_number', 'wrong_person', 'do_not_call',
     'call_disposition', 'respondent_status', 'disposition']);
   if (Object.keys(outputs).some((key) => !exactKeys.has(key) && exactKeys.has(key.trim().toLowerCase()))) return finish('TECHNICALLY_UNRESOLVED', 'OUTPUT_KEY_CASE_CONFLICT');
   try {
     const participation = participationState(outputs);
     if (participation === 'DENIED') return finish('NO_SUBSTANTIVE_RECORD', 'RECORDED_PARTICIPATION_DENIED');
-    let anySubstantiveRequiredOutput = false;
+    let anySubstantiveRequiredOutput = false, anySubstantiveMappedOutput = false;
     const questions = instrument.questions.map((question) => {
       if (!question.required) {
-        for (const key of question.keys) outputState(outputs[key], null);
+        for (const key of question.keys) if (outputState(outputs[key], null) === 'SUBSTANTIVE') anySubstantiveMappedOutput = true;
         return { code: question.code, required: false, status: 'NOT_REQUIRED', mappedOutputs: question.keys.length };
       }
       const states = question.keys.map((key) => outputState(outputs[key], question.contract));
-      if (states.includes('SUBSTANTIVE')) anySubstantiveRequiredOutput = true;
+      if (states.includes('SUBSTANTIVE')) anySubstantiveRequiredOutput = anySubstantiveMappedOutput = true;
       if (states.includes('SUBSTANTIVE') && (states.includes('CANT_SAY') || states.includes('REFUSED'))) throw new Error('MIXED_EXPLICIT_OUTPUT_STATE_UNRESOLVED');
       const status = states.includes('MISSING') ? 'MISSING' : states.includes('SUBSTANTIVE') ? 'SUBSTANTIVE'
         : states.includes('REFUSED') ? 'REFUSED' : 'CANT_SAY';
       return { code: question.code, required: true, status, mappedOutputs: question.keys.length };
     });
     const required = questions.filter((question) => question.required), count = (state) => required.filter((question) => question.status === state).length;
-    if (participation === 'PARTIAL' && anySubstantiveRequiredOutput && count('MISSING') === 0) throw new Error('PARTIAL_DISPOSITION_CONFLICT');
+    if (participation === 'NO_FEEDBACK' && anySubstantiveMappedOutput) throw new Error('NO_MEANINGFUL_DISPOSITION_CONFLICT');
+    if (['PARTIAL', 'CALLBACK'].includes(participation) && anySubstantiveRequiredOutput && count('MISSING') === 0) {
+      throw new Error(participation === 'CALLBACK' ? 'CALLBACK_DISPOSITION_CONFLICT' : 'PARTIAL_DISPOSITION_CONFLICT');
+    }
     result.questions = questions;
     result.coverage = { requiredQuestions: required.length, accountedQuestions: required.length - count('MISSING'),
       substantiveQuestions: count('SUBSTANTIVE'), missingQuestions: count('MISSING'), cantSayQuestions: count('CANT_SAY'), refusedQuestions: count('REFUSED') };

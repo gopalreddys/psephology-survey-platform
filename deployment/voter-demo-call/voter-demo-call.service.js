@@ -103,6 +103,9 @@ export async function dispatchVoterDemoCall({
       }
     });
   } catch (error) {
+    // Preserve safety/uncertain-submission errors for the operator. Never
+    // replace them with a generic provider error that invites blind retry.
+    if (String(error.code || "").startsWith("OUTBOUND_") || error.providerSubmissionMayHaveOccurred) throw error;
     console.error("Sarvam demo call submission failed:", {
       demoCallId,
       voterId: voter.id,

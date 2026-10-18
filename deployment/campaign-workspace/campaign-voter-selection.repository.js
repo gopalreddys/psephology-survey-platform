@@ -120,6 +120,7 @@ export async function selectAssignedVoters(db, {
       WHERE previous_contact.run_id = $1
         AND voter.is_active = TRUE
         AND voter.contact_status = 'ACTIVE'
+        AND NOT public.outbound_contact_is_suppressed_v1(voter.id, voter.phone_number)
         AND voter.is_demo_contact = TRUE
         AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
         AND voter_is_eligible_for_campaign(voter.id, $3)
@@ -187,6 +188,7 @@ export async function selectAssignedVoters(db, {
       ON geography.geo_unit_id = voter.geo_unit_id
     WHERE voter.is_active = TRUE
       AND voter.contact_status = 'ACTIVE'
+      AND NOT public.outbound_contact_is_suppressed_v1(voter.id, voter.phone_number)
       AND voter.is_demo_contact = TRUE
       AND (voter.qualification IS NULL OR length(trim(voter.qualification)) = 0)
       AND voter_is_eligible_for_campaign(voter.id, $1)

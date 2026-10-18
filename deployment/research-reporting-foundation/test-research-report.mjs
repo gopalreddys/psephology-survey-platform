@@ -134,6 +134,47 @@ report = buildResearchReport({ ...base, analysis: analysis({ outputMeasures: { p
 assert.equal(get(report, 'party_salience').captureStatus, 'SMALL_CELLS_WITHHELD');
 assert.deepEqual(get(report, 'party_salience').distribution, []);
 assert.deepEqual(report.findings, []);
+// Exact aided V1 Other is a recorded group choice, not missingness, an
+// inferred party preference, or permission to expand a frozen instrument.
+const v1AidedContract = contract('issue_leadership', ['perceived_issue_leader_aided'], {
+  allowedValues: ['Independent / graduate group', 'Other']
+});
+const v1AidedInstrument = snapshot([v1AidedContract]);
+const v1AidedRecords = Array.from({ length: 10 }, (_, index) => ({ response_variables: {
+  perceived_issue_leader_aided: index < 5 ? 'Other' : 'Independent or graduate group',
+  party_salience_unaided: 'BRS'
+} }));
+const v1AidedBefore = JSON.stringify({ instrument: v1AidedInstrument, records: v1AidedRecords });
+const v1AidedReport = (records, instrument = v1AidedInstrument) => rawBuildResearchReport({ ...base,
+  snapshot: instrument, exactMeasures: { issue_leadership: {
+    source: 'FROZEN_CONTRACT_EXACT_KEYS', outputVariables: ['perceived_issue_leader_aided'],
+    measure: summarizeOutput(records, ['perceived_issue_leader_aided'])
+  } }
+});
+const v1Aided = get(v1AidedReport(v1AidedRecords), 'issue_leadership');
+assert.equal(v1Aided.definitionStatus, 'CONTRACT_RECORDED');
+assert.equal(v1Aided.captureStatus, 'DESCRIPTIVE_AVAILABLE');
+assert.equal(v1Aided.answerBase, 10);
+assert.equal(v1Aided.codedBase, 10);
+assert.deepEqual(v1Aided.distribution, [
+  { value: 'Independent / graduate group', respondents: 5, percentage: 50 },
+  { value: 'Other', respondents: 5, percentage: 50 }
+]);
+assert.match(v1Aided.caution, /not.*electoral support/);
+assert.equal(get(v1AidedReport(v1AidedRecords), 'party_salience').definitionStatus, 'UNCONFIGURED', 'An aided group selection cannot configure unaided party measurement');
+assert.equal(JSON.stringify({ instrument: v1AidedInstrument, records: v1AidedRecords }), v1AidedBefore, 'Reporting never rewrites the raw V1 answer or frozen contract');
+const noOtherAidedInstrument = snapshot([{ ...v1AidedContract, allowedValues: ['BRS', 'Independent / graduate group'] }]);
+const noOtherAided = get(v1AidedReport(v1AidedRecords, noOtherAidedInstrument), 'issue_leadership');
+assert.equal(noOtherAided.captureStatus, 'MAPPING_PENDING', 'Adding a reporting label does not expand an existing frozen allowed-value contract');
+assert.deepEqual(noOtherAided.distribution, []);
+const sparseAided = get(v1AidedReport(v1AidedRecords.map((record, index) => ({ response_variables: {
+  ...record.response_variables, perceived_issue_leader_aided: index === 0 ? 'Other' : 'Independent or graduate group'
+} }))), 'issue_leadership');
+assert.equal(sparseAided.captureStatus, 'SMALL_CELLS_WITHHELD');
+assert.equal(sparseAided.answerBase, null);
+assert.deepEqual(sparseAided.distribution, [], 'One Other response cannot be recovered from the large independent-group complement');
+const unaidedOtherInstrument = snapshot([contract('party_salience', ['party_salience_unaided'], { allowedValues: ['BRS', 'Other'] })]);
+assert.equal(get(v1AidedReport(v1AidedRecords, unaidedOtherInstrument), 'party_salience').definitionStatus, 'UNSUPPORTED_MAPPING', 'Other is added only to explicit aided group reporting, not unaided party categories');
 report = buildResearchReport({ ...base, analysis: analysis({ outputMeasures: { party_salience_unaided: measure([{ value: 'BRS', respondents: 4 }], { codedCount: 4 }) } }) });
 assert.equal(get(report, 'party_salience').answerBase, null);
 assert.equal(get(report, 'party_salience').codedBase, null);

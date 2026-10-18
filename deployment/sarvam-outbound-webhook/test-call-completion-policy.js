@@ -117,4 +117,46 @@ const fallback = classifyCallCompletion({
 assert.equal(fallback.successful, true);
 assert.deepEqual(fallback.meaningfulResponseKeys, ["top_concern_category"]);
 
+const withOutput = (extra = {}) => classifyCallCompletion({ providerStatus: "connected",
+  finalVariables: { disposition: "survey_completed", graduate_issue_priority: "Jobs", ...extra } });
+for (const key of ["disposition", "call_disposition", "respondent_status", "consent", "consent_status", "survey_consent"]) {
+  const stopped = withOutput({ [key]: "DO_NOT_CALL" });
+  assert.equal(stopped.successful, false, key);
+  assert.equal(stopped.retryEligible, false, key);
+  assert.equal(stopped.finalStatus, "DO_NOT_CALL", key);
+  assert.equal(stopped.contactAttemptStatus, "FAILED");
+  assert.equal(stopped.completionReason, "do_not_call");
+}
+for (const key of ["disposition", "call_disposition", "respondent_status"]) {
+  assert.equal(withOutput({ [key]: "wrong_person" }).successful, false);
+  const wrong = withOutput({ [key]: "wrong_number" });
+  assert.equal(wrong.finalStatus, "INVALID_NUMBER");
+  assert.equal(wrong.retryEligible, false);
+  assert.equal(wrong.completionReason, "wrong_number");
+}
+for (const disposition of ["partial_feedback_captured", "substantial_feedback_captured", "partial", "incomplete", "unrecognized", ""]) {
+  const partial = withOutput({ disposition });
+  assert.equal(partial.successful, false, disposition);
+  assert.equal(partial.retryEligible, true, disposition);
+}
+for (const extra of [{ do_not_call: true }, { do_not_call: "yes" }, { consent: false }, { consent_status: "denied" },
+  { wrong_person: true }, { wrong_number: true }, { consent_status: "possibly" }, { consent_status: "NOT_INTERESTED" },
+  { do_not_call: "maybe" }, { wrong_person: {} }, { do_not_call: "DO_NOT_CALL" }]) {
+  assert.equal(withOutput(extra).successful, false, JSON.stringify(extra));
+}
+for (const disposition of ["declined", "refused", "no_consent"]) {
+  const refusal = withOutput({ disposition });
+  assert.equal(refusal.finalStatus, "REFUSED_TERMINAL");
+  assert.equal(refusal.retryEligible, false);
+}
+for (const missing of ["no answer", "uncoded response", "not captured", "", null]) {
+  assert.equal(classifyCallCompletion({ providerStatus: "connected", finalVariables: {
+    disposition: "survey_completed", inactive_legacy_field: missing
+  } }).successful, false);
+}
+assert.deepEqual(meaningfulSurveyResponseKeys({ disposition: "survey_completed", survey_consent: true, wrong_person: false,
+  do_not_call: false, call_disposition: "completed", respondent_status: "completed" }), []);
+assert.equal(withOutput({ consent_status: "agreed" }).successful, true);
+assert.equal(withOutput({ do_not_call: false }).successful, true);
+
 console.log("Call completion policy tests passed.");
