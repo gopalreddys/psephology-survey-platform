@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,7 +19,8 @@ try{
   await writeFile(join(temporary,'src/repositories/voter-demo-calls.repository.js'),`export async function recordVoterDemoCallOutcome(db,options){return db.demoOutcome(options);}`);
   const {setPool}=await import(pathToFileURL(join(temporary,'src/db/postgres.js')));
   const {recordSarvamOutboundResult}=await import(pathToFileURL(join(temporary,'src/repositories/sarvam-outbound-webhook.repository.js')));
-  const state={suppressed:new Set(),events:new Map(),contact:null,rawVariables:null,statements:[],failContact:false,demo:false,release:0};
+  const state={suppressed:new Set(),events:new Map(),contact:null,rawVariables:null,statements:[],failContact:false,demo:false,release:0,
+    executionSnapshot:{phone_number:'+919876543210',request_payload:{phoneNumber:'+919876543210'}}};
   let staged;
   const db={
     async demoOutcome(){return state.demo?{id:id(9),voter_id:id(4),status:'COMPLETED',disposition:'do_not_call',submitted_phone_snapshot:'+918888888888'}:null;},
@@ -32,7 +34,7 @@ try{
       if(sql.includes('INSERT INTO sarvam_outbound_webhook_events')){const item={id:values[1],delivery_status:'RECEIVED'};staged.events.set(values[1],item);return {rows:[item]};}
       if(sql.includes('execution.*'))return {rows:state.demo?[]:[{id:id(1),run_id:id(2),run_contact_id:id(3),voter_id:id(4),
         iteration_id:id(5),study_id:id(6),attempt_number:1,is_demo_contact:true,current_phone_number:'+919999999999',
-        request_payload:{user_config:{user_phone_number:'+919876543210'}}}]};
+        ...state.executionSnapshot}]};
       if(sql.includes('INSERT INTO public.outbound_contact_suppressions_v1')){const key=values[0]+':'+values[1],exists=staged.suppressed.has(key);staged.suppressed.add(key);return {rows:exists?[]:[{identifier_kind:values[0]}],rowCount:exists?0:1};}
       if(sql.includes('SELECT EXISTS')&&sql.includes('outbound_contact_suppressions_v1'))return {rows:[{suppressed:staged.suppressed.has('VOTER:'+values[0])||values[1].some(hash=>staged.suppressed.has('PHONE:'+hash))}]};
       if(sql.startsWith('SELECT phone_number FROM voter_master'))return {rows:[{phone_number:'+919876543210'}]};
@@ -76,6 +78,25 @@ try{
   assert.equal(result.demoCall,true);assert.equal(state.suppressed.size,3,'Standalone conflicting containers retain the opt-out');
   assert.ok(state.statements.some(item=>item.sql.includes('ROLLBACK')));
   assert.ok(state.release>=5);
+  // The deployed service stores the destination in its dedicated column and
+  // the compiled prepared object's root phoneNumber, not a provider body.
+  // Older provider-body snapshots remain supported without overriding either.
+  const hash=phone=>'PHONE:'+createHash('sha256').update(phone).digest('hex');
+  for(const [executionSnapshot,expectedPhone,ignoredPhones]of [
+    [{phone_number:'+919999988888',request_payload:{phoneNumber:'+918888877777',user_config:{user_phone_number:'+917777766666'},
+      body:{user_config:{user_phone_number:'+916666655555'}}}},'+919999988888',['+918888877777','+917777766666','+916666655555']],
+    [{phone_number:null,request_payload:{phoneNumber:'+918888877777',user_config:{user_phone_number:'+917777766666'},
+      body:{user_config:{user_phone_number:'+916666655555'}}}},'+918888877777',['+917777766666','+916666655555']],
+    [{phone_number:null,request_payload:{phoneNumber:null,user_config:{user_phone_number:'+917777766666'},
+      body:{user_config:{user_phone_number:'+916666655555'}}}},'+917777766666',['+916666655555']],
+    [{phone_number:null,request_payload:{body:{user_config:{user_phone_number:'+916666655555'}}}},'+916666655555',[]]
+  ]){
+    state.demo=false;state.executionSnapshot=executionSnapshot;state.suppressed=new Set();state.events=new Map();
+    await recordSarvamOutboundResult(payload());
+    assert.equal(state.suppressed.size,3,'The retained original, current destination and voter identity are suppressed');
+    assert.ok(state.suppressed.has(hash(expectedPhone)),'Prefer the authoritative retained destination');
+    for(const ignored of ignoredPhones)assert.ok(!state.suppressed.has(hash(ignored)),'Do not replace the authoritative snapshot with a lower-priority shape');
+  }
   const demoSource=await readFile(new URL('../voter-demo-call/voter-demo-calls.repository.js',import.meta.url),'utf8');
   assert.match(demoSource,/RETURNING id, voter_id, status, submitted_phone_snapshot/);
   assert.match(demoSource,/voter\.outbound_suppressed !== false/);
@@ -84,5 +105,5 @@ try{
     const active=(source.match(/voter.contact_status = 'ACTIVE'/g)||[]).length;
     assert.equal((source.match(/NOT public\.outbound_contact_is_suppressed_v1\(voter.id, voter.phone_number\)/g)||[]).length,active);
   }
-  console.log('Actual webhook fixture passed: Run/standalone opt-out, original/current destination, duplicate callback, conflicting later success, atomic rollback, source preservation and cohort/reservation wiring.');
+  console.log('Actual webhook fixture passed: Run/standalone opt-out, dedicated/prepared/legacy destination precedence, duplicate callback, conflicting later success, atomic rollback, source preservation and cohort/reservation wiring.');
 }finally{await rm(temporary,{recursive:true,force:true});}

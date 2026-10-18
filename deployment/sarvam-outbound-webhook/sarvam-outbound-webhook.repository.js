@@ -269,7 +269,8 @@ export async function recordSarvamOutboundResult(payload) {
       [String(execution.run_id)]
     );
 
-    const submittedPhone = execution.request_payload?.user_config?.user_phone_number ||
+    const submittedPhone = execution.phone_number || execution.request_payload?.phoneNumber ||
+      execution.request_payload?.user_config?.user_phone_number ||
       execution.request_payload?.body?.user_config?.user_phone_number;
     const phoneNumbers = [submittedPhone, execution.current_phone_number];
     if (explicitOptOut) {

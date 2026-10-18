@@ -13,7 +13,8 @@ const payloadStopWhere=payload=>`(${stopWhere('('+payload+"->'output_agent_varia
 export async function reconcileRecordedOptOuts(db,{apply=false,requestsDoNotCall,recordOutboundOptOut,normalizeOutboundMobile}){
   if([requestsDoNotCall,recordOutboundOptOut,normalizeOutboundMobile].some(helper=>typeof helper!=='function'))throw new TypeError('Reviewed outbound consent helpers are required');
   const run=await db.query(`SELECT c.voter_id,c.attempt_id AS source_attempt_id,c.response_variables AS variables,c.raw_payload AS callback_payload,
-    voter.phone_number,COALESCE(e.request_payload #>> '{user_config,user_phone_number}',
+    voter.phone_number,COALESCE(e.phone_number,e.request_payload->>'phoneNumber',
+      e.request_payload #>> '{user_config,user_phone_number}',
       e.request_payload #>> '{body,user_config,user_phone_number}') AS submitted_phone
     FROM calls c LEFT JOIN voter_master voter ON voter.id=c.voter_id
     LEFT JOIN call_executions e ON e.provider_attempt_id=c.attempt_id AND e.voter_id=c.voter_id AND e.run_id=c.run_id
