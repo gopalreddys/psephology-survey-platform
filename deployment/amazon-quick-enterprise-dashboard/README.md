@@ -114,6 +114,7 @@ Local regressions:
 node deployment/amazon-quick-enterprise-dashboard/test-amazon-quick-dashboard.js
 node deployment/amazon-quick-enterprise-dashboard/test-quick-publication-plan.mjs
 node deployment/amazon-quick-enterprise-dashboard/test-quick-insights.mjs
+node deployment/amazon-quick-enterprise-dashboard/test-quick-calculated-field-limit.mjs
 PGLITE_MODULE_PATH=/path/to/pglite/dist/index.js \
   node deployment/amazon-quick-enterprise-dashboard/test-normalized-output-sql.js
 ```
@@ -121,6 +122,13 @@ PGLITE_MODULE_PATH=/path/to/pglite/dist/index.js \
 The SQL test runs isolated PostgreSQL-compatible fixtures, shared JavaScript/SQL
 normalization parity, answer denominators, missing-wave/minimum-base safeguards
 and the complete migration replay. It never connects to live RDS.
+
+The builder and publication gate enforce Quick's 500 calculated-field limit
+**per dataset**, not across the combined definition. Dependency-safe pruning
+removes only unused fields; the two total-base visuals share a numeric privacy
+guard only when its full expression and dataset are identical. Each visual
+retains its own filter identity, scope and threshold. If a future definition
+still exceeds the limit, stop and review it; never remove privacy checks to fit.
 
 ## Install on the API host
 

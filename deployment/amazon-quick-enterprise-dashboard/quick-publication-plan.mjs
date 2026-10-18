@@ -18,6 +18,14 @@ export const REQUIRED_SHEETS = Object.freeze([
   "Leadership overview", "Demographic pulse", "Geographic intelligence",
   "Iteration movement", "Research quality"
 ]);
+// Quick applies this limit separately to each dataset in an analysis/dashboard,
+// not to the combined CalculatedFields array across all dataset identifiers.
+export const MAX_CALCULATED_FIELDS_PER_DATASET = 500;
+export function calculatedFieldCounts(definition) {
+  const counts = new Map();
+  for (const field of definition.CalculatedFields ?? []) counts.set(field.DataSetIdentifier, (counts.get(field.DataSetIdentifier) ?? 0) + 1);
+  return counts;
+}
 export const REPORTING_VIEWS = Object.freeze({
   enterprise: "analytics_research_enterprise_v2",
   geographic: "analytics_research_geographic_v2",
@@ -244,6 +252,15 @@ export function stagedDatasetRequest({ awsAccountId, dataset, view, columns, new
 /** Validate a generated candidate, not the blueprint or a claim of live QA. */
 export function validatePublicationCandidate({ definition, bindings, guards = [], partitionGuards = [], disclosurePolicy, answerStatusFilters = [], percentagePolicies = [], reviewedVisualIds = [] }) {
   const errors = [];
+  for (const [dataset, count] of calculatedFieldCounts(definition)) {
+    if (count > MAX_CALCULATED_FIELDS_PER_DATASET) errors.push(`Calculated-field limit exceeded: ${dataset} has ${count}; maximum ${MAX_CALCULATED_FIELDS_PER_DATASET} per dataset`);
+  }
+  const calculatedIdentities = new Set();
+  for (const field of definition.CalculatedFields ?? []) {
+    const identity = JSON.stringify([field.DataSetIdentifier, field.Name]);
+    if (calculatedIdentities.has(identity)) errors.push(`Duplicate calculated-field identity: ${field.DataSetIdentifier}.${field.Name}`);
+    calculatedIdentities.add(identity);
+  }
   const sheets = definition.Sheets ?? [];
   for (const sheet of sheets) {
     if ((sheet.TextBoxes?.length ?? 0) > 100) errors.push(`Too many text boxes: ${sheet.SheetId}`);

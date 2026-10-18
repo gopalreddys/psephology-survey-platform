@@ -1,4 +1,4 @@
-import { applyPartyColors, applySentimentColors, minimumCellFilter, privacyPartitionColumns, PRIVACY_DISPLAY_DIMENSIONS, uniquePersonWindowExpression, REPORTING_VIEWS, REQUIRED_SHEETS, VALIDATION_DISCLOSURE } from "./quick-publication-plan.mjs";
+import { applyPartyColors, applySentimentColors, calculatedFieldCounts, MAX_CALCULATED_FIELDS_PER_DATASET, minimumCellFilter, privacyPartitionColumns, PRIVACY_DISPLAY_DIMENSIONS, uniquePersonWindowExpression, REPORTING_VIEWS, REQUIRED_SHEETS, VALIDATION_DISCLOSURE } from "./quick-publication-plan.mjs";
 import { getSentimentValidation, reportingCategoryLabels, OUTPUT_KEYS, DISCLOSURE_POLICY_VERSION } from "../output-variable-standardization/output-normalization.repository.js";
 import { ADDITIONAL_INSIGHT_VISUALS, EXISTING_VISUAL_NOTES } from "./quick-insight-catalog.mjs";
 
@@ -52,6 +52,54 @@ const barAxisLabels = (wells) => {
 // https://github.com/aws-samples/aws-cudos-framework-deployment/blob/main/dashboards/cudos/CUDOS-v5-definition.yaml
 // Content uses a text-box root and inline font-size="16px" descendants.
 export const quickTextBoxContent = (value) => `<text-box><inline font-size="16px">${escape(value)}</inline></text-box>`;
+
+/** Remove only fields unreachable from typed columns, other brace references
+ * and their dependencies. Expressions are scoped to their dataset. Strings
+ * outside a known dataset conservatively retain matches in every dataset;
+ * tokens inside literal text may retain extra fields but never delete a used
+ * one. This is not an expression rewrite or a privacy-policy change.
+ */
+export function pruneUnusedCalculatedFields(definition) {
+  const fields = definition.CalculatedFields ?? [];
+  const identity = (dataset, name) => JSON.stringify([dataset, name]);
+  const byIdentity = new Map();
+  for (const field of fields) {
+    const key = identity(field.DataSetIdentifier, field.Name);
+    if (byIdentity.has(key)) throw new Error(`Duplicate calculated-field identity: ${field.DataSetIdentifier}.${field.Name}`);
+    byIdentity.set(key, field);
+  }
+  const used = new Set();
+  const retain = (dataset, name) => {
+    const key = identity(dataset, name), field = byIdentity.get(key);
+    if (!field || used.has(key)) return;
+    used.add(key);
+    for (const [, dependency] of field.Expression.matchAll(/\{([^{}]+)\}/g)) retain(dataset, dependency);
+  };
+  const visit = (value, matchingDatasets = false, dataset) => {
+    if (typeof value === "string") {
+      // Conditional formatting/custom expressions and text interpolation do
+      // not necessarily expose a typed Column. Unknown context must fail safe
+      // by retaining every same-named calculated field, not guessing a dataset.
+      for (const [, name] of value.matchAll(/\{([^{}]+)\}/g)) {
+        if (dataset && !matchingDatasets) retain(dataset, name);
+        else for (const field of fields) if (field.Name === name) retain(field.DataSetIdentifier, field.Name);
+      }
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    if (value.DataSetIdentifier) dataset = value.DataSetIdentifier;
+    if (value.CrossDataset === "ALL_DATASETS") matchingDatasets = true;
+    if (value.DataSetIdentifier && value.ColumnName) {
+      retain(value.DataSetIdentifier, value.ColumnName);
+      // Cross-dataset filters also use same-named display aliases in the other
+      // datasets (notably map). Their implicit targets are not typed columns.
+      if (matchingDatasets) for (const field of fields) if (field.Name === value.ColumnName) retain(field.DataSetIdentifier, field.Name);
+    }
+    for (const [key, child] of Object.entries(value)) if (key !== "CalculatedFields") visit(child, matchingDatasets, dataset);
+  };
+  visit(definition);
+  return { ...definition, CalculatedFields: fields.filter((field) => used.has(identity(field.DataSetIdentifier, field.Name))) };
+}
 
 /**
  * Offline API definition generator. Requires existing dataset ARNs and a saved
@@ -147,7 +195,15 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
           checks.push(`({${name}} > 0 AND {${name}} < 5)`);
         }
       }
-      const protectedColumn = calc(dataset, `quick_partition_${id.replaceAll('-', '_')}_safe`, `ifelse(${checks.join(' OR ')}, 0, 5)`);
+      const protectedExpression = `ifelse(${checks.join(' OR ')}, 0, 5)`;
+      // These two total-base KPIs have exactly the same dataset, partitions and
+      // complete five-construct disclosure expression. Reuse the numeric guard
+      // only on byte-for-byte equality; IDs, scopes and thresholds stay intact.
+      // Other visuals retain their own guards even when an expression happens
+      // to match. This bounded alias keeps the enterprise dataset within 500.
+      const sharedTotalGuard = id === "quick-evidence-observations" && result.CalculatedFields.find((field) =>
+        field.DataSetIdentifier === dataset && field.Name === "quick_partition_quick_unique_respondents_safe" && field.Expression === protectedExpression);
+      const protectedColumn = sharedTotalGuard?.Name ?? calc(dataset, `quick_partition_${id.replaceAll('-', '_')}_safe`, protectedExpression);
       const partitionGuard = { datasetIdentifier: dataset, sheetId: sheet.SheetId, visualId: id,
         id: `${id}-whole-partition`, column: protectedColumn, aggregation: 'NONE', policy: DISCLOSURE_POLICY_VERSION, kinds };
       result.FilterGroups.push(minimumCellFilter(partitionGuard)); partitionGuards.push(partitionGuard);
@@ -389,5 +445,9 @@ export function buildGovernedDefinition({ bindings, existingDefinition, mapVisua
   }
   const sentiments = applySentimentColors(result);
   const colored = applyPartyColors(sentiments.definition);
-  return { definition: colored.definition, bindings, guards, partitionGuards, disclosurePolicy: DISCLOSURE_POLICY_VERSION, answerBaseGuards, answerStatusFilters, percentagePolicies: [], reviewedVisualIds, filterScopes, measurementNotes, coloredVisuals: colored.colored, sentimentColoredVisuals: sentiments.colored };
+  const definition = pruneUnusedCalculatedFields(colored.definition);
+  for (const [dataset, count] of calculatedFieldCounts(definition)) {
+    if (count > MAX_CALCULATED_FIELDS_PER_DATASET) throw new Error(`Calculated-field limit exceeded: ${dataset} has ${count}; maximum ${MAX_CALCULATED_FIELDS_PER_DATASET} per dataset. Review dependencies and exact-equivalent guards; never remove privacy checks to fit.`);
+  }
+  return { definition, bindings, guards, partitionGuards, disclosurePolicy: DISCLOSURE_POLICY_VERSION, answerBaseGuards, answerStatusFilters, percentagePolicies: [], reviewedVisualIds, filterScopes, measurementNotes, coloredVisuals: colored.colored, sentimentColoredVisuals: sentiments.colored };
 }
