@@ -3,6 +3,9 @@
 The controlled demo workflow is validated. The following items are deliberately
 separate from demo readiness and must be completed before production calling.
 
+The gated implementation program and required exit evidence are defined in
+[`enterprise-production-readiness-plan.md`](./enterprise-production-readiness-plan.md).
+
 ## Priority 0 — retain current safeguards
 
 - Keep demo-only selection and provider-submission checks enabled.

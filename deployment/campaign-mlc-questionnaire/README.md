@@ -1,5 +1,13 @@
 # Graduate MLC Campaign thought-pulse questionnaire — draft v1
 
+**Historical handoff:** the V1 account below records 15 September 2026, not the
+current live Run/version state or today's deployment procedure. The subsequent
+compact runtime handoff deliberately leaves dynamic questionnaire context blank
+for the dedicated V1 prompt. Use the coordinated
+[callback/consent release runbook](../outbound-consent/README.md) for the current
+release; preserve used V1 records. The separate Reporting V2 section below is
+prospective, unused and draft-only.
+
 `campaign-mlc-pulse-v1.json` is a reviewable, ten-question specification for a
 new Campaign-stage questionnaire. The ten questions were entered as a **Draft**
 in the live platform on 15 September 2026 as questionnaire
@@ -128,3 +136,55 @@ instrument change; BRS/Veeresh-specific items have no Base-stage trend.
 - Telangana State Portal, [Members of Legislative Council](https://www.telangana.gov.in/legislature/members-of-legislative-council/), for the current constituency/member listing.
 - [AAPOR survey best practices](https://aapor.org/standards-and-ethics/best-practices/) and [Pew's question-order guidance](https://www.pewresearch.org/writing-survey-questions/) for neutral wording, unknown options and unaided-before-aided order.
 - [Sarvam Variables & Personalization](https://docs.sarvam.ai/conversations/build/variables-personalization) and [webhook payload](https://docs.sarvam.ai/conversations/api/deployments/webhooks/webhook-payload) for input/output variables and callback validation.
+# Reporting V2 — new unused questionnaire
+
+The [voice identity and delivery guardrail](voice-survey-identity-guardrail.md)
+requires a direct, truthful AI answer when asked, a one-time opening and brief
+neutral acknowledgments. It is a prompt-review artifact, not a publication or
+call-launch command.
+
+The additive [V2 source](campaign-mlc-pulse-v2.json) and
+[Sarvam handoff](sarvam-campaign-mlc-pulse-v2.md) configure ten neutral questions
+with nine supported report contracts and one context-only awareness question.
+This is a new `MLC_CAMPAIGN_PULSE_V2` / version 2 instrument, not an edit or
+backfill of the used V1 instrument. Questionnaire codes are unique in the
+verified deployed schema, so V2 has its own code and ID.
+
+The importer creates the DRAFT header and all questions/metadata in one
+transaction. It checks the actual storage schema and unique identity, verifies
+the active Admin/Super Admin creator and uses an exact fixture fingerprint for
+apply. Identical unused content is idempotent. Conflicting, partial or used
+content is refused; no merge, overwrite, repair or deletion occurs.
+
+Resolve the authorized account ID, then dry-run from the checkout using the
+existing API database adapter. No secret or password is supplied to this script:
+
+```sh
+node deployment/campaign-mlc-questionnaire/import-campaign-questionnaire-version.mjs \
+  --fixture deployment/campaign-mlc-questionnaire/campaign-mlc-pulse-v2.json \
+  --api-root /opt/sarvam-voice-analytics \
+  --created-by "$QUESTIONNAIRE_ACTOR_ID" \
+  --dry-run
+```
+
+After reviewing the exact returned `fixtureHash`, use the same command with
+`--apply --expected-fixture-hash "$QUESTIONNAIRE_REVIEWED_HASH"` instead of
+`--dry-run`. Undefined/invalid values fail closed. Retain the returned ID and
+receipt; verify the saved catalogue and downloaded review pack. Do not blindly
+retry an uncertain apply—dry-run first to distinguish an exact existing draft
+from a failed or conflicting operation.
+
+The importer does not install application code, restart services, assign an
+Iteration, alter Sarvam, commit an agent or launch calls. Keep the new version
+unused until independent wording review, exact provider-variable configuration
+and separately approved call validation. Platform questions do not automatically
+program Sarvam; preserve the compact runtime integration.
+
+```sh
+node deployment/campaign-mlc-questionnaire/test-campaign-mlc-pulse-v2.mjs
+node deployment/campaign-mlc-questionnaire/test-import-campaign-questionnaire-version.mjs
+```
+
+Set `PGLITE_MODULE_PATH` to the local PGlite module when running the importer
+test to include real PostgreSQL atomic-create, JSONB, usage-lock and rollback
+checks. Without that variable, only the mocked operator/CLI tests run.
