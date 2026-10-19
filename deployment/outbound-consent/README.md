@@ -29,9 +29,10 @@ bootstrap installer, a Sarvam agent publication or a call-launch command.
 
 Natural, concise acknowledgements and one-time greetings remain appropriate.
 Agent identity must remain truthful: these changes do not instruct the agent to
-conceal that it is automated or impersonate a human. The v7 draft remains
-unpublished; voice, prompts, app versions, connection IDs and call-session
-settings are not changed by this installer.
+conceal that it is automated or impersonate a human. Campaign agent v7 was
+separately committed on 19 October 2026 after the compatibility release; see
+[the release checkpoint](RELEASE-20261019.md). This installer itself does not
+change voice, prompts, app versions, connection IDs or call-session settings.
 
 ## Important limits
 
